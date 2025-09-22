@@ -1,0 +1,38 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: agent-core
+
+# Ollama配置 - 统一配置
+ollama:
+  base-url: http://localhost:11434
+  model: qwen3:8b
+  timeout: 120000
+  temperature: 0.7
+  max-tokens: 4096
+
+# 数据分析配置
+data-analysis:
+  data-path: ./data
+  chart-path: ./charts
+
+# 日志配置
+logging:
+  level:
+    com.zhouruojun: INFO
+    org.springframework: INFO
+    root: INFO
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
+
+# 管理端点配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

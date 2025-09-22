@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多智能体系统 - 聊天界面</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="chat-container">
+        <!-- 头部 -->
+        <div class="chat-header">
+            <div class="header-info">
+                <i class="fas fa-robot"></i>
+                <div class="header-text">
+                    <h1>多智能体系统</h1>
+                    <p>主智能体 & 数据分析智能体协作平台</p>
+                </div>
+            </div>
+            <div class="header-controls">
+                <button id="clearChat" class="btn btn-secondary">
+                    <i class="fas fa-trash"></i> 清空对话
+                </button>
+                <button id="systemStatus" class="btn btn-info">
+                    <i class="fas fa-info-circle"></i> 系统状态
+                </button>
+            </div>
+        </div>
+
+        <!-- 聊天区域 -->
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <div class="message bot-message">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="message-bubble">
+                            <p>👋 欢迎使用多智能体系统！</p>
+                            <p>我是主智能体，负责理解您的需求并协调其他专业智能体为您服务。</p>
+                            <p>🤖 <strong>我的能力：</strong></p>
+                            <ul>
+                                <li>📊 数据分析任务分派</li>
+                                <li>📈 数据可视化协调</li>
+                                <li>🔍 统计分析管理</li>
+                                <li>🤝 智能体间协作</li>
+                            </ul>
+                            <p>请告诉我您需要什么帮助！</p>
+                        </div>
+                        <div class="message-time">系统消息</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="chat-input">
+            <div class="input-container">
+                <div class="session-info">
+                    <span id="sessionId">会话ID: 正在生成...</span>
+                    <span id="messageCount">消息数: 0</span>
+                </div>
+                <div class="input-row">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="请输入您的消息...（支持数据分析、图表生成等任务）"
+                        rows="1"
+                    ></textarea>
+                    <button id="sendButton" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="input-suggestions">
+                    <button class="suggestion-btn" data-text="请帮我分析销售数据">📊 数据分析</button>
+                    <button class="suggestion-btn" data-text="生成一个销售趋势图表">📈 图表生成</button>
+                    <button class="suggestion-btn" data-text="检查数据分析智能体状态">🔍 系统状态</button>
+                    <button class="suggestion-btn" data-text="我需要进行统计分析">📋 统计分析</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 状态模态框 -->
+    <div id="statusModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>系统状态</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="status-section">
+                    <h3><i class="fas fa-server"></i> 服务状态</h3>
+                    <div id="serviceStatus">正在检查...</div>
+                </div>
+                <div class="status-section">
+                    <h3><i class="fas fa-comments"></i> 会话信息</h3>
+                    <div id="sessionStatus">正在加载...</div>
+                </div>
+                <div class="status-section">
+                    <h3><i class="fas fa-brain"></i> AI模型状态</h3>
+                    <div id="aiModelStatus">正在检查...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载指示器 -->
+    <div id="loadingIndicator" class="loading-indicator">
+        <div class="loading-spinner">
+            <i class="fas fa-robot fa-spin"></i>
+        </div>
+        <p>智能体正在思考中...</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
