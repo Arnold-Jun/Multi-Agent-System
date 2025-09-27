@@ -49,11 +49,7 @@ public class DataAnalysisTaskProcessor {
                 case "data_analysis":
                 case "analyze_data":
                     return handleDataAnalysisTask(parameters, sessionId);
-                
-                case "load_data":
-                case "data_loading":
-                    return "数据加载功能已移除，请使用其他分析功能";
-                
+
                 case "generate_chart":
                 case "visualization":
                     return handleVisualizationTask(parameters);

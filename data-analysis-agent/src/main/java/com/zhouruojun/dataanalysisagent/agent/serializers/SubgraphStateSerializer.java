@@ -18,3 +18,5 @@ public class SubgraphStateSerializer extends ObjectStreamStateSerializer<Subgrap
         this.mapper().register(ChatMessage.class, new ChatMessageSerializer());
     }
 }
+
+

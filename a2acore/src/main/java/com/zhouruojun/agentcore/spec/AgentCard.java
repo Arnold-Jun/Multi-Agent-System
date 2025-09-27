@@ -15,10 +15,10 @@ import lombok.ToString;
 @NoArgsConstructor
 public class AgentCard {
     /**
-     * 智能体名�?     */
+     * 智能体名称     */
     private String name;
     /**
-     * 智能体描�?     */
+     * 智能体描述     */
     @Nullable
     private String description;
     private String url;
