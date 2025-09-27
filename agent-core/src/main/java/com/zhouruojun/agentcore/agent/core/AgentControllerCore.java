@@ -116,10 +116,13 @@ public class AgentControllerCore {
             StringBuilder resultBuilder = new StringBuilder();
             String finalResponse = "";
             
+            AgentMessageState finalState = null;
             for (NodeOutput<AgentMessageState> output : stream) {
                 log.info("Graph node output: {}", output.node());
 
                 AgentMessageState state = output.state();
+                finalState = state; // 保存最终状态
+                
                 if (state.agentResponse().isPresent()) {
                     finalResponse = state.agentResponse().get();
                 }
@@ -131,6 +134,13 @@ public class AgentControllerCore {
             String filteredResponse = ContentFilter.filterThinkingContent(finalResponse);
             
             String formattedResponse = filteredResponse;
+
+            // 保存完整的对话历史（包括AI响应）
+            if (finalState != null) {
+                sessionHistory.put(sessionId, new ArrayList<>(finalState.messages()));
+                log.info("Saved {} messages to session history for session {}", 
+                        finalState.messages().size(), sessionId);
+            }
 
             // 缓存会话信息
             sessionCache.put(sessionId, Map.of(
@@ -181,13 +191,36 @@ public class AgentControllerCore {
                 .threadId(sessionId)
                 .build();
         
-        Map<String, Object> initialState = Map.of(
-            "messages", UserMessage.from(request.getChat()),
+        // 构建包含历史对话的初始状态
+        Map<String, Object> initialState = buildInitialStateWithHistory(request, sessionId, username);
+        
+        return compiledGraph.stream(initialState, runnableConfig);
+    }
+    
+    /**
+     * 构建包含历史对话的初始状态
+     */
+    private Map<String, Object> buildInitialStateWithHistory(AgentChatRequest request, String sessionId, String username) {
+        List<ChatMessage> allMessages = new ArrayList<>();
+        
+        // 1. 获取历史对话
+        List<ChatMessage> historyMessages = getSessionHistory(sessionId);
+        if (!historyMessages.isEmpty()) {
+            log.info("Found {} historical messages for session {}", historyMessages.size(), sessionId);
+            allMessages.addAll(historyMessages);
+        }
+        
+        // 2. 添加当前用户消息
+        ChatMessage currentUserMessage = UserMessage.from(request.getChat());
+        allMessages.add(currentUserMessage);
+        
+        log.info("Total messages for session {}: {} (including current)", sessionId, allMessages.size());
+        
+        return Map.of(
+            "messages", allMessages,
             "sessionId", sessionId,
             "username", username
         );
-        
-        return compiledGraph.stream(initialState, runnableConfig);
     }
     
     /**
