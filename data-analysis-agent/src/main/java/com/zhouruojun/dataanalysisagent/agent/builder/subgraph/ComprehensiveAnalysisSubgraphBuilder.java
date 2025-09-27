@@ -7,42 +7,53 @@ import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.dataanalysisagent.agent.state.SubgraphState;
 import com.zhouruojun.dataanalysisagent.common.PromptTemplateManager;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
-import org.bsc.langgraph4j.GraphStateException;
+import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.EdgeAction;
+import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.serializer.StateSerializer;
-
-import java.util.Map;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
-import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
+import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 /**
- * 网络搜索子图构建器
- * 专门处理网络搜索相关的工具调用
+ * 综合分析子图构建器
+ * 负责构建综合分析智能体的执行图
  */
-public class WebSearchSubgraphBuilder extends AbstractAgentGraphBuilder<SubgraphState> {
+@Slf4j
+public class ComprehensiveAnalysisSubgraphBuilder extends AbstractAgentGraphBuilder<SubgraphState> {
 
+    /**
+     * 获取智能体名称
+     */
     @Override
     protected String getAgentName() {
-        return "webSearchAgent";
+        return "comprehensiveAnalysisAgent";
     }
 
+    /**
+     * 获取动作名称
+     */
     @Override
     protected String getActionName() {
-        return "webSearchAction";
+        return "comprehensiveAnalysisAction";
     }
 
+    /**
+     * 获取提示词
+     */
     @Override
     protected String getPrompt() {
-        return PromptTemplateManager.instance.getWebSearchPrompt();
+        return PromptTemplateManager.instance.getPrompt("comprehensiveAnalysis");
     }
 
+    /**
+     * 创建临时工具集合
+     */
     @Override
     protected DataAnalysisToolCollection createTempToolCollection() {
-        // 使用工厂方法创建子图工具集合，工厂方法会自动获取对应工具
         return DataAnalysisToolCollection.createSubgraphToolCollection(getAgentName(), mainToolCollection);
     }
     
@@ -55,11 +66,16 @@ public class WebSearchSubgraphBuilder extends AbstractAgentGraphBuilder<Subgraph
         super.initializeDefaults();
     }
 
+    /**
+     * 构建综合分析子图
+     */
     @Override
     protected StateGraph<SubgraphState> buildGraph(
             CallAgent<SubgraphState> callAgent,
             ExecuteTools<SubgraphState> executeTools
     ) throws GraphStateException {
+        // 综合分析子图：直接输出结果
+
         // 使用基类提供的标准边条件
         EdgeAction<SubgraphState> agentShouldContinue = getStandardAgentShouldContinue();
         EdgeAction<SubgraphState> actionShouldContinue = getStandardActionShouldContinue();
@@ -71,11 +87,9 @@ public class WebSearchSubgraphBuilder extends AbstractAgentGraphBuilder<Subgraph
                 .addEdge(START, getAgentName())
                 .addConditionalEdges(getAgentName(),
                         edge_async(agentShouldContinue),
-                        Map.of(
-                                "action", getActionName(),
-                                "FINISH", END))
+                        java.util.Map.of("action", getActionName(), "FINISH", END))
                 .addConditionalEdges(getActionName(),
                         edge_async(actionShouldContinue),
-                        Map.of("callback", END));
+                        java.util.Map.of("callback", END));
     }
 }

@@ -1,35 +1,21 @@
 package com.zhouruojun.dataanalysisagent.agent.state;
 
 import com.zhouruojun.dataanalysisagent.agent.todo.TodoList;
-import dev.langchain4j.data.message.ChatMessage;
-import org.bsc.langgraph4j.prebuilt.MessagesState;
 
 import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 
 /**
- * Agent消息状态管理类
- * 扩展MessagesState以支持智能体间的复杂状态管理
- *
+ * 主图状态类
+ * 包含主图执行所需的所有状态信息
+ * 用于Planner、Scheduler、Summary等主图节点
  */
-public class AgentMessageState extends MessagesState<ChatMessage> {
+public class MainGraphState extends BaseAgentState {
 
-    public AgentMessageState(Map<String, Object> initData) {
+    public MainGraphState(Map<String, Object> initData) {
         super(initData);
     }
-
-    /**
-     * 获取最后一条消息
-     */
-    public Optional<ChatMessage> lastMessage() {
-        var messages = messages();
-        if (messages.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(messages.get(messages.size() - 1));
-    }
-
 
     /**
      * 获取Todo列表
@@ -47,19 +33,11 @@ public class AgentMessageState extends MessagesState<ChatMessage> {
     }
 
     /**
-     * 获取原始用户查询
-     */
-    public Optional<String> getOriginalUserQuery() {
-        return this.value("originalUserQuery");
-    }
-
-    /**
      * 获取Scheduler输出
      */
     public Optional<String> getSchedulerOutput() {
         return this.value("schedulerOutput");
     }
-
 
     /**
      * 获取指定子图的结果
@@ -77,49 +55,63 @@ public class AgentMessageState extends MessagesState<ChatMessage> {
                 .map(TodoList::getStatistics)
                 .orElse("无任务列表");
     }
-    
+
     // === 状态更新方法 ===
-    
+
     /**
-     * 创建新的状态实例 - 私有辅助方法
+     * 更新TodoList状态 - 使用Builder模式
      */
-    private AgentMessageState withData(String key, Object value) {
-        Map<String, Object> newData = new java.util.HashMap<>(this.data());
-        newData.put(key, value);
-        return new AgentMessageState(newData);
-    }
-    
-    /**
-     * 更新TodoList状态
-     */
-    public AgentMessageState withTodoList(TodoList todoList) {
-        return withData("todoList", todoList);
+    public MainGraphState withTodoList(TodoList todoList) {
+        return withData("todoList", todoList, MainGraphState.class);
     }
 
-    
     /**
-     * 更新Scheduler输出
+     * 更新原始用户查询 - 使用Builder模式
      */
-    public AgentMessageState withSchedulerOutput(String schedulerOutput) {
-        return withData("schedulerOutput", schedulerOutput);
+    public MainGraphState withOriginalUserQuery(String originalQuery) {
+        return withData("originalUserQuery", originalQuery, MainGraphState.class);
     }
-    
+
     /**
-     * 更新子图结果
+     * 更新Scheduler输出 - 使用Builder模式
      */
-    public AgentMessageState withSubgraphResult(String agentName, String result) {
+    public MainGraphState withSchedulerOutput(String schedulerOutput) {
+        return withData("schedulerOutput", schedulerOutput, MainGraphState.class);
+    }
+
+    /**
+     * 更新子图结果 - 使用Builder模式
+     */
+    public MainGraphState withSubgraphResult(String agentName, String result) {
         Map<String, String> results = getSubgraphResults().orElse(new java.util.HashMap<>());
         results.put(agentName, result);
-        return withData("subgraphResults", results);
+        return withData("subgraphResults", results, MainGraphState.class);
     }
 
-    
     /**
-     * 更新TodoList状态
+     * 批量更新子图结果 - 使用Builder模式
+     */
+    public MainGraphState withSubgraphResults(Map<String, String> newResults) {
+        return withData("subgraphResults", new java.util.HashMap<>(newResults), MainGraphState.class);
+    }
+
+    /**
+     * 批量更新状态 - 使用Builder模式
+     */
+    public MainGraphState withUpdates(Map<String, Object> updates) {
+        Map<String, Object> newData = new java.util.HashMap<>(this.data());
+        newData.putAll(updates);
+        return new MainGraphState(newData);
+    }
+
+    // === 兼容性方法（保持与原有AgentMessageState的兼容性） ===
+
+    /**
+     * 更新TodoList状态（兼容性方法）
      */
     public void updateTodoList(TodoList todoList) {
         // 使用Builder模式更新状态，然后通过反射替换
-        AgentMessageState updatedState = withTodoList(todoList);
+        MainGraphState updatedState = withTodoList(todoList);
         try {
             Field dataField = findDataField();
             dataField.setAccessible(true);
@@ -128,13 +120,13 @@ public class AgentMessageState extends MessagesState<ChatMessage> {
             throw new RuntimeException("Failed to update todoList: " + e.getMessage(), e);
         }
     }
-    
+
     /**
-     * 更新Scheduler输出
+     * 更新Scheduler输出（兼容性方法）
      */
     public void setSchedulerOutput(String schedulerOutput) {
         // 使用Builder模式更新状态，然后通过反射替换
-        AgentMessageState updatedState = withSchedulerOutput(schedulerOutput);
+        MainGraphState updatedState = withSchedulerOutput(schedulerOutput);
         try {
             Field dataField = findDataField();
             dataField.setAccessible(true);
@@ -145,11 +137,41 @@ public class AgentMessageState extends MessagesState<ChatMessage> {
     }
 
     /**
-     * 查找data字段
+     * 更新原始用户查询（兼容性方法）
+     */
+    public void updateOriginalUserQuery(String originalQuery) {
+        // 使用Builder模式更新状态，然后通过反射替换
+        MainGraphState updatedState = withOriginalUserQuery(originalQuery);
+        try {
+            Field dataField = findDataField();
+            dataField.setAccessible(true);
+            dataField.set(this, updatedState.data());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update originalUserQuery: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 添加子图结果（兼容性方法）
+     */
+    public void addSubgraphResult(String agentName, String result) {
+        // 使用Builder模式更新状态，然后通过反射替换
+        MainGraphState updatedState = withSubgraphResult(agentName, result);
+        try {
+            Field dataField = findDataField();
+            dataField.setAccessible(true);
+            dataField.set(this, updatedState.data());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to update subgraphResults: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 查找data字段 - 辅助方法
      */
     private Field findDataField() throws NoSuchFieldException {
         Class<?> currentClass = this.getClass();
-        
+
         // 向上查找data字段
         while (currentClass != null) {
             try {
@@ -168,8 +190,7 @@ public class AgentMessageState extends MessagesState<ChatMessage> {
             }
             currentClass = currentClass.getSuperclass();
         }
-        
+
         throw new NoSuchFieldException("无法找到data字段，尝试了data、state、values等字段名");
     }
-    
 }

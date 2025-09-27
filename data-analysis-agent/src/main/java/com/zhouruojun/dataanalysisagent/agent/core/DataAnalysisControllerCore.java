@@ -8,11 +8,11 @@ import com.zhouruojun.agentcore.spec.Part;
 import com.zhouruojun.agentcore.spec.TextPart;
 import com.zhouruojun.dataanalysisagent.agent.AgentChatRequest;
 import com.zhouruojun.dataanalysisagent.agent.builder.DataAnalysisGraphBuilder;
-import com.zhouruojun.dataanalysisagent.agent.state.AgentMessageState;
+import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
+import com.zhouruojun.dataanalysisagent.config.ParallelExecutionConfig;
 import com.zhouruojun.dataanalysisagent.service.OllamaService;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.*;
 import dev.langchain4j.data.text.TextFile;
 import dev.langchain4j.internal.ValidationUtils;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -31,9 +31,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import com.zhouruojun.agentcore.spec.FileContent;
 import dev.langchain4j.agent.tool.ToolSpecification;
-import dev.langchain4j.data.message.Content;
-import dev.langchain4j.data.message.TextContent;
-import dev.langchain4j.data.message.TextFileContent;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -41,6 +38,7 @@ import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -55,8 +53,8 @@ import jakarta.annotation.PostConstruct;
 public class DataAnalysisControllerCore {
 
     // LangGraph相关组件
-    private Map<String, CompiledGraph<AgentMessageState>> compiledGraphCache;
-    private Map<String, StateGraph<AgentMessageState>> stateGraphCache;
+    private Map<String, CompiledGraph<MainGraphState>> compiledGraphCache;
+    private Map<String, StateGraph<MainGraphState>> stateGraphCache;
     private BaseCheckpointSaver checkpointSaver;
     
     // 核心依赖
@@ -70,6 +68,10 @@ public class DataAnalysisControllerCore {
     // 数据分析工具集合
     @Autowired
     private DataAnalysisToolCollection toolCollection;
+    
+    // 并行执行配置
+    @Autowired
+    private ParallelExecutionConfig parallelExecutionConfig;
     
     // 会话管理
     private final Map<String, List<ChatMessage>> sessionHistory = new ConcurrentHashMap<>();
@@ -108,29 +110,29 @@ public class DataAnalysisControllerCore {
             cleanupExpiredSessionsIfNeeded();
 
             // 使用图处理流程
-            AsyncGenerator<NodeOutput<AgentMessageState>> stream = processStream(request);
+            AsyncGenerator<NodeOutput<MainGraphState>> stream = processStream(request);
             
             StringBuilder resultBuilder = new StringBuilder();
             String finalResponse = "";
             
             // 处理流式输出
-            for (NodeOutput<AgentMessageState> output : stream) {
+            for (NodeOutput<MainGraphState> output : stream) {
                 log.info("Graph node output: {}", output.node());
                 
-                AgentMessageState state = output.state();
+                MainGraphState state = output.state();
                 
                 // 获取分析结果 - 修复：优先获取finalResponse，但不要被后续节点覆盖
-                if (state.finalResponse().isPresent()) {
-                    String currentResponse = state.finalResponse().get();
+                if (state.value("finalResponse").isPresent()) {
+                    String currentResponse = (String) state.value("finalResponse").get();
                     // 只有当当前响应不为空且不是默认值时，才更新finalResponse
                     if (!currentResponse.isEmpty() && !currentResponse.equals("进行中")) {
                         finalResponse = currentResponse;
                     }
                 } else if (state.value("analysisResult").isPresent()) {
                     finalResponse = (String) state.value("analysisResult").get();
-                } else if (state.errorMessage().isPresent()) {
-                    finalResponse = "错误: " + state.errorMessage().get();
-                } else if (state.hasMessages()) {
+                } else if (state.value("errorMessage").isPresent()) {
+                    finalResponse = "错误: " + state.value("errorMessage").get();
+                } else if (!state.messages().isEmpty()) {
                     // 获取最后一条AI消息作为响应
                     var lastMessage = state.lastMessage();
                     if (lastMessage.isPresent()) {
@@ -143,12 +145,12 @@ public class DataAnalysisControllerCore {
                 
                 // 构建节点执行信息
                 String nodeStatus = "进行中";
-                if (state.errorMessage().isPresent()) {
-                    nodeStatus = "错误: " + state.errorMessage().get();
-                } else if (state.finalResponse().isPresent()) {
+                if (state.value("errorMessage").isPresent()) {
+                    nodeStatus = "错误: " + state.value("errorMessage").get();
+                } else if (state.value("finalResponse").isPresent()) {
                     nodeStatus = "完成";
-                } else if (state.isDataReady()) {
-                    nodeStatus = "数据已准备";
+                } else if (state.getSubgraphResults().isPresent() && !state.getSubgraphResults().get().isEmpty()) {
+                    nodeStatus = "子图结果已准备";
                 }
                 
                 resultBuilder.append("节点: ").append(output.node())
@@ -188,14 +190,14 @@ public class DataAnalysisControllerCore {
     /**
      * 处理请求流程 - 使用LangGraph4j
      */
-    private AsyncGenerator<NodeOutput<AgentMessageState>> processStream(AgentChatRequest request) 
+    private AsyncGenerator<NodeOutput<MainGraphState>> processStream(AgentChatRequest request) 
             throws GraphStateException {
         
         String sessionId = request.getSessionId();
         String username = "user"; // 可以从request中获取
         
         // 获取或构建状态图
-        StateGraph<AgentMessageState> stateGraph = stateGraphCache.computeIfAbsent(sessionId, 
+        StateGraph<MainGraphState> stateGraph = stateGraphCache.computeIfAbsent(sessionId, 
             key -> {
                 try {
                     return buildGraph(username, sessionId);
@@ -205,7 +207,7 @@ public class DataAnalysisControllerCore {
             });
         
         // 获取或编译图
-        CompiledGraph<AgentMessageState> compiledGraph = compiledGraphCache.computeIfAbsent(sessionId,
+        CompiledGraph<MainGraphState> compiledGraph = compiledGraphCache.computeIfAbsent(sessionId,
             key -> {
                 try {
                     return stateGraph.compile(buildCompileConfig());
@@ -233,12 +235,13 @@ public class DataAnalysisControllerCore {
     /**
      * 构建数据分析图
      */
-    private StateGraph<AgentMessageState> buildGraph(String username, String requestId) 
+    private StateGraph<MainGraphState> buildGraph(String username, String requestId) 
             throws GraphStateException {
         
         return new DataAnalysisGraphBuilder()
                 .chatLanguageModel(chatLanguageModel)
                 .toolCollection(toolCollection)
+                .parallelExecutionConfig(parallelExecutionConfig)
                 .username(username)
                 .requestId(requestId)
                 .build();
@@ -443,11 +446,11 @@ public class DataAnalysisControllerCore {
     private String processFirstA2aCall(String sessionId, String userMessage) {
         try {
             // 初始化状态图和编译图
-            StateGraph<AgentMessageState> stateGraph = buildGraphWithSkill(
+            StateGraph<MainGraphState> stateGraph = buildGraphWithSkill(
                     Collections.emptyList(), "a2a-user", sessionId, null);
             stateGraphCache.put(sessionId, stateGraph);
             
-            CompiledGraph<AgentMessageState> graph = stateGraph.compile(buildCompileConfig());
+            CompiledGraph<MainGraphState> graph = stateGraph.compile(buildCompileConfig());
             compiledGraphCache.put(sessionId, graph);
             
             // 执行图
@@ -456,27 +459,50 @@ public class DataAnalysisControllerCore {
                     .build();
             
             List<Content> contents = Collections.singletonList(TextContent.from(userMessage));
+            UserMessage userMsg = UserMessage.from(contents);
             
-            AsyncGenerator<NodeOutput<AgentMessageState>> stream = graph.stream(Map.of(
-                    "messages", UserMessage.from(contents),
-                    "sessionId", sessionId,
-                    "requestId", sessionId,
-                    "username", "a2a-user"
-            ), runnableConfig);
+            // 创建初始状态，确保messages字段正确设置
+            Map<String, Object> initialState = new HashMap<>();
+            initialState.put("messages", List.of(userMsg));
+            initialState.put("sessionId", sessionId);
+            initialState.put("requestId", sessionId);
+            initialState.put("username", "a2a-user");
             
-            // 收集所有输出
+            AsyncGenerator<NodeOutput<MainGraphState>> stream = graph.stream(initialState, runnableConfig);
+            
+            // 收集所有输出，但只返回最终结果
             StringBuilder result = new StringBuilder();
-            for (NodeOutput<AgentMessageState> output : stream) {
-                AgentMessageState state = output.state();
+            String finalResult = null;
+            
+            for (NodeOutput<MainGraphState> output : stream) {
+                String nodeName = output.node();
+                MainGraphState state = output.state();
+
+                // 只收集summary节点的输出作为最终结果
+                if ("summary".equals(nodeName) && state.lastMessage().isPresent()) {
+                    ChatMessage lastMsg = state.lastMessage().get();
+                    if (lastMsg instanceof AiMessage) {
+                        finalResult = ((AiMessage) lastMsg).text();
+                        log.info("Summary node output: {}", finalResult);
+                    }
+                }
+                
+                // 记录所有节点的输出用于调试
                 if (state.lastMessage().isPresent()) {
                     ChatMessage lastMsg = state.lastMessage().get();
-                    if (lastMsg instanceof dev.langchain4j.data.message.AiMessage) {
-                        result.append(((dev.langchain4j.data.message.AiMessage) lastMsg).text()).append("\n");
+                    if (lastMsg instanceof AiMessage) {
+                        result.append("[").append(nodeName).append("] ").append(((AiMessage) lastMsg).text()).append("\n");
                     }
                 }
             }
             
-            return result.length() > 0 ? result.toString().trim() : "数据分析完成: " + userMessage;
+            // 返回summary节点的结果，如果没有则返回调试信息
+            if (finalResult != null && !finalResult.trim().isEmpty()) {
+                return finalResult;
+            } else {
+                log.warn("No summary result found, returning debug info: {}", result.toString());
+                return "数据分析流程执行完成，但未获得最终总结结果。调试信息:\n" + result.toString();
+            }
             
         } catch (Exception e) {
             log.error("Error processing first A2A call: sessionId={}", sessionId, e);
@@ -490,7 +516,7 @@ public class DataAnalysisControllerCore {
     private String processResumeA2aCall(String sessionId, String userMessage) {
         try {
             // 从cache获取编译图
-            CompiledGraph<AgentMessageState> graph = compiledGraphCache.get(sessionId);
+            CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
             if (graph == null) {
                 log.warn("No compiled graph found for session: {}, treating as first call", sessionId);
                 return processFirstA2aCall(sessionId, userMessage);
@@ -501,20 +527,24 @@ public class DataAnalysisControllerCore {
                     .threadId(sessionId)
                     .build();
             
-            StateSnapshot<AgentMessageState> state = graph.getState(runnableConfig);
+            StateSnapshot<MainGraphState> state = graph.getState(runnableConfig);
             
             // 将新消息添加到状态中并继续执行
             List<Content> contents = Collections.singletonList(TextContent.from(userMessage));
-            Map<String, Object> newMessages = Map.of("messages", UserMessage.from(contents));
+            UserMessage userMsg = UserMessage.from(contents);
+            
+            // 创建状态更新，确保messages字段正确设置
+            Map<String, Object> newMessages = new HashMap<>();
+            newMessages.put("messages", List.of(userMsg));
             
             // 更新状态并从当前状态继续执行
             RunnableConfig newConfig = graph.updateState(state.config(), newMessages);
-            AsyncGenerator<NodeOutput<AgentMessageState>> stream = graph.stream(null, newConfig);
+            AsyncGenerator<NodeOutput<MainGraphState>> stream = graph.stream(null, newConfig);
             
             // 收集所有输出
             StringBuilder result = new StringBuilder();
-            for (NodeOutput<AgentMessageState> output : stream) {
-                AgentMessageState stateOutput = output.state();
+            for (NodeOutput<MainGraphState> output : stream) {
+                MainGraphState stateOutput = output.state();
                 if (stateOutput.lastMessage().isPresent()) {
                     ChatMessage lastMsg = stateOutput.lastMessage().get();
                     if (lastMsg instanceof dev.langchain4j.data.message.AiMessage) {
@@ -534,7 +564,7 @@ public class DataAnalysisControllerCore {
     /**
      * 处理A2A流式任务的核心逻辑
      */
-    private AsyncGenerator<NodeOutput<AgentMessageState>> processStreamA2a(String requestId,
+    private AsyncGenerator<NodeOutput<MainGraphState>> processStreamA2a(String requestId,
                                                                            String sessionId,
                                                                            Message message,
                                                                            List<ToolSpecification> userTools,
@@ -549,11 +579,11 @@ public class DataAnalysisControllerCore {
                 skill = skillObj.toString();
             }
             
-            StateGraph<AgentMessageState> stateGraph = stateGraphCache.getOrDefault(requestId,
+            StateGraph<MainGraphState> stateGraph = stateGraphCache.getOrDefault(requestId,
                     buildGraphWithSkill(userTools, userEmail, requestId, skill));
             stateGraphCache.put(requestId, stateGraph);
 
-            CompiledGraph<AgentMessageState> graph = compiledGraphCache.getOrDefault(requestId,
+            CompiledGraph<MainGraphState> graph = compiledGraphCache.getOrDefault(requestId,
                     stateGraph.compile(buildCompileConfig()));
             compiledGraphCache.put(requestId, graph);
 
@@ -595,7 +625,7 @@ public class DataAnalysisControllerCore {
     /**
      * 构建带技能的数据分析图
      */
-    private StateGraph<AgentMessageState> buildGraphWithSkill(List<ToolSpecification> userTools, 
+    private StateGraph<MainGraphState> buildGraphWithSkill(List<ToolSpecification> userTools, 
                                                               String userEmail, 
                                                               String requestId, 
                                                               String skill) 
@@ -604,6 +634,7 @@ public class DataAnalysisControllerCore {
         return new DataAnalysisGraphBuilder()
                 .chatLanguageModel(chatLanguageModel)
                 .toolCollection(toolCollection)
+                .parallelExecutionConfig(parallelExecutionConfig)
                 .username(userEmail)
                 .requestId(requestId)
                 .build();
@@ -629,14 +660,14 @@ public class DataAnalysisControllerCore {
                         .build();
                 
                 // 从cache中获取编译好的图
-                CompiledGraph<AgentMessageState> graph = compiledGraphCache.get(requestId);
+                CompiledGraph<MainGraphState> graph = compiledGraphCache.get(requestId);
                 if (graph == null) {
                     log.error("No compiled graph found for requestId: {}", requestId);
                     return;
                 }
                 
                 // 获取当前状态
-                StateSnapshot<AgentMessageState> state = graph.getState(runnableConfig);
+                StateSnapshot<MainGraphState> state = graph.getState(runnableConfig);
                 
                 // 将新消息添加到状态中并继续执行
                 List<Content> contents = message.getParts().stream().<Content>map(part -> {
@@ -657,7 +688,9 @@ public class DataAnalysisControllerCore {
                     }
                 }).collect(Collectors.toList());
                 
-                Map<String, Object> newMessages = Map.of("messages", UserMessage.from(contents));
+                UserMessage userMsg = UserMessage.from(contents);
+                Map<String, Object> newMessages = new HashMap<>();
+                newMessages.put("messages", List.of(userMsg));
                 
                 // 更新状态并从当前状态继续执行
                 RunnableConfig newConfig = graph.updateState(state.config(), newMessages);

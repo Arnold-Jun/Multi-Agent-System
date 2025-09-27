@@ -4,7 +4,8 @@ import com.zhouruojun.dataanalysisagent.agent.BaseAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.CallAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.ExecuteTools;
 import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
-import com.zhouruojun.dataanalysisagent.agent.state.AgentMessageState;
+import com.zhouruojun.dataanalysisagent.agent.state.BaseAgentState;
+import com.zhouruojun.dataanalysisagent.config.ParallelExecutionConfig;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -24,12 +25,13 @@ import java.util.concurrent.LinkedBlockingQueue;
  * 抽象智能体图构建器基类
  * 使用模板方法模式消除重复代码
  */
-public abstract class AbstractAgentGraphBuilder {
+public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     protected StreamingChatLanguageModel streamingChatLanguageModel;
     protected ChatLanguageModel chatLanguageModel;
-    protected StateSerializer<AgentMessageState> stateSerializer;
+    protected StateSerializer<T> stateSerializer;
+    protected ParallelExecutionConfig parallelExecutionConfig;
     protected List<ToolSpecification> tools;
-    protected BlockingQueue<AsyncGenerator.Data<StreamingOutput<AgentMessageState>>> queue;
+    protected BlockingQueue<AsyncGenerator.Data<StreamingOutput<T>>> queue;
     protected DataAnalysisToolCollection mainToolCollection;
 
     /**
@@ -51,7 +53,7 @@ public abstract class AbstractAgentGraphBuilder {
     /**
      * 设置状态序列化器
      */
-    public AbstractAgentGraphBuilder stateSerializer(StateSerializer<AgentMessageState> stateSerializer) {
+    public AbstractAgentGraphBuilder stateSerializer(StateSerializer<T> stateSerializer) {
         this.stateSerializer = stateSerializer;
         return this;
     }
@@ -61,6 +63,14 @@ public abstract class AbstractAgentGraphBuilder {
      */
     public AbstractAgentGraphBuilder tools(List<ToolSpecification> tools) {
         this.tools = tools;
+        return this;
+    }
+    
+    /**
+     * 设置并行执行配置
+     */
+    public AbstractAgentGraphBuilder parallelExecutionConfig(ParallelExecutionConfig parallelExecutionConfig) {
+        this.parallelExecutionConfig = parallelExecutionConfig;
         return this;
     }
     
@@ -75,7 +85,7 @@ public abstract class AbstractAgentGraphBuilder {
     /**
      * 模板方法：构建状态图
      */
-    public final StateGraph<AgentMessageState> build() throws GraphStateException {
+    public final StateGraph<T> build() throws GraphStateException {
         // 1. 参数验证
         validateParameters();
         
@@ -87,7 +97,7 @@ public abstract class AbstractAgentGraphBuilder {
         
         // 4. 创建节点
         CallAgent callAgent = createCallAgent(agent);
-        ExecuteTools executeTools = createExecuteTools(agent);
+        ExecuteTools<T> executeTools = createExecuteTools(agent);
         
         // 5. 构建图 - 子类实现
         return buildGraph(callAgent, executeTools);
@@ -111,7 +121,8 @@ public abstract class AbstractAgentGraphBuilder {
      */
     protected void initializeDefaults() {
         if (stateSerializer == null) {
-            stateSerializer = AgentSerializers.STD.object();
+            // 子类需要重写此方法来设置特定的序列化器
+            throw new IllegalStateException("stateSerializer must be set by subclass");
         }
         
         // 创建队列用于流式输出
@@ -153,8 +164,8 @@ public abstract class AbstractAgentGraphBuilder {
     /**
      * 创建调用智能体节点
      */
-    protected CallAgent createCallAgent(BaseAgent agent) {
-        CallAgent callAgent = new CallAgent(getAgentName(), agent);
+    protected CallAgent<T> createCallAgent(BaseAgent agent) {
+        CallAgent<T> callAgent = new CallAgent<>(getAgentName(), agent);
         callAgent.setQueue(queue);
         return callAgent;
     }
@@ -162,10 +173,10 @@ public abstract class AbstractAgentGraphBuilder {
     /**
      * 创建执行工具节点
      */
-    protected ExecuteTools createExecuteTools(BaseAgent agent) {
+    protected ExecuteTools<T> createExecuteTools(BaseAgent agent) {
         // 使用工厂方法创建轻量级的工具集合
         DataAnalysisToolCollection tempToolCollection = createTempToolCollection();
-        return new ExecuteTools(getActionName(), agent, tempToolCollection);
+        return new ExecuteTools<>(getActionName(), agent, tempToolCollection, parallelExecutionConfig);
     }
 
     /**
@@ -176,9 +187,9 @@ public abstract class AbstractAgentGraphBuilder {
     /**
      * 构建图 - 子类实现
      */
-    protected abstract StateGraph<AgentMessageState> buildGraph(
-            CallAgent callAgent,
-            ExecuteTools executeTools
+    protected abstract StateGraph<T> buildGraph(
+            CallAgent<T> callAgent,
+            ExecuteTools<T> executeTools
     ) throws GraphStateException;
 
 
@@ -202,7 +213,7 @@ public abstract class AbstractAgentGraphBuilder {
      * 获取标准的边条件 - 辅助方法
      * 直接结束，不再调用额外的总结节点
      */
-    protected EdgeAction<AgentMessageState> getStandardAgentShouldContinue() {
+    protected EdgeAction<T> getStandardAgentShouldContinue() {
         return (state) -> {
             var lastMessage = state.lastMessage();
             if (lastMessage.isPresent() && lastMessage.get() instanceof dev.langchain4j.data.message.AiMessage) {
@@ -219,7 +230,7 @@ public abstract class AbstractAgentGraphBuilder {
     /**
      * 获取标准的工具执行回调边条件 - 辅助方法
      */
-    protected EdgeAction<AgentMessageState> getStandardActionShouldContinue() {
+    protected EdgeAction<T> getStandardActionShouldContinue() {
         return (state) -> "callback";
     }
 

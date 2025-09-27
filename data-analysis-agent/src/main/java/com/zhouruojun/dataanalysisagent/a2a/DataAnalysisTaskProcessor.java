@@ -52,7 +52,7 @@ public class DataAnalysisTaskProcessor {
                 
                 case "load_data":
                 case "data_loading":
-                    return handleDataLoadingTask(parameters);
+                    return "数据加载功能已移除，请使用其他分析功能";
                 
                 case "generate_chart":
                 case "visualization":
@@ -89,23 +89,6 @@ public class DataAnalysisTaskProcessor {
         return dataAnalysisControllerCore.processStreamReturnStr(chatRequest);
     }
 
-    private String handleDataLoadingTask(JsonNode parameters) {
-        String filePath = parameters.path("filePath").asText();
-        String format = parameters.path("format").asText("csv");
-        boolean hasHeader = parameters.path("hasHeader").asBoolean(true);
-        
-        if (filePath.isEmpty()) {
-            return createErrorResponse("缺少文件路径");
-        }
-        
-        // 使用图处理流程处理数据加载任务
-        String message = String.format("请加载文件: %s, 格式: %s, 包含表头: %s", filePath, format, hasHeader);
-        AgentChatRequest chatRequest = new AgentChatRequest();
-        chatRequest.setSessionId("data-loading-" + System.currentTimeMillis());
-        chatRequest.setChat(message);
-        
-        return dataAnalysisControllerCore.processStreamReturnStr(chatRequest);
-    }
 
     private String handleVisualizationTask(JsonNode parameters) {
         String chartType = parameters.path("chartType").asText();

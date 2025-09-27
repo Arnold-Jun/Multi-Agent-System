@@ -1,5 +1,6 @@
 package com.zhouruojun.dataanalysisagent.tools;
 
+import com.zhouruojun.dataanalysisagent.agent.state.BaseAgentState;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import static dev.langchain4j.agent.tool.ToolSpecifications.toolSpecificationsFrom;
@@ -30,15 +31,15 @@ public class DataAnalysisToolCollection {
     
     // 分组的工具规范
     @Getter
-    private final List<ToolSpecification> dataLoadingTools = new ArrayList<>();
-    @Getter
     private final List<ToolSpecification> analysisTools = new ArrayList<>();
     @Getter
     private final List<ToolSpecification> searchTools = new ArrayList<>();
     @Getter
     private final List<ToolSpecification> visualizationTools = new ArrayList<>();
     @Getter
-    private final List<ToolSpecification> SupervisorTools = new ArrayList<>();
+    private final List<ToolSpecification> plannerTools = new ArrayList<>();
+    @Getter
+    private final List<ToolSpecification> schedulerTools = new ArrayList<>();
     
     // 缓存的工具类列表
     private List<Class<?>> cachedToolClasses = new ArrayList<>();
@@ -82,11 +83,11 @@ public class DataAnalysisToolCollection {
     private void registerTools() {
         // 清空现有的工具规范
         toolSpecifications.clear();
-        dataLoadingTools.clear();
         analysisTools.clear();
         searchTools.clear();
         visualizationTools.clear();
-        SupervisorTools.clear();
+        plannerTools.clear();
+        schedulerTools.clear();
         cachedToolClasses.clear();
         
         // 动态扫描工具类
@@ -115,16 +116,12 @@ public class DataAnalysisToolCollection {
         String className = toolClass.getSimpleName();
         
         for (ToolSpecification spec : specs) {
-            if (className.contains("DataLoader")) {
-                dataLoadingTools.add(spec);
-            } else if (className.contains("StatisticalAnalysis")) {
+            if (className.contains("StatisticalAnalysis")) {
                 analysisTools.add(spec);
             } else if (className.contains("WebSearch")) {
                 searchTools.add(spec);
             } else if (className.contains("DataVisualization")) {
                 visualizationTools.add(spec);
-            } else if (className.contains("Supervisor")) {
-                SupervisorTools.add(spec);
             } else {
                 // 默认添加到分析工具组
                 analysisTools.add(spec);
@@ -138,16 +135,20 @@ public class DataAnalysisToolCollection {
      */
     public List<ToolSpecification> getToolsByAgentName(String agentName) {
         switch (agentName) {
-            case "dataAnalysisSupervisor":
-                return SupervisorTools;
-            case "dataLoadingAgent":
-                return dataLoadingTools;
+            case "planner":
+                return plannerTools;
+            case "scheduler":
+                return schedulerTools;
             case "statisticalAnalysisAgent":
                 return analysisTools;
             case "dataVisualizationAgent":
                 return visualizationTools;
             case "webSearchAgent":
                 return searchTools;
+            case "comprehensiveAnalysisAgent":
+                // 综合分析智能体专注于整合和评估，不需要工具
+                // 它基于其他子智能体的结果进行综合分析和报告生成
+                return List.of();
             default:
                 log.warning("Unknown agent name: " + agentName + ", returning empty tools");
                 return List.of();
@@ -303,12 +304,12 @@ public class DataAnalysisToolCollection {
     /**
      * 执行工具调用
      */
-    public String executeTool(ToolExecutionRequest request) {
+    public String executeTool(ToolExecutionRequest request, BaseAgentState state) {
         try {
             log.info("Executing tool: " + request.name());
             
             // 通过反射调用工具方法
-            return executeToolByReflection(request);
+            return executeToolByReflection(request, state);
         } catch (Exception e) {
             log.severe("Error executing tool " + request.name() + ": " + e.getMessage());
             return "Error executing tool: " + e.getMessage();
@@ -318,14 +319,14 @@ public class DataAnalysisToolCollection {
     /**
      * 通过反射执行工具方法
      */
-    private String executeToolByReflection(ToolExecutionRequest request) {
+    private String executeToolByReflection(ToolExecutionRequest request, BaseAgentState state) {
         try {
             // 使用缓存的方法直接查找
             Method method = toolMethodCache.get(request.name());
             
             if (method != null) {
                 // 解析参数
-                Object[] args = parseToolArguments(request.arguments(), method.getParameterTypes(), request.name());
+                Object[] args = parseToolArguments(request.arguments(), method.getParameterTypes(), request.name(), state);
                 
                 // 调用方法
                 Object result = method.invoke(null, args);
@@ -344,7 +345,7 @@ public class DataAnalysisToolCollection {
     /**
      * 解析工具参数
      */
-    private Object[] parseToolArguments(String argumentsJson, Class<?>[] parameterTypes, String toolName) {
+    private Object[] parseToolArguments(String argumentsJson, Class<?>[] parameterTypes, String toolName, BaseAgentState state) {
         try {
             com.alibaba.fastjson.JSONObject argsJson = com.alibaba.fastjson.JSONObject.parseObject(argumentsJson);
             Object[] args = new Object[parameterTypes.length];
@@ -358,7 +359,10 @@ public class DataAnalysisToolCollection {
                     Class<?> paramType = parameterTypes[i];
                     String paramName = methodParams[i].getName(); // 使用实际的参数名
                     
-                    if (argsJson.containsKey(paramName)) {
+                    // 如果参数类型是BaseAgentState或其子类，直接使用传入的state
+                    if (BaseAgentState.class.isAssignableFrom(paramType)) {
+                        args[i] = state;
+                    } else if (argsJson.containsKey(paramName)) {
                         Object value = argsJson.get(paramName);
                         args[i] = convertValue(value, paramType);
                     } else {
@@ -372,7 +376,10 @@ public class DataAnalysisToolCollection {
                     Class<?> paramType = parameterTypes[i];
                     String paramName = "arg" + i;
                     
-                    if (argsJson.containsKey(paramName)) {
+                    // 如果参数类型是BaseAgentState或其子类，直接使用传入的state
+                    if (BaseAgentState.class.isAssignableFrom(paramType)) {
+                        args[i] = state;
+                    } else if (argsJson.containsKey(paramName)) {
                         Object value = argsJson.get(paramName);
                         args[i] = convertValue(value, paramType);
                     } else {
@@ -467,9 +474,6 @@ public class DataAnalysisToolCollection {
         
         // 根据智能体名称确定目标工具组并添加工具
         switch (agentName) {
-            case "dataLoadingAgent":
-                subgraphCollection.getDataLoadingTools().addAll(tools);
-                break;
             case "statisticalAnalysisAgent":
                 subgraphCollection.getAnalysisTools().addAll(tools);
                 break;
@@ -479,8 +483,8 @@ public class DataAnalysisToolCollection {
             case "webSearchAgent":
                 subgraphCollection.getSearchTools().addAll(tools);
                 break;
-            case "dataAnalysisSupervisor":
-                subgraphCollection.getSupervisorTools().addAll(tools);
+            case "comprehensiveAnalysisAgent":
+                // 综合分析智能体不需要工具，专注于整合和评估
                 break;
             default:
                 // 默认添加到分析工具组

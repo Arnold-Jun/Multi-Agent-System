@@ -30,7 +30,6 @@ public class ChatMessageSerializer implements Serializer<ChatMessage> {
             case USER -> this.user.write((UserMessage)object, out);
             case SYSTEM -> this.system.write((SystemMessage)object, out);
             case TOOL_EXECUTION_RESULT -> this.toolExecutionResult.write((ToolExecutionResultMessage)object, out);
-            case CUSTOM -> this.user.write((UserMessage)object, out);
         }
 
     }
@@ -49,10 +48,6 @@ public class ChatMessageSerializer implements Serializer<ChatMessage> {
             }
             case TOOL_EXECUTION_RESULT -> {
                 return this.toolExecutionResult.read(in);
-            }
-            case CUSTOM -> {
-                // 对于自定义消息类型，尝试作为UserMessage处理
-                return this.user.read(in);
             }
             default -> throw new IllegalArgumentException("Unsupported chat message type: " + String.valueOf(type));
         }

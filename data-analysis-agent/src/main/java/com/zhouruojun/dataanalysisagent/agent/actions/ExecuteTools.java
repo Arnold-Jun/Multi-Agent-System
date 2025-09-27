@@ -2,7 +2,7 @@ package com.zhouruojun.dataanalysisagent.agent.actions;
 
 import cn.hutool.core.collection.CollectionUtil;
 import com.zhouruojun.dataanalysisagent.agent.BaseAgent;
-import com.zhouruojun.dataanalysisagent.agent.state.AgentMessageState;
+import com.zhouruojun.dataanalysisagent.agent.state.BaseAgentState;
 import com.zhouruojun.dataanalysisagent.config.ParallelExecutionConfig;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -14,6 +14,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,7 +24,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 通用工具执行节点
@@ -31,7 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 支持并行和串行两种执行模式
  */
 @Slf4j
-public class ExecuteTools implements NodeAction<AgentMessageState> {
+public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
 
     /**
      * 智能体实例
@@ -51,8 +51,17 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
     /**
      * 并行执行配置
      */
-    @Autowired
     private ParallelExecutionConfig parallelConfig;
+    
+    /**
+     * 构造函数
+     */
+    public ExecuteTools(String agentName, BaseAgent agent, DataAnalysisToolCollection toolCollection, ParallelExecutionConfig parallelConfig) {
+        this.agentName = agentName;
+        this.agent = agent;
+        this.toolCollection = toolCollection;
+        this.parallelConfig = parallelConfig;
+    }
     
     /**
      * 线程池执行器，用于并行执行工具
@@ -108,7 +117,7 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
      * @return 包含执行结果的映射
      */
     @Override
-    public Map<String, Object> apply(AgentMessageState state) {
+    public Map<String, Object> apply(T state) {
 
         List<ToolExecutionRequest> toolExecutionRequests = null;
         Optional<ChatMessage> chatMessage = state.lastMessage();
@@ -150,11 +159,11 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
         if (shouldUseParallel) {
             // 使用并行执行
             log.info("并行执行 {} 个工具", toolExecutionRequests.size());
-            result = executeToolsInParallel(toolExecutionRequests);
+            result = executeToolsInParallel(toolExecutionRequests, state);
         } else {
             // 使用串行执行
             log.info("串行执行 {} 个工具", toolExecutionRequests.size());
-            result = executeToolsSequentially(toolExecutionRequests);
+            result = executeToolsSequentially(toolExecutionRequests, state);
         }
 
         if (result.isEmpty()) {
@@ -170,8 +179,31 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
         }
 
         // 将工具执行结果添加到状态中，这样智能体才能看到工具执行的结果
-        return Map.of("next", "callback", "messages", result);
+        Map<String, Object> resultMap = new HashMap<>();
+        resultMap.put("next", "callback");
+        resultMap.put("messages", result);
+        
+        // 检查状态是否有更新（如TodoList等）
+        // 因为框架需要知道状态的存在，以便正确管理状态
+        if (state.getOriginalUserQuery().isPresent()) {
+            resultMap.put("originalUserQuery", state.getOriginalUserQuery().get());
+        }
+        
+        // 只有MainGraphState才有这些方法，需要类型检查
+        if (state instanceof com.zhouruojun.dataanalysisagent.agent.state.MainGraphState) {
+            com.zhouruojun.dataanalysisagent.agent.state.MainGraphState mainState = 
+                (com.zhouruojun.dataanalysisagent.agent.state.MainGraphState) state;
+            if (mainState.getTodoList().isPresent()) {
+                resultMap.put("todoList", mainState.getTodoList().get());
+            }
+            if (mainState.getSubgraphResults().isPresent()) {
+                resultMap.put("subgraphResults", mainState.getSubgraphResults().get());
+            }
+        }
+        
+        return resultMap;
     }
+
 
     /**
      * 判断是否应该使用并行执行
@@ -227,9 +259,9 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
      * @param requests 工具执行请求列表
      * @return 工具执行结果列表
      */
-    private List<ToolExecutionResultMessage> executeToolsSequentially(List<ToolExecutionRequest> requests) {
+    private List<ToolExecutionResultMessage> executeToolsSequentially(List<ToolExecutionRequest> requests, T state) {
         return requests.stream()
-                .map(this::executeTool)
+                .map(request -> executeTool(request, state))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .collect(Collectors.toList());
@@ -241,13 +273,13 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
      * @param requests 工具执行请求列表
      * @return 工具执行结果列表
      */
-    private List<ToolExecutionResultMessage> executeToolsInParallel(List<ToolExecutionRequest> requests) {
+    private List<ToolExecutionResultMessage> executeToolsInParallel(List<ToolExecutionRequest> requests, T state) {
         try {
             // 创建并行任务
             List<CompletableFuture<Optional<ToolExecutionResultMessage>>> futures = requests.stream()
                     .map(request -> CompletableFuture.supplyAsync(() -> {
                         log.info("开始并行执行工具: {}", request.name());
-                        return executeTool(request);
+                        return executeTool(request, state);
                     }, executorService))
                     .collect(Collectors.toList());
             
@@ -275,7 +307,7 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
             
             // 如果并行执行失败，回退到串行执行
             log.warn("回退到串行执行模式");
-            return executeToolsSequentially(requests);
+            return executeToolsSequentially(requests, state);
         }
     }
 
@@ -285,13 +317,13 @@ public class ExecuteTools implements NodeAction<AgentMessageState> {
      * @param request 工具执行请求
      * @return 工具执行结果
      */
-    private Optional<ToolExecutionResultMessage> executeTool(ToolExecutionRequest request) {
+    private Optional<ToolExecutionResultMessage> executeTool(ToolExecutionRequest request, T state) {
         try {
             long startTime = System.currentTimeMillis();
             log.info("执行工具: {} (线程: {})", request.name(), Thread.currentThread().getName());
             
             // 使用工具集合执行工具
-            String result = toolCollection.executeTool(request);
+            String result = toolCollection.executeTool(request, state);
             
             long duration = System.currentTimeMillis() - startTime;
             log.info("工具 {} 执行完成，耗时: {}ms", request.name(), duration);
