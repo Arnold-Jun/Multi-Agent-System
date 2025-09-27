@@ -538,8 +538,7 @@ public class DataAnalysisGraphBuilder {
         // 如果originalUserQuery为空，从messages中提取
         List<ChatMessage> messages = state.messages();
         for (ChatMessage message : messages) {
-            if (message instanceof UserMessage) {
-                UserMessage userMessage = (UserMessage) message;
+            if (message instanceof UserMessage userMessage) {
                 String content = userMessage.text();
                 if (content != null && !content.trim().isEmpty()) {
                     return content.trim();

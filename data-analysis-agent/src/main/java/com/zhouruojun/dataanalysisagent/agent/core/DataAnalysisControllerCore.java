@@ -167,7 +167,7 @@ public class DataAnalysisControllerCore {
                 %s
                 """, 
                 finalResponse,
-                resultBuilder.toString()
+                    resultBuilder
             );
             
             // 缓存会话信息
@@ -500,8 +500,8 @@ public class DataAnalysisControllerCore {
             if (finalResult != null && !finalResult.trim().isEmpty()) {
                 return finalResult;
             } else {
-                log.warn("No summary result found, returning debug info: {}", result.toString());
-                return "数据分析流程执行完成，但未获得最终总结结果。调试信息:\n" + result.toString();
+                log.warn("No summary result found, returning debug info: {}", result);
+                return "数据分析流程执行完成，但未获得最终总结结果。调试信息:\n" + result;
             }
             
         } catch (Exception e) {
@@ -592,7 +592,7 @@ public class DataAnalysisControllerCore {
                     .build();
 
             List<Part> parts = message.getParts();
-            List<Content> contents = parts.stream().<Content>map(part -> {
+            List<Content> contents = parts.stream().map(part -> {
                 if (part instanceof FilePart filePart) {
                     FileContent file = filePart.getFile();
                     TextFile base64data = TextFile.builder()
@@ -670,7 +670,7 @@ public class DataAnalysisControllerCore {
                 StateSnapshot<MainGraphState> state = graph.getState(runnableConfig);
                 
                 // 将新消息添加到状态中并继续执行
-                List<Content> contents = message.getParts().stream().<Content>map(part -> {
+                List<Content> contents = message.getParts().stream().map(part -> {
                     if (part instanceof FilePart filePart) {
                         FileContent file = filePart.getFile();
                         TextFile base64data = TextFile.builder()

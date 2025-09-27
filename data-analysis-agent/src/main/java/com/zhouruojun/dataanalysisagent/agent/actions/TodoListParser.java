@@ -37,12 +37,11 @@ public class TodoListParser implements NodeAction<MainGraphState> {
             }
             
             ChatMessage lastMessage = lastMessageOpt.get();
-            if (!(lastMessage instanceof AiMessage)) {
+            if (!(lastMessage instanceof AiMessage aiMessage)) {
                 log.warn("最后一条消息不是AiMessage，无法解析JSON");
                 return createErrorResult(state, "最后一条消息不是AI消息");
             }
-            
-            AiMessage aiMessage = (AiMessage) lastMessage;
+
             String plannerOutput = aiMessage.text();
             
             log.info("Planner输出内容: {}", plannerOutput);

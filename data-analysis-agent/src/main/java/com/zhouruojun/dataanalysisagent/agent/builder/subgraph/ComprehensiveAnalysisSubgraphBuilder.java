@@ -61,7 +61,7 @@ public class ComprehensiveAnalysisSubgraphBuilder extends AbstractAgentGraphBuil
     protected void initializeDefaults() {
         // 设置子图序列化器
         if (stateSerializer == null) {
-            stateSerializer = (StateSerializer<SubgraphState>) AgentSerializers.SUBGRAPH.subgraph();
+            stateSerializer = AgentSerializers.SUBGRAPH.subgraph();
         }
         super.initializeDefaults();
     }

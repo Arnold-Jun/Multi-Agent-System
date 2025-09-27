@@ -115,7 +115,7 @@ public class CallAgent<T extends BaseAgentState> implements NodeAction<T> {
                 
                 if (retryCount < maxRetries) {
                     try {
-                        Thread.sleep(1000 * retryCount); // 递增延迟
+                        Thread.sleep(1000L * retryCount); // 递增延迟
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break;

@@ -31,7 +31,7 @@ public class A2AClient {
     private final transient WebClient webClient;
     @Getter(AccessLevel.PROTECTED)
     private final transient ObjectMapper objectMapper = new ObjectMapper();
-    private List<SseEventHandler> sseEventHandlers;
+    private final List<SseEventHandler> sseEventHandlers;
 
     private static final Predicate<String> SSE_DONE_PREDICATE = "[DONE]"::equals;
 

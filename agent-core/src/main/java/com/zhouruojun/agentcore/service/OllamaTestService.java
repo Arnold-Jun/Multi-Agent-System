@@ -69,11 +69,10 @@ public class OllamaTestService {
      */
     public String getServiceInfo() {
         try {
-            StringBuilder info = new StringBuilder();
-            info.append("Ollama服务信息:\n");
-            info.append("- 可用性: ").append(ollamaService.isAvailable() ? "是" : "否").append("\n");
-            info.append("- 可用模型: ").append(ollamaService.getAvailableModels()).append("\n");
-            return info.toString();
+            String info = "Ollama服务信息:\n" +
+                    "- 可用性: " + (ollamaService.isAvailable() ? "是" : "否") + "\n" +
+                    "- 可用模型: " + ollamaService.getAvailableModels() + "\n";
+            return info;
         } catch (Exception e) {
             return "获取服务信息失败: " + e.getMessage();
         }

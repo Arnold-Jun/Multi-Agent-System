@@ -216,8 +216,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     protected EdgeAction<T> getStandardAgentShouldContinue() {
         return (state) -> {
             var lastMessage = state.lastMessage();
-            if (lastMessage.isPresent() && lastMessage.get() instanceof dev.langchain4j.data.message.AiMessage) {
-                dev.langchain4j.data.message.AiMessage aiMessage = (dev.langchain4j.data.message.AiMessage) lastMessage.get();
+            if (lastMessage.isPresent() && lastMessage.get() instanceof dev.langchain4j.data.message.AiMessage aiMessage) {
                 if (aiMessage.hasToolExecutionRequests()) {
                     return "action";
                 }

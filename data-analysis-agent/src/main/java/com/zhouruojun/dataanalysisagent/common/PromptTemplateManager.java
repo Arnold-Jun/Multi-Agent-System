@@ -17,7 +17,7 @@ public class PromptTemplateManager {
     @Getter
     public static final PromptTemplateManager instance = new PromptTemplateManager();
     
-    private Map<String, String> cache = new ConcurrentHashMap<>();
+    private final Map<String, String> cache = new ConcurrentHashMap<>();
     
     private PromptTemplateManager() {
         // 私有构造函数，确保单例
@@ -412,7 +412,7 @@ public class PromptTemplateManager {
             - 如果任务失败且失败次数<3，不修改状态（会重试）
             - 如果任务失败且失败次数>=3，使用modify将状态改为failed
             - 只输出JSON，不要其他内容
-            """, userQuery, todoListInfo, subgraphInfo.toString());
+            """, userQuery, todoListInfo, subgraphInfo);
     }
     public String getPlannerPrompt() {
         return """

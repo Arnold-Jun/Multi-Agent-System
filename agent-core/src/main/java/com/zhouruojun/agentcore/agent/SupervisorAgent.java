@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class SupervisorAgent extends BaseAgent {
 
-    private List<String> agentNames;
+    private final List<String> agentNames;
 
     @Override
     protected String getPrompt() {

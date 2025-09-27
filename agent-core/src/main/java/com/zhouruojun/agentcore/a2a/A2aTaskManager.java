@@ -18,8 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class A2aTaskManager {
 
     private static final A2aTaskManager INSTANCE = new A2aTaskManager();
-    private Map<String, TaskSendParams> taskSendParamsMap;
-    private Map<String, List<String>> taskWithSessionIdMap;
+    private final Map<String, TaskSendParams> taskSendParamsMap;
+    private final Map<String, List<String>> taskWithSessionIdMap;
 
     private A2aTaskManager() {
         taskSendParamsMap = new ConcurrentHashMap<>();

@@ -46,7 +46,7 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
     /**
      * 工具集合管理器
      */
-    private DataAnalysisToolCollection toolCollection;
+    private final DataAnalysisToolCollection toolCollection;
     
     /**
      * 并行执行配置
@@ -190,9 +190,7 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
         }
         
         // 只有MainGraphState才有这些方法，需要类型检查
-        if (state instanceof com.zhouruojun.dataanalysisagent.agent.state.MainGraphState) {
-            com.zhouruojun.dataanalysisagent.agent.state.MainGraphState mainState = 
-                (com.zhouruojun.dataanalysisagent.agent.state.MainGraphState) state;
+        if (state instanceof com.zhouruojun.dataanalysisagent.agent.state.MainGraphState mainState) {
             if (mainState.getTodoList().isPresent()) {
                 resultMap.put("todoList", mainState.getTodoList().get());
             }

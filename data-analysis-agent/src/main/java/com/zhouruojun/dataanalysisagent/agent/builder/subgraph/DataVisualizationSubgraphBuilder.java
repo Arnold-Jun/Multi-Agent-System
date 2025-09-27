@@ -50,7 +50,7 @@ public class DataVisualizationSubgraphBuilder extends AbstractAgentGraphBuilder<
     protected void initializeDefaults() {
         // 设置子图序列化器
         if (stateSerializer == null) {
-            stateSerializer = (StateSerializer<SubgraphState>) AgentSerializers.SUBGRAPH.subgraph();
+            stateSerializer = AgentSerializers.SUBGRAPH.subgraph();
         }
         super.initializeDefaults();
     }

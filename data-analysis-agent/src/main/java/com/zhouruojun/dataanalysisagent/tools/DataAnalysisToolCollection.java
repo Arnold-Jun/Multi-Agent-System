@@ -42,7 +42,7 @@ public class DataAnalysisToolCollection {
     private final List<ToolSpecification> schedulerTools = new ArrayList<>();
     
     // 缓存的工具类列表
-    private List<Class<?>> cachedToolClasses = new ArrayList<>();
+    private final List<Class<?>> cachedToolClasses = new ArrayList<>();
     
     // 缓存的工具方法映射 (工具名 -> 方法)
     private final Map<String, Method> toolMethodCache = new ConcurrentHashMap<>();

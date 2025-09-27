@@ -11,7 +11,7 @@ public enum AgentSerializers {
 
     private final StateSerializer<AgentMessageState> serializer;
 
-    private AgentSerializers(StateSerializer<AgentMessageState> serializer) {
+    AgentSerializers(StateSerializer<AgentMessageState> serializer) {
         this.serializer = serializer;
     }
 

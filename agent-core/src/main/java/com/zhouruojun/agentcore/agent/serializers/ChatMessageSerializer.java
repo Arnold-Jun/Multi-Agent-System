@@ -49,7 +49,7 @@ public class ChatMessageSerializer implements Serializer<ChatMessage> {
             case TOOL_EXECUTION_RESULT -> {
                 return this.toolExecutionResult.read(in);
             }
-            default -> throw new IllegalArgumentException("Unsupported chat message type: " + String.valueOf(type));
+            default -> throw new IllegalArgumentException("Unsupported chat message type: " + type);
         }
     }
 }

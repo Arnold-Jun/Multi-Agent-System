@@ -9,7 +9,7 @@ import lombok.Getter;
  */
 @Getter
 public class A2AClientJSONError extends A2AClientError {
-    private String message;
+    private final String message;
 
     public A2AClientJSONError(String message) {
         super(String.format("JSON Error: %s", message));

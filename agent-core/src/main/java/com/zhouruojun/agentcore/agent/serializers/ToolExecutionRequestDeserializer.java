@@ -12,8 +12,8 @@ class ToolExecutionRequestDeserializer extends JsonDeserializer<ToolExecutionReq
     ToolExecutionRequestDeserializer() {
     }
 
-    public ToolExecutionRequest deserialize(JsonParser parser, DeserializationContext ctx) throws IOException, JacksonException {
-        JsonNode node = (JsonNode)parser.getCodec().readTree(parser);
+    public ToolExecutionRequest deserialize(JsonParser parser, DeserializationContext ctx) throws IOException {
+        JsonNode node = parser.getCodec().readTree(parser);
         return ToolExecutionRequest.builder().id(node.get("id").asText()).name(node.get("name").asText()).arguments(node.get("arguments").asText()).build();
     }
 }

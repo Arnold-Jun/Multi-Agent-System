@@ -17,7 +17,7 @@ public enum AgentSerializers {
 
     private final StateSerializer<?> serializer;
 
-    private AgentSerializers(StateSerializer<?> serializer) {
+    AgentSerializers(StateSerializer<?> serializer) {
         this.serializer = serializer;
     }
 

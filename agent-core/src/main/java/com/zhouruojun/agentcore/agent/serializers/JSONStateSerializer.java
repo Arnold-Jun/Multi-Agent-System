@@ -21,6 +21,6 @@ public class JSONStateSerializer extends JacksonStateSerializer<AgentMessageStat
 
     public AgentMessageState read(ObjectInput in) throws IOException, ClassNotFoundException {
         String json = in.readUTF();
-        return (AgentMessageState)this.objectMapper.readValue(json, AgentMessageState.class);
+        return this.objectMapper.readValue(json, AgentMessageState.class);
     }
 }

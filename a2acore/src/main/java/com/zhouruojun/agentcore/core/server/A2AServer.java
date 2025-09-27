@@ -11,8 +11,8 @@ import reactor.core.publisher.Mono;
  *
  */
 public class A2AServer {
-    private AgentCard agentCard;
-    private ServerAdapter serverAdapter;
+    private final AgentCard agentCard;
+    private final ServerAdapter serverAdapter;
 
     public A2AServer(AgentCard agentCard, ServerAdapter serverAdapter) {
         this.agentCard = agentCard;

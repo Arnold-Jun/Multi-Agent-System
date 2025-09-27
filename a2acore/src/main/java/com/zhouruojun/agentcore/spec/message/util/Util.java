@@ -41,7 +41,7 @@ public class Util {
     }
 
 
-    private static ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
 //    static {
 //        //这个特性，决定了解析器是否将自动关闭那些不属于parser自己的输入源�?//// 如果禁止，则调用应用不得不分别去关闭那些被用来创建parser的基础输入流InputStream和reader�?////默认是true
@@ -110,7 +110,7 @@ public class Util {
         }
     }
 
-    private static String json = "{\"jsonrpc\":\"2.0\",\"id\":\"4cfc6c25a616401ba5095e72475181c2\",\"method\":\"tasks/sendSubscribe\",\"params\":{\"id\":\"e6d4a0a98055472bb3b6184bfc16fdfb\",\"sessionId\":\"15bd8990773f45d58a88a3c1b5865043\",\"message\":{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"type\":\"text\",\"metadata\":null,\"text\":\"100块人民币能总汇多少美元\"}],\"metadata\":null},\"acceptedOutputModes\":null,\"pushNotification\":null,\"historyLength\":3,\"metadata\":null}}\n";
+    private static final String json = "{\"jsonrpc\":\"2.0\",\"id\":\"4cfc6c25a616401ba5095e72475181c2\",\"method\":\"tasks/sendSubscribe\",\"params\":{\"id\":\"e6d4a0a98055472bb3b6184bfc16fdfb\",\"sessionId\":\"15bd8990773f45d58a88a3c1b5865043\",\"message\":{\"role\":\"user\",\"parts\":[{\"type\":\"text\",\"type\":\"text\",\"metadata\":null,\"text\":\"100块人民币能总汇多少美元\"}],\"metadata\":null},\"acceptedOutputModes\":null,\"pushNotification\":null,\"historyLength\":3,\"metadata\":null}}\n";
 
     public static void main(String[] args) {
         JsonRpcResponse jsonRpcResponse = Util.fromJson(json, JsonRpcResponse.class);

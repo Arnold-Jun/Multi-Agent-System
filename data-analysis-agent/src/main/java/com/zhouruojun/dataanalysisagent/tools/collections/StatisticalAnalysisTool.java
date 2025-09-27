@@ -39,21 +39,20 @@ public class StatisticalAnalysisTool {
             DescriptiveStatistics stats = new DescriptiveStatistics();
             validValues.forEach(stats::addValue);
 
-            StringBuilder result = new StringBuilder();
-            result.append("列 '").append(columnName).append("' 的描述性统计:\n");
-            result.append("- 数据量: ").append(stats.getN()).append("\n");
-            result.append("- 均值: ").append(String.format("%.4f", stats.getMean())).append("\n");
-            result.append("- 中位数: ").append(String.format("%.4f", stats.getPercentile(50))).append("\n");
-            result.append("- 标准差: ").append(String.format("%.4f", stats.getStandardDeviation())).append("\n");
-            result.append("- 方差: ").append(String.format("%.4f", stats.getVariance())).append("\n");
-            result.append("- 最小值: ").append(String.format("%.4f", stats.getMin())).append("\n");
-            result.append("- 最大值: ").append(String.format("%.4f", stats.getMax())).append("\n");
-            result.append("- 第一四分位数(Q1): ").append(String.format("%.4f", stats.getPercentile(25))).append("\n");
-            result.append("- 第三四分位数(Q3): ").append(String.format("%.4f", stats.getPercentile(75))).append("\n");
-            result.append("- 偏度: ").append(String.format("%.4f", stats.getSkewness())).append("\n");
-            result.append("- 峰度: ").append(String.format("%.4f", stats.getKurtosis())).append("\n");
+            String result = "列 '" + columnName + "' 的描述性统计:\n" +
+                    "- 数据量: " + stats.getN() + "\n" +
+                    "- 均值: " + String.format("%.4f", stats.getMean()) + "\n" +
+                    "- 中位数: " + String.format("%.4f", stats.getPercentile(50)) + "\n" +
+                    "- 标准差: " + String.format("%.4f", stats.getStandardDeviation()) + "\n" +
+                    "- 方差: " + String.format("%.4f", stats.getVariance()) + "\n" +
+                    "- 最小值: " + String.format("%.4f", stats.getMin()) + "\n" +
+                    "- 最大值: " + String.format("%.4f", stats.getMax()) + "\n" +
+                    "- 第一四分位数(Q1): " + String.format("%.4f", stats.getPercentile(25)) + "\n" +
+                    "- 第三四分位数(Q3): " + String.format("%.4f", stats.getPercentile(75)) + "\n" +
+                    "- 偏度: " + String.format("%.4f", stats.getSkewness()) + "\n" +
+                    "- 峰度: " + String.format("%.4f", stats.getKurtosis()) + "\n";
 
-            return result.toString();
+            return result;
         } catch (Exception e) {
             log.error("Error calculating descriptive statistics: {}", e.getMessage(), e);
             return "Error calculating descriptive statistics: " + e.getMessage();

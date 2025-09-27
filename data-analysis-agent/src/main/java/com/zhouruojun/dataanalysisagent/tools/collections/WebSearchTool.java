@@ -10,6 +10,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -287,7 +288,7 @@ public class WebSearchTool {
                 Pattern urlPattern = Pattern.compile("uddg=([^&]+)");
                 Matcher urlMatcher = urlPattern.matcher(url);
                 if (urlMatcher.find()) {
-                    url = java.net.URLDecoder.decode(urlMatcher.group(1), "UTF-8");
+                    url = java.net.URLDecoder.decode(urlMatcher.group(1), StandardCharsets.UTF_8);
                 }
             }
             

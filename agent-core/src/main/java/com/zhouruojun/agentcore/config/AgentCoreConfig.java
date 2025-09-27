@@ -98,13 +98,9 @@ public class AgentCoreConfig {
                         if (message instanceof dev.langchain4j.data.message.SystemMessage) {
                             // 跳过系统消息，我们已经有了自己的系统提示
                             continue;
-                        } else if (message instanceof dev.langchain4j.data.message.UserMessage) {
-                            dev.langchain4j.data.message.UserMessage userMsg = 
-                                (dev.langchain4j.data.message.UserMessage) message;
+                        } else if (message instanceof dev.langchain4j.data.message.UserMessage userMsg) {
                             contextBuilder.append("用户: ").append(userMsg.singleText()).append("\n");
-                        } else if (message instanceof dev.langchain4j.data.message.AiMessage) {
-                            dev.langchain4j.data.message.AiMessage aiMsg = 
-                                (dev.langchain4j.data.message.AiMessage) message;
+                        } else if (message instanceof AiMessage aiMsg) {
                             contextBuilder.append("助手: ").append(aiMsg.text()).append("\n");
                         }
                     }
