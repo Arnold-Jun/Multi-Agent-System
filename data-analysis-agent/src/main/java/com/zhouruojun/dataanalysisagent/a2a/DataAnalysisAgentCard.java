@@ -1,8 +1,8 @@
 package com.zhouruojun.dataanalysisagent.a2a;
 
-import com.zhouruojun.agentcore.spec.AgentCapabilities;
-import com.zhouruojun.agentcore.spec.AgentCard;
-import com.zhouruojun.agentcore.spec.AgentSkill;
+import com.zhouruojun.a2acore.spec.AgentCapabilities;
+import com.zhouruojun.a2acore.spec.AgentCard;
+import com.zhouruojun.a2acore.spec.AgentSkill;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,7 +27,7 @@ public class DataAnalysisAgentCard {
         AgentSkill skill = AgentSkill.builder()
                 .id("data_analysis")
                 .name("数据分析工具")
-                .description("帮助用户完成数据加载、统计分析、可视化等一系列数据分析任务")
+                .description("帮助用户完成数据搜索、统计分析、可视化等一系列数据分析任务")
                 .tags(Arrays.asList("数据分析", "data analysis", "统计", "可视化"))
                 .examples(Collections.singletonList("请帮我分析数据并生成图表"))
                 .inputModes(List.of("text", "data"))
@@ -35,8 +35,8 @@ public class DataAnalysisAgentCard {
                 .build();
                 
         AgentCard agentCard = new AgentCard();
-        agentCard.setName("DataAnalysisAgent");
-        agentCard.setDescription("数据分析智能体，提供数据加载、统计分析、可视化等功能");
+        agentCard.setName("data-analysis-agent");
+        agentCard.setDescription("数据分析智能体，提供数据搜索、统计分析、可视化等功能");
         agentCard.setUrl("http://localhost:8082");
         agentCard.setVersion("1.0.0");
         agentCard.setCapabilities(capabilities);

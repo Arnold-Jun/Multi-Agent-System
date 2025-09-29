@@ -19,7 +19,7 @@ import jakarta.annotation.PostConstruct;
 import java.util.*;
 
 /**
- * 数据分析任务管理器 - 基于codewiz的CrAgentTaskManager经验重构
+ * 数据分析任务管理器
  * 作为A2A协议的入口，处理流式任务和多种交互方法
  */
 @Slf4j

@@ -32,7 +32,6 @@ public class PromptTemplateManager {
         cache.put("dataVisualization", getDataVisualizationPrompt());
         cache.put("webSearch", getWebSearchPrompt());
         cache.put("comprehensiveAnalysis", getComprehensiveAnalysisPrompt());
-        cache.put("dataAnalysis", getDataAnalysisPrompt());
     }
 
     /**
@@ -44,68 +43,7 @@ public class PromptTemplateManager {
         return cache.getOrDefault(key, "");
     }
 
-    /**
-     * 设置提示词模板
-     * @param key 提示词键名
-     * @param prompt 提示词内容
-     */
-    public void setPrompt(String key, String prompt) {
-        cache.put(key, prompt);
-    }
 
-    /**
-     * 清除缓存
-     */
-    public void clearCache() {
-        cache.clear();
-        initializePrompts();
-    }
-
-    /**
-     * 获取缓存大小
-     * @return 缓存中的提示词数量
-     */
-    public int getCacheSize() {
-        return cache.size();
-    }
-
-    
-    
-    /**
-     * 获取Summary的系统消息模板（使用缓存）
-     */
-    public String getSummarySystemPrompt() {
-        return cache.computeIfAbsent("summarySystem", 
-            k -> "你是一名专业的数据分析总结专家，负责整合所有子智能体的执行结果，为用户提供完整的数据分析报告。\n\n" +
-                "**你的职责**：\n" +
-                "- 收集和整合所有子智能体的执行结果\n" +
-                "- 分析任务执行的整体情况\n" +
-                "- 生成结构化的数据分析报告\n" +
-                "- 提供数据洞察和建议\n" +
-                "- 以自然语言形式向用户呈现结果\n\n" +
-                "**报告结构**：\n" +
-                "1. **执行摘要**：整体任务执行情况概述\n" +
-                "2. **统计分析结果**：统计分析和数学计算发现\n" +
-                "3. **可视化结果**：图表生成和可视化展示\n" +
-                "4. **网络搜索结果**：外部信息获取和补充\n" +
-                "5. **数据洞察**：基于分析结果的关键发现\n" +
-                "6. **建议和后续行动**：基于分析结果的建议");
-    }
-    
-    /**
-     * 获取Summary的用户消息模板（使用缓存）
-     */
-    public String getSummaryUserPrompt() {
-        return cache.computeIfAbsent("summaryUser", 
-            k -> "**输出要求**：\n" +
-                "请基于以上信息生成完整的数据分析报告，包括：\n" +
-                "- 使用清晰的结构和标题\n" +
-                "- 包含具体的数据和结果\n" +
-                "- 提供可操作的洞察和建议\n" +
-                "- 使用自然语言，避免过多技术术语\n" +
-                "- 确保内容的完整性和准确性\n" +
-                "- 如果某些任务失败，要在总结中说明原因和影响");
-    }
 
     /**
      * 获取统计分析智能体提示词
@@ -247,77 +185,6 @@ public class PromptTemplateManager {
         - 记住：你的价值在于整合和评估，而不是重复分析！
         """;
     }
-
-    /**
-     * 获取原始数据分析智能体提示词（保留兼容性）
-     */
-    public String getDataAnalysisPrompt() {
-        return """
-        你是一名专业的数据分析智能体，具备以下核心能力：
-        
-        **数据处理能力**：
-        - 数据清洗、去重、格式转换
-        - 缺失值处理和异常值检测
-        - 数据质量评估和验证
-        
-        **统计分析能力**：
-        - 描述性统计分析（均值、中位数、标准差等）
-        - 相关性分析和趋势分析
-        - 分布分析和假设检验
-        
-        **数据可视化**：
-        - 生成各类图表（柱状图、散点图、热力图等）
-        - 数据透视表和交叉表分析
-        - 趋势图和对比分析图
-        
-        **机器学习**：
-        - 基础回归和分类分析
-        - 聚类分析和异常检测
-        - 特征工程和模型评估
-        
-        **网络搜索能力**：
-        - 搜索网络信息获取最新数据
-        - 搜索特定网站的专业信息
-        - 搜索最新新闻和趋势
-        - 搜索学术论文和研究资料
-        
-        **数据库操作**：
-        - SQL查询和数据提取
-        - 数据库连接和数据导入导出
-        
-        **重要：你必须主动使用工具！**
-        
-        当用户询问需要最新信息的问题时，你必须使用搜索工具：
-        - 使用 searchWeb 工具搜索一般信息
-        - 使用 searchLatestNews 工具搜索最新新闻
-        - 使用 searchSpecificSite 工具搜索特定网站
-        - 使用 searchAcademicPapers 工具搜索学术资料
-        
-        当用户提供数据文件时，你必须使用数据处理工具：
-        - 使用 loadCsvData、loadExcelData、loadJsonData 加载数据
-        - 使用 calculateDescriptiveStats 进行统计分析
-        - 使用 generateBarChart、generatePieChart 等生成图表
-        
-        **工作原则**：
-        1. 始终首先理解用户的数据分析需求
-        2. 如果需要最新信息或背景资料，主动使用搜索工具
-        3. 选择最合适的分析方法和工具
-        4. 提供清晰的分析步骤和结果解释
-        5. 生成直观的可视化结果
-        6. 给出实用的数据洞察和建议
-        
-        **搜索工具使用指南**：
-        - 当用户询问需要最新数据的问题时，使用搜索工具
-        - 当需要了解某个行业或领域背景时，使用搜索工具
-        - 当需要验证数据或获取对比信息时，使用搜索工具
-        - 搜索后结合搜索结果进行更准确的分析
-        
-        请根据用户的具体需求，运用相应的数据分析工具和方法来完成任务。
-        当任务完成时，请回复FINISH。
-        记住：不要只是回答问题，要主动使用工具获取准确信息！
-        """;
-    }
-
 
 
     /**

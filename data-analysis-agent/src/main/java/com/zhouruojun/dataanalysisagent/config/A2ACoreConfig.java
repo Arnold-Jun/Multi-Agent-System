@@ -71,7 +71,7 @@ public class A2ACoreConfig {
         );
 
         return AgentCard.builder()
-                .name("数据分析智能体")
+                .name("data-analysis-agent")
                 .description("专业的数据分析智能体，支持数据加载、统计分析、可视化等功能")
                 .url("http://localhost:8082")
                 .provider(provider)

@@ -90,10 +90,26 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
 
         log.info("Invoking agent {} with task instruction: {}", agentName, taskInstruction);
         
+        // 检查A2A客户端管理器状态
+        if (a2aClientManager == null) {
+            log.error("A2A客户端管理器不可用");
+            return Map.of(
+                "next", "userInput",
+                "agent_response", "A2A客户端管理器不可用",
+                "username", username.get()
+            );
+        }
+        
+        // 检查Agent注册状态
+        try {
+            Map<String, Object> registrationStatus = a2aClientManager.getAgentRegistrationStatus(agentName);
+            log.info("Agent registration status for {}: {}", agentName, registrationStatus);
+        } catch (Exception e) {
+            log.warn("Failed to get registration status: {}", e.getMessage());
+        }
+        
         // 使用A2A客户端管理器进行调用
-        A2AInvocationResult invocationResult = a2aClientManager != null ? 
-            invokeAgentWithA2A(agentName, taskInstruction, sessionId.get()) :
-            A2AInvocationResult.failure("A2A客户端管理器不可用");
+        A2AInvocationResult invocationResult = invokeAgentWithA2A(agentName, taskInstruction, sessionId.get());
 
         if (!invocationResult.isSuccess()) {
             String errorMessage = invocationResult.getError() != null ? invocationResult.getError() : "智能体服务不可用";
@@ -123,6 +139,13 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
      */
     private A2AInvocationResult invokeAgentWithA2A(String agentName, String taskInstruction, String sessionId) {
         try {
+            // 首先验证Agent是否可用
+            log.info("Checking if agent {} is available...", agentName);
+            boolean isHealthy = a2aClientManager.checkAgentHealth(agentName);
+            if (!isHealthy) {
+                log.warn("Agent {} is not healthy, attempting to register...", agentName);
+            }
+            
             // 使用A2A客户端管理器进行实际的A2A调用
             // A2AClient a2aClient = a2aClientManager.getA2aClient(agentName);
             

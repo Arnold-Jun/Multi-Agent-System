@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * A2A SSE事件处理器 - 基于codewiz经验重构
+ * A2A SSE事件处理器
  * 用于处理A2A的task/subscribe接口的后续监听逻辑
  */
 @Slf4j

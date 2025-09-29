@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A2A任务管理器 - 基于codewiz经验重构
+ * A2A任务管理器
  * 管理任务生命周期和会话状态
  */
 @Slf4j

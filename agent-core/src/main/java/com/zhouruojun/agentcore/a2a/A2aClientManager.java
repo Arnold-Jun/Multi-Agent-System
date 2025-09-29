@@ -29,12 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.HashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
- * A2A客户端管理器 - 基于codewiz经验重构
+ * A2A客户端管理器
  * 支持智能体注册、发现、健康检查和A2A协议通信
  */
 @Slf4j
@@ -130,26 +131,49 @@ public class A2aClientManager implements ApplicationContextAware {
         List<A2AClient> a2aClients = clientsMap.get(agentName);
         if (CollectionUtil.isEmpty(a2aClients)) {
             log.warn("No A2AClient found for agent: {}, attempting to register...", agentName);
-            // 尝试重新注册
-            try {
-                if (AgentConstants.DATA_ANALYSIS_AGENT_NAME.equals(agentName)) {
-                    A2aRegister a2aRegister = new A2aRegister();
-                    a2aRegister.setName(AgentConstants.DATA_ANALYSIS_AGENT_NAME);
-                    a2aRegister.setBaseUrl(AgentConstants.DATA_ANALYSIS_AGENT_URL);
-                    a2aRegister.setAgentCardPath(AgentConstants.DATA_ANALYSIS_AGENT_CARD_PATH);
-                    register(a2aRegister);
-                    log.info("Successfully re-registered {} at {}", agentName, AgentConstants.DATA_ANALYSIS_AGENT_URL);
+            // 尝试重新注册 - 最多重试3次
+            for (int retry = 0; retry < 3; retry++) {
+                try {
+                    log.info("Attempting to register agent: {} (retry {}/{})", agentName, retry + 1, 3);
                     
-                    // 重新获取
-                    a2aClients = clientsMap.get(agentName);
-                    if (!CollectionUtil.isEmpty(a2aClients)) {
-                        return a2aClients.get(0);
+                    if (AgentConstants.DATA_ANALYSIS_AGENT_NAME.equals(agentName)) {
+                        A2aRegister a2aRegister = new A2aRegister();
+                        a2aRegister.setName(AgentConstants.DATA_ANALYSIS_AGENT_NAME);
+                        a2aRegister.setBaseUrl(AgentConstants.DATA_ANALYSIS_AGENT_URL);
+                        a2aRegister.setAgentCardPath(AgentConstants.DATA_ANALYSIS_AGENT_CARD_PATH);
+                        
+                        AgentCard agentCard = register(a2aRegister);
+                        log.info("Successfully re-registered {} at {}, agentCard: {}", 
+                                agentName, AgentConstants.DATA_ANALYSIS_AGENT_URL, agentCard.getName());
+                        
+                        // 重新获取 - 需要再次检查，因为register可能重写了AgentCard的name
+                        String actualAgentName = agentCard.getName();
+                        a2aClients = clientsMap.get(actualAgentName);
+                        
+                        if (!CollectionUtil.isEmpty(a2aClients)) {
+                            return a2aClients.get(0);
+                        }
+                        
+                        // 如果没有找到，也尝试原来的agentName（兼容性）
+                        a2aClients = clientsMap.get(agentName);
+                        if (!CollectionUtil.isEmpty(a2aClients)) {
+                            return a2aClients.get(0);
+                        }
+                    }
+                    
+                    // 如果还没找到，等待一下再重试
+                    if (retry < 2) {
+                        Thread.sleep(1000 + retry * 1000); // 1秒, 2秒, 3秒... 递增等待
+                    }
+                    
+                } catch (Exception e) {
+                    log.error("Failed to re-register agent: {} (retry {}/{})", agentName, retry + 1, 3, e);
+                    if (retry == 2) { // 最后一次重试失败
+                        throw new RuntimeException("Failed to re-register agent after 3 attempts: " + agentName, e);
                     }
                 }
-            } catch (Exception e) {
-                log.error("Failed to re-register agent: {}", agentName, e);
             }
-            throw new RuntimeException("No A2AClient found for agent: " + agentName);
+            throw new RuntimeException("No A2AClient found for agent after all retries: " + agentName);
         }
         return a2aClients.get(0); // 简单轮询，后续可扩展为负载均衡
     }
@@ -216,7 +240,7 @@ public class A2aClientManager implements ApplicationContextAware {
         
         try {
             // 等待最多30秒
-            boolean completed = latch.await(3000, java.util.concurrent.TimeUnit.SECONDS);
+            boolean completed = latch.await(120, java.util.concurrent.TimeUnit.SECONDS);
             if (!completed) {
                 return "A2A调用超时，请重试";
             }
@@ -271,6 +295,32 @@ public class A2aClientManager implements ApplicationContextAware {
             log.warn("Health check failed for agent {}: {}", agentName, e.getMessage());
             return false;
         }
+    }
+    
+    /**
+     * 检查Agent注册状态 - 用于调试
+     */
+    public Map<String, Object> getAgentRegistrationStatus(String agentName) {
+        Map<String, Object> status = new HashMap<>();
+        status.put("agentName", agentName);
+        status.put("registeredInAgentRegistry", agentRegistry.containsKey(agentName));
+        status.put("agentRegistryUrl", agentRegistry.get(agentName));
+        
+        List<A2AClient> clients = clientsMap.get(agentName);
+        status.put("hasClients", !CollectionUtil.isEmpty(clients));
+        status.put("clientCount", clients != null ? clients.size() : 0);
+        
+        if (!CollectionUtil.isEmpty(clients)) {
+            A2AClient firstClient = clients.get(0);
+            status.put("agentCardName", firstClient.getAgentCard().getName());
+            status.put("agentCardUrl", firstClient.getAgentCard().getUrl());
+            status.put("agentCardDescription", firstClient.getAgentCard().getDescription());
+        }
+        
+        status.put("totalRegisteredAgents", clientsMap.size());
+        status.put("totalClients", clients != null ? clients.size() : 0);
+        
+        return status;
     }
 
     public String getAgentInfo(String agentName) {

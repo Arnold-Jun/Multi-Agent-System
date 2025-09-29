@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-
+import com.zhouruojun.agentcore.a2a.A2AInvocationResult;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -104,7 +104,7 @@ public class A2AClientService {
                                                      String agentUrl) {
         return CompletableFuture.supplyAsync(() -> {
             A2AInvocationResult result = invokeAgent(agentName, taskType, parameters, sessionId, agentUrl);
-            return result.success() ? result.response() : "Error: " + result.error();
+            return result.isSuccess() ? result.getResponse() : "Error: " + result.getError();
         });
     }
 

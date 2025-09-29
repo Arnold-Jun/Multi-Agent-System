@@ -1,6 +1,6 @@
 package com.zhouruojun.agentcore.a2a;
 
-import com.zhouruojun.agentcore.spec.UpdateEvent;
+import com.zhouruojun.a2acore.spec.UpdateEvent;
 import lombok.Data;
 
 /**
