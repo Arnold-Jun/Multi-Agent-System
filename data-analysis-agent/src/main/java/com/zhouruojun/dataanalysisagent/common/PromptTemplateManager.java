@@ -20,7 +20,6 @@ public class PromptTemplateManager {
     private final Map<String, String> cache = new ConcurrentHashMap<>();
 
     private PromptTemplateManager() {
-        // 私有构造函数，确保单例
         initializePrompts();
     }
 
