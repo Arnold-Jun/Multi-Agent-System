@@ -5,8 +5,9 @@ import static org.bsc.langgraph4j.StateGraph.START;
 import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
-import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import com.zhouruojun.agentcore.agent.SupervisorAgent;
+import com.zhouruojun.agentcore.a2a.A2aClientManager;
+import com.zhouruojun.a2acore.spec.AgentCard;
 import com.zhouruojun.agentcore.agent.actions.AgentInvoke;
 import com.zhouruojun.agentcore.agent.actions.AgentInvokeStateCheck;
 import com.zhouruojun.agentcore.agent.actions.CallSupervisorAgent;
@@ -22,11 +23,13 @@ import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.EdgeAction;
 import org.bsc.langgraph4j.serializer.StateSerializer;
 import org.bsc.langgraph4j.streaming.StreamingOutput;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.stream.Collectors;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**
@@ -35,6 +38,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * 
 
  */
+@Slf4j
 public class AgentGraphBuilder {
     private StreamingChatLanguageModel streamingChatLanguageModel;
     private ChatLanguageModel chatLanguageModel;
@@ -101,6 +105,7 @@ public class AgentGraphBuilder {
     }
 
 
+
     /**
      * 构建状态图
      */
@@ -119,16 +124,33 @@ public class AgentGraphBuilder {
             stateSerializer = AgentSerializers.STD.object();
         }
 
-        // 获取可用的智能体名称
-        List<String> availableAgents = a2aClientManager.getAgentNames();
+        // 获取可用的智能体信息
+        List<AgentCard> agentCards = new ArrayList<>();
+        
+        if (a2aClientManager != null) {
+            try {
+                agentCards = a2aClientManager.getAgentCards();
+                if (agentCards != null && !agentCards.isEmpty()) {
+                    List<String> agentNames = agentCards.stream()
+                        .map(card -> card.getName())
+                        .collect(Collectors.toList());
+                    log.info("Found {} available agents: {}", agentNames.size(), agentNames);
+                } else {
+                    log.warn("No agent cards found, no agents available");
+                }
+            } catch (Exception e) {
+                log.error("Error getting agent cards, no agents available", e);
+            }
+        } else {
+            log.warn("A2aClientManager is null, no agents available");
+        }
 
         // 创建主管智能体
         var supervisorAgent = SupervisorAgent.supervisorBuilder()
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
-                .tools(List.of()) // 工具将在运行时设置
                 .agentName("supervisor")
-                .agentNames(availableAgents)
+                .agentCards(agentCards)
                 .build();
 
         // 创建子节点列表
@@ -144,7 +166,7 @@ public class AgentGraphBuilder {
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<AgentMessageState>>> queue = new LinkedBlockingQueue<>();
 
         // 创建主管调用节点
-        final var callSupervisorAgent = new CallSupervisorAgent("supervisor", supervisorAgent, supervisorChildren, requestId, username);
+        final var callSupervisorAgent = new CallSupervisorAgent("supervisor", supervisorAgent, username);
         callSupervisorAgent.setQueue(queue);
 
         // 构建状态图

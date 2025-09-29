@@ -1,7 +1,7 @@
 package com.zhouruojun.dataanalysisagent.agent.builder.subgraph;
 
 import com.zhouruojun.dataanalysisagent.agent.builder.AbstractAgentGraphBuilder;
-import com.zhouruojun.dataanalysisagent.agent.actions.CallAgent;
+import com.zhouruojun.dataanalysisagent.agent.actions.CallSubAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.ExecuteTools;
 import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.dataanalysisagent.agent.state.SubgraphState;
@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.EdgeAction;
 import org.bsc.langgraph4j.GraphStateException;
-import org.bsc.langgraph4j.serializer.StateSerializer;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
@@ -71,7 +70,7 @@ public class ComprehensiveAnalysisSubgraphBuilder extends AbstractAgentGraphBuil
      */
     @Override
     protected StateGraph<SubgraphState> buildGraph(
-            CallAgent<SubgraphState> callAgent,
+            CallSubAgent callAgent,
             ExecuteTools<SubgraphState> executeTools
     ) throws GraphStateException {
         // 综合分析子图：直接输出结果

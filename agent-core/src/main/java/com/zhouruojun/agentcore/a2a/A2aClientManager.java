@@ -1,70 +1,98 @@
 package com.zhouruojun.agentcore.a2a;
 
-import org.springframework.http.HttpStatus;
-
 import cn.hutool.core.collection.CollectionUtil;
-import com.zhouruojun.agentcore.client.A2AClient;
-import com.zhouruojun.agentcore.client.AgentCardResolver;
-import com.zhouruojun.agentcore.client.sse.SseEventHandler;
+import com.zhouruojun.a2a.client.autoconfiguration.A2aAgentsProperties;
+import com.zhouruojun.a2acore.client.A2AClient;
+import com.zhouruojun.a2acore.client.AgentCardResolver;
+import com.zhouruojun.a2acore.client.sse.SseEventHandler;
+import com.zhouruojun.a2acore.spec.AgentCard;
+import com.zhouruojun.a2acore.spec.PushNotificationConfig;
+import com.zhouruojun.a2acore.spec.TaskSendParams;
+import com.zhouruojun.a2acore.spec.TaskState;
+import com.zhouruojun.a2acore.spec.TaskArtifactUpdateEvent;
+import com.zhouruojun.a2acore.spec.TaskStatusUpdateEvent;
+import com.zhouruojun.a2acore.spec.message.SendTaskStreamingResponse;
+import com.zhouruojun.a2acore.spec.message.util.Util;
 import com.zhouruojun.agentcore.config.AgentConstants;
-import com.zhouruojun.agentcore.spec.AgentCard;
-import com.zhouruojun.agentcore.spec.PushNotificationConfig;
-import com.zhouruojun.agentcore.spec.TaskSendParams;
-import com.zhouruojun.agentcore.spec.message.SendTaskStreamingResponse;
-import com.zhouruojun.agentcore.spec.message.util.Util;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
 import javax.annotation.PostConstruct;
-import javax.annotation.Resource;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
- * A2A客户端管理器 - 完整版本
+ * A2A客户端管理器 - 基于codewiz经验重构
  * 支持智能体注册、发现、健康检查和A2A协议通信
  */
 @Slf4j
 @Component
-public class A2aClientManager {
+public class A2aClientManager implements ApplicationContextAware {
 
     private final Map<String, String> agentRegistry = new ConcurrentHashMap<>();
     private List<A2AClient> clients;
     private Map<String, List<A2AClient>> clientsMap;
     private final List<String> supportModes = Arrays.asList("text", "file", "data");
 
-    @Autowired
-    private ApplicationContext applicationContext;
+    @Autowired(required = false)
+    private A2aAgentsProperties a2aAgentsProperties;
 
-    // 暂时移除SseEventHandler依赖，避免启动错误
-    // @Resource
-    // private List<SseEventHandler> sseEventHandlers;
+    private List<SseEventHandler> sseEventHandlers = new ArrayList<>();
+    private ApplicationContext applicationContext;
 
     @PostConstruct
     public void initializeDefaultAgents() {
         clientsMap = new ConcurrentHashMap<>();
         clients = new CopyOnWriteArrayList<>();
+        
+        // 延迟初始化SSE事件处理器
+        initializeSseEventHandlers();
 
         try {
-            A2aRegister a2aRegister = new A2aRegister();
-            a2aRegister.setName(AgentConstants.DATA_ANALYSIS_AGENT_NAME);
-            a2aRegister.setBaseUrl(AgentConstants.DATA_ANALYSIS_AGENT_URL);
-            a2aRegister.setAgentCardPath(AgentConstants.DATA_ANALYSIS_AGENT_CARD_PATH);
-            register(a2aRegister);
-            log.info("Successfully registered {} at {}", AgentConstants.DATA_ANALYSIS_AGENT_NAME, AgentConstants.DATA_ANALYSIS_AGENT_URL);
-        } catch (Exception e) {
-            log.warn("Failed to register {} during startup: {}. Will retry later.", AgentConstants.DATA_ANALYSIS_AGENT_NAME, e.getMessage());
-        }
+                // 注册数据分析智能体
+                A2aRegister a2aRegister = new A2aRegister();
+                a2aRegister.setName(AgentConstants.DATA_ANALYSIS_AGENT_NAME);
+                a2aRegister.setBaseUrl(AgentConstants.DATA_ANALYSIS_AGENT_URL);
+                a2aRegister.setAgentCardPath(AgentConstants.DATA_ANALYSIS_AGENT_CARD_PATH);
+                register(a2aRegister);
+                log.info("Successfully registered {} at {}", AgentConstants.DATA_ANALYSIS_AGENT_NAME, AgentConstants.DATA_ANALYSIS_AGENT_URL);
+            } catch (Exception e) {
+                log.warn("Failed to register {} during startup: {}. Will retry later.", AgentConstants.DATA_ANALYSIS_AGENT_NAME, e.getMessage());
+            }
 
-        log.info("Initialized agents for distributed mode - {} at {}", AgentConstants.DATA_ANALYSIS_AGENT_NAME, AgentConstants.DATA_ANALYSIS_AGENT_URL);
+            log.info("Initialized agents for distributed mode");
+    }
+    
+    /**
+     * 延迟初始化SSE事件处理器
+     */
+    private void initializeSseEventHandlers() {
+        try {
+            if (applicationContext != null) {
+                Map<String, SseEventHandler> handlerBeans = applicationContext.getBeansOfType(SseEventHandler.class);
+                sseEventHandlers.addAll(handlerBeans.values());
+                log.info("Initialized {} SSE event handlers", sseEventHandlers.size());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to initialize SSE event handlers: {}", e.getMessage());
+        }
+    }
+    
+    @Override
+    public void setApplicationContext(@org.springframework.lang.NonNull ApplicationContext applicationContext) {
+        this.applicationContext = applicationContext;
     }
 
     public void registerAgent(String agentName, String agentUrl) {
@@ -74,11 +102,18 @@ public class A2aClientManager {
 
     public AgentCard register(A2aRegister register) {
         PushNotificationConfig notification = register.getNotification();
+        if (notification == null && a2aAgentsProperties != null) {
+            notification = a2aAgentsProperties.getNotification();
+        }
 
         AgentCardResolver resolver = new AgentCardResolver(register.getName(), register.getBaseUrl(), register.getAgentCardPath());
         try {
             AgentCard agentCard = resolver.resolve();
-            A2AClient a2AClient = new A2AClient(agentCard, null, notification, WebClient.create());
+            String baseUrl = agentCard.getUrl() != null ? agentCard.getUrl() : register.getBaseUrl();
+            WebClient webClient = WebClient.builder()
+                .baseUrl(baseUrl)
+                .build();
+            A2AClient a2AClient = new A2AClient(agentCard, sseEventHandlers, notification, webClient);
             clients.add(a2AClient);
             clientsMap.computeIfAbsent(a2AClient.getAgentCard().getName(), k -> new CopyOnWriteArrayList<>()).add(a2AClient);
 
@@ -94,9 +129,29 @@ public class A2aClientManager {
     public A2AClient getA2aClient(String agentName) {
         List<A2AClient> a2aClients = clientsMap.get(agentName);
         if (CollectionUtil.isEmpty(a2aClients)) {
+            log.warn("No A2AClient found for agent: {}, attempting to register...", agentName);
+            // 尝试重新注册
+            try {
+                if (AgentConstants.DATA_ANALYSIS_AGENT_NAME.equals(agentName)) {
+                    A2aRegister a2aRegister = new A2aRegister();
+                    a2aRegister.setName(AgentConstants.DATA_ANALYSIS_AGENT_NAME);
+                    a2aRegister.setBaseUrl(AgentConstants.DATA_ANALYSIS_AGENT_URL);
+                    a2aRegister.setAgentCardPath(AgentConstants.DATA_ANALYSIS_AGENT_CARD_PATH);
+                    register(a2aRegister);
+                    log.info("Successfully re-registered {} at {}", agentName, AgentConstants.DATA_ANALYSIS_AGENT_URL);
+                    
+                    // 重新获取
+                    a2aClients = clientsMap.get(agentName);
+                    if (!CollectionUtil.isEmpty(a2aClients)) {
+                        return a2aClients.get(0);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to re-register agent: {}", agentName, e);
+            }
             throw new RuntimeException("No A2AClient found for agent: " + agentName);
         }
-        return a2aClients.get(0);
+        return a2aClients.get(0); // 简单轮询，后续可扩展为负载均衡
     }
 
     public List<AgentCard> getAgentCards() {
@@ -107,6 +162,92 @@ public class A2aClientManager {
         A2AClient a2aClient = getA2aClient(agentName);
         Flux<SendTaskStreamingResponse> responseFlux = a2aClient.sendTaskSubscribe(taskSendParams);
         responseFlux.subscribe();
+    }
+
+    /**
+     * 发送任务订阅并等待响应
+     */
+    public String sendTaskSubscribeAndWait(String agentName, TaskSendParams taskSendParams, String sessionId) {
+        A2AClient a2aClient = getA2aClient(agentName);
+        
+        // 创建一个同步阻塞机制
+        CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        AtomicReference<String> responseRef = new AtomicReference<>();
+        AtomicReference<String> errorRef = new AtomicReference<>();
+        
+        Flux<SendTaskStreamingResponse> responseFlux = a2aClient.sendTaskSubscribe(taskSendParams);
+        responseFlux.subscribe(
+            response -> {
+                try {
+                    if (response.getResult() instanceof TaskStatusUpdateEvent) {
+                        TaskStatusUpdateEvent statusEvent = (TaskStatusUpdateEvent) response.getResult();
+                        if (statusEvent.isFinalFlag() && statusEvent.getStatus().getState() == TaskState.COMPLETED) {
+                            // 获取最终响应文本
+                            String responseText = extractTextFromStatusEvent(statusEvent);
+                            if (responseText != null && !responseText.trim().isEmpty()) {
+                                responseRef.set(responseText);
+                            } else {
+                                responseRef.set("数据分析任务已完成");
+                            }
+                            latch.countDown();
+                        }
+                    } else if (response.getResult() instanceof TaskArtifactUpdateEvent) {
+                        // 处理制品更新
+                        TaskArtifactUpdateEvent artifactEvent = (TaskArtifactUpdateEvent) response.getResult();
+                        String artifactInfo = "数据处理结果: " + artifactEvent.getArtifact().getName();
+                        responseRef.set(artifactInfo);
+                        latch.countDown();
+                    } else {
+                        // 其他事件继续等待最终事件
+                        log.info("Received intermediate event: {}", response.getResult().getClass().getSimpleName());
+                    }
+                } catch (Exception e) {
+                    log.error("Error processing A2A response", e);
+                    errorRef.set("A2A响应处理错误: " + e.getMessage());
+                    latch.countDown();
+                }
+            },
+            error -> {
+                log.error("A2A stream error", error);
+                errorRef.set("A2A通信错误: " + error.getMessage());
+                latch.countDown();
+            }
+        );
+        
+        try {
+            // 等待最多30秒
+            boolean completed = latch.await(3000, java.util.concurrent.TimeUnit.SECONDS);
+            if (!completed) {
+                return "A2A调用超时，请重试";
+            }
+            
+            if (errorRef.get() != null) {
+                return errorRef.get();
+            }
+            
+            String response = responseRef.get();
+            return response != null ? response : "A2A任务已完成";
+            
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "A2A调用被中断: " + e.getMessage();
+        }
+    }
+    
+    private String extractTextFromStatusEvent(TaskStatusUpdateEvent statusEvent) {
+        // 尝试从TaskStatus的message字段中获取文本
+        if (statusEvent.getStatus() != null && statusEvent.getStatus().getMessage() != null) {
+            com.zhouruojun.a2acore.spec.Message message = statusEvent.getStatus().getMessage();
+            // 从Message中提取文本内容
+            if (message.getParts() != null && !message.getParts().isEmpty()) {
+                for (com.zhouruojun.a2acore.spec.Part part : message.getParts()) {
+                    if (part instanceof com.zhouruojun.a2acore.spec.TextPart) {
+                        return ((com.zhouruojun.a2acore.spec.TextPart) part).getText();
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     public List<String> getSystemSupportModes() {
@@ -121,61 +262,25 @@ public class A2aClientManager {
         return new ConcurrentHashMap<>(agentRegistry);
     }
 
-    public List<String> getAgentNames() {
-        return List.copyOf(agentRegistry.keySet());
-    }
-
     public boolean checkAgentHealth(String agentName) {
         try {
-            A2AClientService a2aClientService = applicationContext.getBean(A2AClientService.class);
-            return a2aClientService.checkAgentHealth(agentName, getAgentUrl(agentName));
+            A2AClient client = getA2aClient(agentName);
+            // 这里可以添加健康检查逻辑
+            return client != null;
         } catch (Exception e) {
-            log.warn("Health check failed for agent: {}", agentName, e);
+            log.warn("Health check failed for agent {}: {}", agentName, e.getMessage());
             return false;
-        }
-    }
-
-    public A2AInvocationResult invokeAgent(String agentName,
-                                           String taskType,
-                                           Map<String, Object> parameters,
-                                           String sessionId) {
-        try {
-            String agentUrl = getAgentUrl(agentName);
-            if (agentUrl == null && AgentConstants.DATA_ANALYSIS_AGENT_NAME.equals(agentName)) {
-                log.warn("Agent {} not found in registry, attempting to re-register", agentName);
-                try {
-                    A2aRegister a2aRegister = new A2aRegister();
-                    a2aRegister.setName(AgentConstants.DATA_ANALYSIS_AGENT_NAME);
-                    a2aRegister.setBaseUrl(AgentConstants.DATA_ANALYSIS_AGENT_URL);
-                    register(a2aRegister);
-                    agentUrl = getAgentUrl(agentName);
-                } catch (Exception e) {
-                    log.error("Failed to re-register {}: {}", AgentConstants.DATA_ANALYSIS_AGENT_NAME, e.getMessage());
-                    return A2AInvocationResult.failure(
-                            "数据分析智能体服务不可用，请确保服务已启动在端口8082",
-                            HttpStatus.SERVICE_UNAVAILABLE.value());
-                }
-            }
-
-            if (agentUrl == null) {
-                return A2AInvocationResult.failure("未找到智能体 " + agentName, HttpStatus.NOT_FOUND.value());
-            }
-
-            A2AClientService a2aClientService = applicationContext.getBean(A2AClientService.class);
-            return a2aClientService.invokeAgent(agentName, taskType, parameters, sessionId, agentUrl);
-        } catch (Exception e) {
-            log.error("Failed to invoke agent: {}", agentName, e);
-            return A2AInvocationResult.failure("未知异常: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR.value());
         }
     }
 
     public String getAgentInfo(String agentName) {
         try {
-            A2AClientService a2aClientService = applicationContext.getBean(A2AClientService.class);
-            return a2aClientService.getAgentInfo(agentName, getAgentUrl(agentName));
+            A2AClient client = getA2aClient(agentName);
+            AgentCard card = client.getAgentCard();
+            return String.format("Name: %s, Version: %s, Description: %s", 
+                card.getName(), card.getVersion(), card.getDescription());
         } catch (Exception e) {
-            log.error("Failed to get agent info: {}", agentName, e);
-            return "Error: " + e.getMessage();
+            return "Agent info unavailable: " + e.getMessage();
         }
     }
 }

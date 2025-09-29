@@ -142,9 +142,7 @@ public class AgentCoreConfig {
             OllamaService ollamaService,
             List<ToolSpecification> supervisorToolSpecs) {
         
-        List<String> availableAgents = List.of("data-analysis-agent");
-        
-        log.info("Creating supervisor agent with {} available agents", availableAgents.size());
+        log.info("Creating supervisor agent");
         
         // 直接使用fallback ChatLanguageModel，确保稳定性
         ChatLanguageModel chatModel = createFallbackChatLanguageModel(ollamaService);
@@ -154,7 +152,7 @@ public class AgentCoreConfig {
                 .streamingChatLanguageModel(null) // 暂时不使用streaming
                 .tools(supervisorToolSpecs)
                 .agentName("supervisor-agent")
-                .agentNames(availableAgents)
+                .agentCards(null) // 将在运行时动态设置
                 .build();
     }
 }

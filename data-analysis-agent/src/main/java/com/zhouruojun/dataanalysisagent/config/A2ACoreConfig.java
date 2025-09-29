@@ -1,10 +1,10 @@
 package com.zhouruojun.dataanalysisagent.config;
 
-import com.zhouruojun.agentcore.core.PushNotificationSenderAuth;
-import com.zhouruojun.agentcore.spec.AgentCard;
-import com.zhouruojun.agentcore.spec.AgentCapabilities;
-import com.zhouruojun.agentcore.spec.AgentProvider;
-import com.zhouruojun.agentcore.spec.AgentSkill;
+import com.zhouruojun.a2acore.core.PushNotificationSenderAuth;
+import com.zhouruojun.a2acore.spec.AgentCard;
+import com.zhouruojun.a2acore.spec.AgentCapabilities;
+import com.zhouruojun.a2acore.spec.AgentProvider;
+import com.zhouruojun.a2acore.spec.AgentSkill;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

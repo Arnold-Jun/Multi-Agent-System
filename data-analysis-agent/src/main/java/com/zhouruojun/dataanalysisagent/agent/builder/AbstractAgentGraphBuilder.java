@@ -1,10 +1,10 @@
 package com.zhouruojun.dataanalysisagent.agent.builder;
 
 import com.zhouruojun.dataanalysisagent.agent.BaseAgent;
-import com.zhouruojun.dataanalysisagent.agent.actions.CallAgent;
+import com.zhouruojun.dataanalysisagent.agent.actions.CallSubAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.ExecuteTools;
-import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.dataanalysisagent.agent.state.BaseAgentState;
+import com.zhouruojun.dataanalysisagent.agent.state.SubgraphState;
 import com.zhouruojun.dataanalysisagent.config.ParallelExecutionConfig;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -37,7 +37,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置聊天语言模型
      */
-    public AbstractAgentGraphBuilder chatLanguageModel(ChatLanguageModel chatLanguageModel) {
+    public AbstractAgentGraphBuilder<T> chatLanguageModel(ChatLanguageModel chatLanguageModel) {
         this.chatLanguageModel = chatLanguageModel;
         return this;
     }
@@ -45,7 +45,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置流式聊天语言模型
      */
-    public AbstractAgentGraphBuilder streamingChatLanguageModel(StreamingChatLanguageModel streamingChatLanguageModel) {
+    public AbstractAgentGraphBuilder<T> streamingChatLanguageModel(StreamingChatLanguageModel streamingChatLanguageModel) {
         this.streamingChatLanguageModel = streamingChatLanguageModel;
         return this;
     }
@@ -53,7 +53,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置状态序列化器
      */
-    public AbstractAgentGraphBuilder stateSerializer(StateSerializer<T> stateSerializer) {
+    public AbstractAgentGraphBuilder<T> stateSerializer(StateSerializer<T> stateSerializer) {
         this.stateSerializer = stateSerializer;
         return this;
     }
@@ -61,7 +61,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置工具列表
      */
-    public AbstractAgentGraphBuilder tools(List<ToolSpecification> tools) {
+    public AbstractAgentGraphBuilder<T> tools(List<ToolSpecification> tools) {
         this.tools = tools;
         return this;
     }
@@ -69,7 +69,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置并行执行配置
      */
-    public AbstractAgentGraphBuilder parallelExecutionConfig(ParallelExecutionConfig parallelExecutionConfig) {
+    public AbstractAgentGraphBuilder<T> parallelExecutionConfig(ParallelExecutionConfig parallelExecutionConfig) {
         this.parallelExecutionConfig = parallelExecutionConfig;
         return this;
     }
@@ -77,7 +77,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置主工具集合
      */
-    public AbstractAgentGraphBuilder mainToolCollection(DataAnalysisToolCollection mainToolCollection) {
+    public AbstractAgentGraphBuilder<T> mainToolCollection(DataAnalysisToolCollection mainToolCollection) {
         this.mainToolCollection = mainToolCollection;
         return this;
     }
@@ -96,7 +96,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
         BaseAgent agent = createAgent();
         
         // 4. 创建节点
-        CallAgent callAgent = createCallAgent(agent);
+        CallSubAgent callAgent = createCallAgent(agent);
         ExecuteTools<T> executeTools = createExecuteTools(agent);
         
         // 5. 构建图 - 子类实现
@@ -164,9 +164,14 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 创建调用智能体节点
      */
-    protected CallAgent<T> createCallAgent(BaseAgent agent) {
-        CallAgent<T> callAgent = new CallAgent<>(getAgentName(), agent);
-        callAgent.setQueue(queue);
+    protected CallSubAgent createCallAgent(BaseAgent agent) {
+        CallSubAgent callAgent = new CallSubAgent(getAgentName(), agent);
+        // 注意：这里需要类型转换，因为CallSubAgent期望SubgraphState，但基类使用泛型T
+        // 由于子图构建器都使用SubgraphState，这个转换是安全的
+        @SuppressWarnings("unchecked")
+        BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>> subgraphQueue = 
+            (BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>>) (BlockingQueue<?>) queue;
+        callAgent.setQueue(subgraphQueue);
         return callAgent;
     }
 
@@ -188,7 +193,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
      * 构建图 - 子类实现
      */
     protected abstract StateGraph<T> buildGraph(
-            CallAgent<T> callAgent,
+            CallSubAgent callAgent,
             ExecuteTools<T> executeTools
     ) throws GraphStateException;
 

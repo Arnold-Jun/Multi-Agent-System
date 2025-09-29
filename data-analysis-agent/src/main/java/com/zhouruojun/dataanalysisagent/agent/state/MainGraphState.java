@@ -32,12 +32,6 @@ public class MainGraphState extends BaseAgentState {
         return this.value("subgraphResults").map(v -> (Map<String, String>) v);
     }
 
-    /**
-     * 获取Scheduler输出
-     */
-    public Optional<String> getSchedulerOutput() {
-        return this.value("schedulerOutput");
-    }
 
     /**
      * 获取指定子图的结果
@@ -66,20 +60,6 @@ public class MainGraphState extends BaseAgentState {
     }
 
     /**
-     * 更新原始用户查询 - 使用Builder模式
-     */
-    public MainGraphState withOriginalUserQuery(String originalQuery) {
-        return withData("originalUserQuery", originalQuery, MainGraphState.class);
-    }
-
-    /**
-     * 更新Scheduler输出 - 使用Builder模式
-     */
-    public MainGraphState withSchedulerOutput(String schedulerOutput) {
-        return withData("schedulerOutput", schedulerOutput, MainGraphState.class);
-    }
-
-    /**
      * 更新子图结果 - 使用Builder模式
      */
     public MainGraphState withSubgraphResult(String agentName, String result) {
@@ -95,16 +75,7 @@ public class MainGraphState extends BaseAgentState {
         return withData("subgraphResults", new java.util.HashMap<>(newResults), MainGraphState.class);
     }
 
-    /**
-     * 批量更新状态 - 使用Builder模式
-     */
-    public MainGraphState withUpdates(Map<String, Object> updates) {
-        Map<String, Object> newData = new java.util.HashMap<>(this.data());
-        newData.putAll(updates);
-        return new MainGraphState(newData);
-    }
 
-    // === 兼容性方法（保持与原有AgentMessageState的兼容性） ===
 
     /**
      * 更新TodoList状态（兼容性方法）
@@ -121,50 +92,10 @@ public class MainGraphState extends BaseAgentState {
         }
     }
 
-    /**
-     * 更新Scheduler输出（兼容性方法）
-     */
-    public void setSchedulerOutput(String schedulerOutput) {
-        // 使用Builder模式更新状态，然后通过反射替换
-        MainGraphState updatedState = withSchedulerOutput(schedulerOutput);
-        try {
-            Field dataField = findDataField();
-            dataField.setAccessible(true);
-            dataField.set(this, updatedState.data());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to update schedulerOutput: " + e.getMessage(), e);
-        }
-    }
 
-    /**
-     * 更新原始用户查询（兼容性方法）
-     */
-    public void updateOriginalUserQuery(String originalQuery) {
-        // 使用Builder模式更新状态，然后通过反射替换
-        MainGraphState updatedState = withOriginalUserQuery(originalQuery);
-        try {
-            Field dataField = findDataField();
-            dataField.setAccessible(true);
-            dataField.set(this, updatedState.data());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to update originalUserQuery: " + e.getMessage(), e);
-        }
-    }
 
-    /**
-     * 添加子图结果（兼容性方法）
-     */
-    public void addSubgraphResult(String agentName, String result) {
-        // 使用Builder模式更新状态，然后通过反射替换
-        MainGraphState updatedState = withSubgraphResult(agentName, result);
-        try {
-            Field dataField = findDataField();
-            dataField.setAccessible(true);
-            dataField.set(this, updatedState.data());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to update subgraphResults: " + e.getMessage(), e);
-        }
-    }
+
+
 
     /**
      * 查找data字段 - 辅助方法

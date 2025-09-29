@@ -1,8 +1,10 @@
 package com.zhouruojun.agentcore;
 
+import com.zhouruojun.a2a.client.autoconfiguration.A2aHostAutoConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Import;
 
 /**
  * <p>
@@ -14,6 +16,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
     "com.zhouruojun.agentcore",         // 扫描本项目包
     "com.zhouruojun.a2acore"            // A2A核心通信包
 })
+@Import(A2aHostAutoConfiguration.class)  // 启用A2A自动配置
 @Slf4j
 public class Application {
     public static void main(String[] args) {

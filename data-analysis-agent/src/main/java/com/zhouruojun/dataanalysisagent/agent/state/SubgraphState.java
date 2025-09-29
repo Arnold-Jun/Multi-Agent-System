@@ -68,7 +68,7 @@ public class SubgraphState extends BaseAgentState {
         return new SubgraphState(newData);
     }
 
-    // === 兼容性方法（保持与原有AgentMessageState的兼容性） ===
+    // === 兼容性方法（保持与原有状态的兼容性） ===
 
     /**
      * 更新工具执行结果（兼容性方法）

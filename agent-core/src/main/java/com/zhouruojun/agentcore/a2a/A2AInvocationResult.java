@@ -1,19 +1,45 @@
 package com.zhouruojun.agentcore.a2a;
 
+import lombok.Data;
+
 /**
- * 封裝A2A遠程調用的結果，攜帶狀態碼與錯誤信息，便於上層做統一處理。
+ * A2A调用结果封装
  */
-public record A2AInvocationResult(boolean success, String response, String error, int statusCode) {
+@Data
+public class A2AInvocationResult {
+    private boolean success;
+    private String response;
+    private String error;
+    private String taskId;
+    private String sessionId;
 
-    public static A2AInvocationResult success(String response, int statusCode) {
-        return new A2AInvocationResult(true, response, null, statusCode);
+    public A2AInvocationResult(boolean success, String response, String error) {
+        this.success = success;
+        this.response = response;
+        this.error = error;
     }
 
-    public static A2AInvocationResult failure(String error, int statusCode) {
-        return new A2AInvocationResult(false, null, error, statusCode);
+    public A2AInvocationResult(boolean success, String response, String error, String taskId, String sessionId) {
+        this.success = success;
+        this.response = response;
+        this.error = error;
+        this.taskId = taskId;
+        this.sessionId = sessionId;
     }
 
-    public String messageOrError() {
-        return success ? response : error;
+    public static A2AInvocationResult success(String response) {
+        return new A2AInvocationResult(true, response, null);
+    }
+
+    public static A2AInvocationResult success(String response, String taskId, String sessionId) {
+        return new A2AInvocationResult(true, response, null, taskId, sessionId);
+    }
+
+    public static A2AInvocationResult failure(String error) {
+        return new A2AInvocationResult(false, null, error);
+    }
+
+    public static A2AInvocationResult failure(String error, String taskId, String sessionId) {
+        return new A2AInvocationResult(false, null, error, taskId, sessionId);
     }
 }

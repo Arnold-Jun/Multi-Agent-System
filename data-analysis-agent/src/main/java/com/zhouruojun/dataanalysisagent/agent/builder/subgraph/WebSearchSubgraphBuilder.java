@@ -1,7 +1,7 @@
 package com.zhouruojun.dataanalysisagent.agent.builder.subgraph;
 
 import com.zhouruojun.dataanalysisagent.agent.builder.AbstractAgentGraphBuilder;
-import com.zhouruojun.dataanalysisagent.agent.actions.CallAgent;
+import com.zhouruojun.dataanalysisagent.agent.actions.CallSubAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.ExecuteTools;
 import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.dataanalysisagent.agent.state.SubgraphState;
@@ -10,7 +10,6 @@ import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.EdgeAction;
-import org.bsc.langgraph4j.serializer.StateSerializer;
 
 import java.util.Map;
 
@@ -57,7 +56,7 @@ public class WebSearchSubgraphBuilder extends AbstractAgentGraphBuilder<Subgraph
 
     @Override
     protected StateGraph<SubgraphState> buildGraph(
-            CallAgent<SubgraphState> callAgent,
+            CallSubAgent callAgent,
             ExecuteTools<SubgraphState> executeTools
     ) throws GraphStateException {
         // 使用基类提供的标准边条件

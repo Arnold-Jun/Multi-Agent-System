@@ -1,11 +1,11 @@
 package com.zhouruojun.a2a.client.autoconfiguration;
 
-import com.zhouruojun.agentcore.client.A2AClient;
-import com.zhouruojun.agentcore.client.AgentCardResolver;
-import com.zhouruojun.agentcore.client.sse.SseEventHandler;
-import com.zhouruojun.agentcore.spec.AgentCard;
-import com.zhouruojun.agentcore.spec.PushNotificationConfig;
-import com.zhouruojun.agentcore.spec.message.util.Util;
+import com.zhouruojun.a2acore.client.A2AClient;
+import com.zhouruojun.a2acore.client.AgentCardResolver;
+import com.zhouruojun.a2acore.client.sse.SseEventHandler;
+import com.zhouruojun.a2acore.spec.AgentCard;
+import com.zhouruojun.a2acore.spec.PushNotificationConfig;
+import com.zhouruojun.a2acore.spec.message.util.Util;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;

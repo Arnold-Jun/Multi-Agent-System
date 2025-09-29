@@ -1,115 +1,51 @@
 package com.zhouruojun.agentcore.a2a;
 
+import com.alibaba.fastjson.JSONObject;
+import com.zhouruojun.a2acore.client.A2AClient;
+import com.zhouruojun.a2acore.client.sse.SseEventHandler;
+import com.zhouruojun.a2acore.spec.UpdateEvent;
+import com.zhouruojun.a2acore.spec.message.SendTaskStreamingResponse;
+import com.zhouruojun.agentcore.agent.core.AgentControllerCore;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A2A SSE事件处理器
- * 处理服务器发送事件(Server-Sent Events)
+ * A2A SSE事件处理器 - 基于codewiz经验重构
+ * 用于处理A2A的task/subscribe接口的后续监听逻辑
  */
-@Component
 @Slf4j
-public class A2aSseEventHandler {
+@Component
+public class A2aSseEventHandler implements SseEventHandler {
 
-    private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
-
-    /**
-     * 创建SSE连接
-     */
-    public SseEmitter createConnection(String sessionId) {
-        SseEmitter emitter = new SseEmitter(30000L); // 30秒超时
-        emitters.put(sessionId, emitter);
-        
-        emitter.onCompletion(() -> {
-            log.info("SSE connection completed for session: {}", sessionId);
-            emitters.remove(sessionId);
-        });
-        
-        emitter.onTimeout(() -> {
-            log.warn("SSE connection timeout for session: {}", sessionId);
-            emitters.remove(sessionId);
-        });
-        
-        emitter.onError(throwable -> {
-            log.error("SSE connection error for session: {}", sessionId, throwable);
-            emitters.remove(sessionId);
-        });
-        
-        log.info("Created SSE connection for session: {}", sessionId);
-        return emitter;
-    }
+    @Autowired(required = false)
+    private AgentControllerCore agentControllerCore;
 
     /**
-     * 发送消息到指定会话
+     * 处理event消息
+     * 由于是sse消息，用于交互链路。
+     * @param a2AClient A2A客户端
+     * @param sendTaskStreamingResponse 流式响应
      */
-    public void sendMessage(String sessionId, String message) {
-        SseEmitter emitter = emitters.get(sessionId);
-        if (emitter != null) {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("message")
-                        .data(message));
-                log.debug("Sent message to session {}: {}", sessionId, message);
-            } catch (IOException e) {
-                log.error("Failed to send message to session: {}", sessionId, e);
-                emitters.remove(sessionId);
-            }
+    @Override
+    public void onEvent(A2AClient a2AClient, SendTaskStreamingResponse sendTaskStreamingResponse) {
+        log.info("receive task streaming response: {}", JSONObject.toJSONString(sendTaskStreamingResponse));
+        UpdateEvent result = sendTaskStreamingResponse.getResult();
+        if (agentControllerCore != null) {
+            agentControllerCore.a2aAiMessageOnEvent(result);
         } else {
-            log.warn("No SSE connection found for session: {}", sessionId);
+            log.warn("AgentControllerCore is not available, skipping event processing");
         }
     }
 
     /**
-     * 发送事件到指定会话
+     * 处理异常消息
+     * @param a2AClient A2A客户端
+     * @param throwable 异常
      */
-    public void sendEvent(String sessionId, String eventName, Object data) {
-        SseEmitter emitter = emitters.get(sessionId);
-        if (emitter != null) {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name(eventName)
-                        .data(data));
-                log.debug("Sent event {} to session {}: {}", eventName, sessionId, data);
-            } catch (IOException e) {
-                log.error("Failed to send event to session: {}", sessionId, e);
-                emitters.remove(sessionId);
-            }
-        } else {
-            log.warn("No SSE connection found for session: {}", sessionId);
-        }
-    }
-
-    /**
-     * 关闭指定会话的连接
-     */
-    public void closeConnection(String sessionId) {
-        SseEmitter emitter = emitters.remove(sessionId);
-        if (emitter != null) {
-            try {
-                emitter.complete();
-                log.info("Closed SSE connection for session: {}", sessionId);
-            } catch (Exception e) {
-                log.error("Error closing SSE connection for session: {}", sessionId, e);
-            }
-        }
-    }
-
-    /**
-     * 获取活跃连接数
-     */
-    public int getActiveConnectionCount() {
-        return emitters.size();
-    }
-
-    /**
-     * 获取所有活跃会话ID
-     */
-    public java.util.Set<String> getActiveSessionIds() {
-        return emitters.keySet();
+    @Override
+    public void onError(A2AClient a2AClient, Throwable throwable) {
+        log.error("a2a client:{}, errorMessage:{}", a2AClient.getAgentCard().getName(), throwable.getMessage(), throwable);
+        // 可以在这里添加异常处理逻辑，比如重试、通知等
     }
 }

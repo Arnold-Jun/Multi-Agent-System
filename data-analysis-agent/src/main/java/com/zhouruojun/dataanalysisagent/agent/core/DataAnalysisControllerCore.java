@@ -1,11 +1,11 @@
 package com.zhouruojun.dataanalysisagent.agent.core;
 
 import com.alibaba.fastjson.JSONObject;
-import com.zhouruojun.agentcore.spec.DataPart;
-import com.zhouruojun.agentcore.spec.FilePart;
-import com.zhouruojun.agentcore.spec.Message;
-import com.zhouruojun.agentcore.spec.Part;
-import com.zhouruojun.agentcore.spec.TextPart;
+import com.zhouruojun.a2acore.spec.DataPart;
+import com.zhouruojun.a2acore.spec.FilePart;
+import com.zhouruojun.a2acore.spec.Message;
+import com.zhouruojun.a2acore.spec.Part;
+import com.zhouruojun.a2acore.spec.TextPart;
 import com.zhouruojun.dataanalysisagent.agent.AgentChatRequest;
 import com.zhouruojun.dataanalysisagent.agent.builder.DataAnalysisGraphBuilder;
 import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
@@ -29,7 +29,7 @@ import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import com.zhouruojun.agentcore.spec.FileContent;
+import com.zhouruojun.a2acore.spec.FileContent;
 import dev.langchain4j.agent.tool.ToolSpecification;
 
 import java.time.Duration;
@@ -224,6 +224,7 @@ public class DataAnalysisControllerCore {
         // 构建初始状态
         Map<String, Object> initialState = Map.of(
             "messages", UserMessage.from(request.getChat()),
+            "originalUserQuery", request.getChat(),
             "sessionId", sessionId,
             "username", username
         );
@@ -463,7 +464,7 @@ public class DataAnalysisControllerCore {
             
             // 创建初始状态，确保messages字段正确设置
             Map<String, Object> initialState = new HashMap<>();
-            initialState.put("messages", List.of(userMsg));
+            initialState.put("originalUserQuery", userMessage);
             initialState.put("sessionId", sessionId);
             initialState.put("requestId", sessionId);
             initialState.put("username", "a2a-user");

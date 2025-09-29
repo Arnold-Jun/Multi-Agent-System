@@ -1,14 +1,14 @@
 package com.zhouruojun.agentcore.agent.controller;
 
 import com.alibaba.fastjson.JSONObject;
-import com.zhouruojun.agentcore.spec.AgentCard;
+import com.zhouruojun.a2acore.spec.AgentCard;
 import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import com.zhouruojun.agentcore.a2a.A2aRegister;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import javax.annotation.Resource;
 import java.util.List;
 
 /**
@@ -23,7 +23,7 @@ import java.util.List;
 @Slf4j
 public class AgentA2AController {
 
-    @Resource
+    @Autowired
     private A2aClientManager a2aClientManager;
 
     /**

@@ -1,14 +1,9 @@
 package com.zhouruojun.agentcore.agent.actions;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.zhouruojun.agentcore.agent.SupervisorAgent;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
 import com.zhouruojun.agentcore.common.ContentFilter;
 import com.zhouruojun.agentcore.config.AgentConstants;
-// import com.zhouruojun.dataanalysisagent.agent.task.RouteResponse;
-// import com.zhouruojun.dataanalysisagent.agent.task.TaskDescription;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -31,9 +26,6 @@ import java.util.concurrent.BlockingQueue;
 @Slf4j
 public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String DEFAULT_TARGET_AGENT = AgentConstants.DATA_ANALYSIS_AGENT_NAME;
-    private static final String DEFAULT_TASK_INSTRUCTION = "请根据用户需求进行数据分析处理";
 
     private final SupervisorAgent agent;
     private final String agentName;
@@ -44,8 +36,6 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
 
     public CallSupervisorAgent(String agentName,
                                SupervisorAgent agent,
-                               List<String> members,
-                               String requestId,
                                String username) {
         this.agent = agent;
         this.agentName = agentName;
@@ -109,20 +99,19 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
         log.info("SupervisorAgent raw response: {}", responseText);
 
         String filteredResponse = ContentFilter.filterThinkingContent(responseText);
-        // Optional<RouteResponse> routeDecision = parseRouteResponse(filteredResponse);
 
-        // 简化路由逻辑，直接根据响应内容判断
         if (filteredResponse.contains("FINISH") || filteredResponse.contains("任务完成")) {
             return Map.of("next", "FINISH", "agent_response", filteredResponse);
         }
 
         String lowerText = filteredResponse.toLowerCase();
-        if (lowerText.contains("需要调用专业智能体") || lowerText.contains("数据分析") ||
-                lowerText.contains(DEFAULT_TARGET_AGENT)) {
+        if (lowerText.contains("需要调用专业智能体") || lowerText.contains("数据分析") || 
+            lowerText.contains("data-analysis-agent") || lowerText.contains("发送给") ||
+            lowerText.contains("路由到") || lowerText.contains("调用")) {
             String taskInstruction = extractTaskInstructionFromLegacyResponse(filteredResponse);
             return Map.of(
                     "next", "agentInvoke",
-                    "nextAgent", DEFAULT_TARGET_AGENT,
+                    "nextAgent", AgentConstants.DATA_ANALYSIS_AGENT_NAME,
                     "taskInstruction", taskInstruction,
                     "agent_response", filteredResponse,
                     "username", username
@@ -156,7 +145,8 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
             log.warn("Error extracting legacy task instruction: {}", e.getMessage());
         }
 
-        return DEFAULT_TASK_INSTRUCTION;
+        // 如果没有找到具体任务指令，返回通用任务
+        return "请根据用户需求进行数据分析处理";
     }
 
     private boolean hasText(String value) {
