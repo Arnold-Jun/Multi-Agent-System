@@ -19,17 +19,22 @@ public class TodoTaskSerializer implements Serializer<TodoTask> {
             return;
         }
         
-        out.writeObject(object.getTaskId());
-        out.writeObject(object.getDescription());
+        // 确保所有字段都不为null，使用默认值替代
+        out.writeObject(object.getTaskId() != null ? object.getTaskId() : "");
+        out.writeObject(object.getDescription() != null ? object.getDescription() : "");
         out.writeObject(object.getStatus());
         out.writeObject(object.getDependencies());
-        out.writeObject(object.getAssignedAgent());
+        out.writeObject(object.getAssignedAgent() != null ? object.getAssignedAgent() : "");
         out.writeInt(object.getFailureCount());
         out.writeLong(object.getCreatedAt());
-        out.writeObject(object.getCompletedAt());
-        out.writeObject(object.getResult());
+        
+        // completedAt可能为null，使用特殊标记处理
+        Long completedAt = object.getCompletedAt();
+        out.writeLong(completedAt != null ? completedAt : -1L);
+        
+        out.writeObject(object.getResult() != null ? object.getResult() : "");
         out.writeObject(object.getOrder());
-        out.writeObject(object.getUniqueId());
+        out.writeObject(object.getUniqueId() != null ? object.getUniqueId() : "");
     }
     
     @Override
@@ -45,7 +50,10 @@ public class TodoTaskSerializer implements Serializer<TodoTask> {
         String assignedAgent = (String) in.readObject();
         int failureCount = in.readInt();
         long createdAt = in.readLong();
-        Object completedAtObj = in.readObject();
+        
+        // completedAt：使用-1L标记null
+        long completedAtLong = in.readLong();
+        
         String result = (String) in.readObject();
         Integer order = (Integer) in.readObject();
         String uniqueId = (String) in.readObject();
@@ -61,8 +69,8 @@ public class TodoTaskSerializer implements Serializer<TodoTask> {
         }
         task.setFailureCount(failureCount);
         task.setCreatedAt(createdAt);
-        if (completedAtObj != null) {
-            task.setCompletedAt((Long) completedAtObj);
+        if (completedAtLong >= 0L) {  // -1L表示null
+            task.setCompletedAt(completedAtLong);
         }
         task.setResult(result);
         task.setOrder(order);

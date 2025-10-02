@@ -13,31 +13,26 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Component
 public class PromptTemplateManager {
-    
+
     @Getter
     public static final PromptTemplateManager instance = new PromptTemplateManager();
-    
+
     private final Map<String, String> cache = new ConcurrentHashMap<>();
-    
+
     private PromptTemplateManager() {
-        // 私有构造函数，确保单例
         initializePrompts();
     }
-    
+
     /**
      * 初始化所有提示词模板
      */
     private void initializePrompts() {
-        cache.put("planner", getPlannerPrompt());
-        cache.put("scheduler", getSchedulerPrompt());
-        cache.put("summary", getSummaryPrompt());
         cache.put("statisticalAnalysis", getStatisticalAnalysisPrompt());
         cache.put("dataVisualization", getDataVisualizationPrompt());
         cache.put("webSearch", getWebSearchPrompt());
         cache.put("comprehensiveAnalysis", getComprehensiveAnalysisPrompt());
-        cache.put("dataAnalysis", getDataAnalysisPrompt());
     }
-    
+
     /**
      * 获取提示词模板
      * @param key 提示词键名
@@ -46,32 +41,7 @@ public class PromptTemplateManager {
     public String getPrompt(String key) {
         return cache.getOrDefault(key, "");
     }
-    
-    /**
-     * 设置提示词模板
-     * @param key 提示词键名
-     * @param prompt 提示词内容
-     */
-    public void setPrompt(String key, String prompt) {
-        cache.put(key, prompt);
-    }
-    
-    /**
-     * 清除缓存
-     */
-    public void clearCache() {
-        cache.clear();
-        initializePrompts();
-    }
-    
-    /**
-     * 获取缓存大小
-     * @return 缓存中的提示词数量
-     */
-    public int getCacheSize() {
-        return cache.size();
-    }
-    
+
 
 
     /**
@@ -215,206 +185,11 @@ public class PromptTemplateManager {
         """;
     }
 
-    /**
-     * 获取原始数据分析智能体提示词（保留兼容性）
-     */
-    public String getDataAnalysisPrompt() {
-        return """
-        你是一名专业的数据分析智能体，具备以下核心能力：
-        
-        **数据处理能力**：
-        - 数据清洗、去重、格式转换
-        - 缺失值处理和异常值检测
-        - 数据质量评估和验证
-        
-        **统计分析能力**：
-        - 描述性统计分析（均值、中位数、标准差等）
-        - 相关性分析和趋势分析
-        - 分布分析和假设检验
-        
-        **数据可视化**：
-        - 生成各类图表（柱状图、散点图、热力图等）
-        - 数据透视表和交叉表分析
-        - 趋势图和对比分析图
-        
-        **机器学习**：
-        - 基础回归和分类分析
-        - 聚类分析和异常检测
-        - 特征工程和模型评估
-        
-        **网络搜索能力**：
-        - 搜索网络信息获取最新数据
-        - 搜索特定网站的专业信息
-        - 搜索最新新闻和趋势
-        - 搜索学术论文和研究资料
-        
-        **数据库操作**：
-        - SQL查询和数据提取
-        - 数据库连接和数据导入导出
-        
-        **重要：你必须主动使用工具！**
-        
-        当用户询问需要最新信息的问题时，你必须使用搜索工具：
-        - 使用 searchWeb 工具搜索一般信息
-        - 使用 searchLatestNews 工具搜索最新新闻
-        - 使用 searchSpecificSite 工具搜索特定网站
-        - 使用 searchAcademicPapers 工具搜索学术资料
-        
-        当用户提供数据文件时，你必须使用数据处理工具：
-        - 使用 loadCsvData、loadExcelData、loadJsonData 加载数据
-        - 使用 calculateDescriptiveStats 进行统计分析
-        - 使用 generateBarChart、generatePieChart 等生成图表
-        
-        **工作原则**：
-        1. 始终首先理解用户的数据分析需求
-        2. 如果需要最新信息或背景资料，主动使用搜索工具
-        3. 选择最合适的分析方法和工具
-        4. 提供清晰的分析步骤和结果解释
-        5. 生成直观的可视化结果
-        6. 给出实用的数据洞察和建议
-        
-        **搜索工具使用指南**：
-        - 当用户询问需要最新数据的问题时，使用搜索工具
-        - 当需要了解某个行业或领域背景时，使用搜索工具
-        - 当需要验证数据或获取对比信息时，使用搜索工具
-        - 搜索后结合搜索结果进行更准确的分析
-        
-        请根据用户的具体需求，运用相应的数据分析工具和方法来完成任务。
-        当任务完成时，请回复FINISH。
-        记住：不要只是回答问题，要主动使用工具获取准确信息！
-        """;
-    }
 
     /**
-     * 构建Planner的动态prompt
+     * 构建Planner的初始创建SystemPrompt
      */
-    public String buildPlannerPrompt(String userQuery, Map<String, String> subgraphResults, String todoListInfo) {
-        if (subgraphResults != null && !subgraphResults.isEmpty()) {
-            // 有子图结果，使用更新模式
-            return buildPlannerUpdatePrompt(userQuery, subgraphResults, todoListInfo);
-        } else {
-            // 没有子图结果，使用初始创建模式
-            return buildPlannerInitialPrompt(userQuery);
-        }
-    }
-    
-    /**
-     * 构建Planner的初始创建prompt
-     */
-    private String buildPlannerInitialPrompt(String userQuery) {
-        return String.format("""
-            你是一名专业的任务规划器，负责分析用户需求并将复杂任务分解为可执行的任务列表。
-
-            **用户查询**：%s
-
-            **你的职责**：
-            - 深入理解用户的数据分析需求
-            - 将复杂任务分解为具体的子任务
-            - 为每个子任务分配合适的子智能体
-            - 识别任务间的依赖关系
-            - 输出JSON格式的任务列表
-
-            **可用的子智能体**：
-            - statisticalAnalysisAgent: 统计分析（描述性统计、相关性分析、异常值检测）
-            - dataVisualizationAgent: 数据可视化（柱状图、饼图、散点图、折线图等）
-            - webSearchAgent: 网络搜索（实时信息搜索、新闻搜索、学术资料搜索）
-            - comprehensiveAnalysisAgent: 综合分析（处理复杂任务、评估分析、综合报告生成）
-
-            **任务分配指导**：
-            1. **统计分析任务** → statisticalAnalysisAgent：计算统计指标、相关性分析
-            2. **可视化任务** → dataVisualizationAgent：生成图表、可视化展示
-            3. **网络搜索任务** → webSearchAgent：搜索实时信息、新闻、学术资料
-            4. **综合分析任务** → comprehensiveAnalysisAgent：整合多个子智能体结果、深度评估、综合报告
-
-            **输出格式**：
-            你必须输出以下JSON格式：
-            {
-              "add": [
-                {
-                  "description": "任务描述",
-                  "assignedAgent": "agentName",
-                  "status": "pending",
-                  "order": 1
-                }
-              ],
-              "delete": [],
-              "modify": []
-            }
-
-            **重要**：
-            - 任务顺序很重要，按执行顺序设置order
-            - 如果连续多个子任务都分配给同一个子智能体，必须合并成一个任务
-            - 确保任务描述清晰明确
-            - 只输出JSON，不要其他内容
-            """, userQuery);
-    }
-    
-    /**
-     * 构建Planner的更新prompt
-     */
-    private String buildPlannerUpdatePrompt(String userQuery, Map<String, String> subgraphResults, String todoListInfo) {
-        // 构建子图结果信息
-        StringBuilder subgraphInfo = new StringBuilder();
-        for (Map.Entry<String, String> entry : subgraphResults.entrySet()) {
-            subgraphInfo.append(String.format("**%s执行结果**：\n%s\n\n", entry.getKey(), entry.getValue()));
-        }
-        
-        return String.format("""
-            你是一名专业的任务规划器，负责根据子图执行结果动态更新任务列表。
-
-            **用户查询**：%s
-
-            **当前任务列表状态**：
-            %s
-
-            **子图执行结果**：
-            %s
-
-            **你的职责**：
-            - 分析子图执行结果，判断任务完成情况
-            - 更新已完成任务的状态
-            - 根据结果调整后续任务
-            - 添加新的必要任务
-            - 删除不再需要的任务
-
-            **任务状态判断**：
-            - 如果子图返回成功信息且包含预期结果 → 任务完成
-            - 如果子图返回错误信息 → 任务失败
-            - 如果结果不完整或需要补充 → 添加新任务
-
-            **输出格式**：
-            你必须输出以下JSON格式：
-            {
-              "add": [
-                {
-                  "description": "新任务描述",
-                  "assignedAgent": "agentName",
-                  "status": "pending",
-                  "order": 任务顺序
-                }
-              ],
-              "delete": [
-                {
-                  "uniqueId": "要删除的任务ID"
-                }
-              ],
-              "modify": [
-                {
-                  "uniqueId": "要修改的任务ID",
-                  "status": "completed"
-                }
-              ]
-            }
-
-            **重要**：
-            - 根据子图结果判断任务是否完成
-            - 如果任务完成，使用modify将状态改为completed
-            - 如果任务失败且失败次数<3，不修改状态（会重试）
-            - 如果任务失败且失败次数>=3，使用modify将状态改为failed
-            - 只输出JSON，不要其他内容
-            """, userQuery, todoListInfo, subgraphInfo);
-    }
-    public String getPlannerPrompt() {
+    public String buildPlannerInitialSystemPrompt() {
         return """
         你是一名专业的任务规划器，负责分析用户需求并将复杂任务分解为可执行的任务列表。
 
@@ -423,7 +198,7 @@ public class PromptTemplateManager {
         - 将复杂任务分解为具体的子任务
         - 为每个子任务分配合适的子智能体
         - 识别任务间的依赖关系
-        - 直接输出JSON格式的任务列表
+        - 输出JSON格式的任务列表
 
         **可用的子智能体**：
         - statisticalAnalysisAgent: 统计分析（描述性统计、相关性分析、异常值检测）
@@ -432,123 +207,313 @@ public class PromptTemplateManager {
         - comprehensiveAnalysisAgent: 综合分析（处理复杂任务、评估分析、综合报告生成）
 
         **任务分配指导**：
-        1. **统计分析任务** → statisticalAnalysisAgent：计算统计指标、相关性分析
-        2. **可视化任务** → dataVisualizationAgent：生成图表、可视化展示
-        3. **网络搜索任务** → webSearchAgent：搜索实时信息、新闻、学术资料
-        4. **综合分析任务** → comprehensiveAnalysisAgent：整合多个子智能体结果、深度评估、综合报告
-
-        **特殊情况处理**：
-        - 如果任务需要整合多个子智能体的结果，分配给comprehensiveAnalysisAgent
-        - 如果任务需要对已有分析结果进行深度评估，分配给comprehensiveAnalysisAgent
-        - 如果任务需要生成综合报告，分配给comprehensiveAnalysisAgent
-        - 如果任务无法明确分类，分配给comprehensiveAnalysisAgent
+        1. **统计分析任务** → statisticalAnalysisAgent："计算统计指标、相关性分析
+        2. **可视化任务** → dataVisualizationAgent："生成图表、可视化展示
+        3. **网络搜索任务** → webSearchAgent："搜索实时信息、新闻、学术资料
+        4. **综合分析任务** → comprehensiveAnalysisAgent："整合多个子智能体结果、深度评估、综合报告
 
         **任务合并规则**：
         - 如果连续多个子任务都分配给同一个子智能体，必须合并成一个任务
         - 合并后的任务描述要包含所有子任务的要求
-        - 例如：如果前3个子任务都是统计分析，应该合并为"执行完整的统计分析"任务
         - 这样可以减少任务数量，提高执行效率
+        """;
+    }
 
-        **输出格式要求**：
-        - 你必须直接输出JSON格式的任务列表，不要调用任何工具
-        - JSON格式如下：
+    /**
+     * 构建Planner的初始创建UserPrompt
+     */
+    public String buildPlannerInitialUserPrompt(String userQuery) {
+        return String.format("""
+        **用户查询**：%s
+
+        **输出格式**：
+        你必须输出以下JSON格式：
         {
           "add": [
             {
               "description": "任务描述",
-              "assignedAgent": "智能体名称",
-              "order": 1,
-              "status": "pending"
+              "assignedAgent": "agentName",
+              "status": "pending",
+              "order": 1
             }
           ],
-          "modify": [],
-          "delete": []
+          "delete": [],
+          "modify": []
         }
 
         **重要**：
-        - 直接输出JSON，不要调用工具
-        - 任务分解要全面但不冗余
-        - 确保每个任务都能由指定的子智能体完成
-        - **关键**：如果多个子任务都分配给同一个子智能体，必须合并成一个任务
-        - **关键**：每个子智能体最多只分配一个任务，避免重复调用
-        - 只输出JSON，不要添加其他文字
+        - 任务顺序很重要，按执行顺序设置order
+        - 如果连续多个子任务都分配给同一个子智能体，必须合并成一个任务
+        - 确保任务描述清晰明确
+        - 只输出JSON，不要其他内容
+        """, userQuery);
+    }
+
+    /**
+     * 构建Planner的更新SystemPrompt
+     */
+    public String buildPlannerUpdateSystemPrompt() {
+        return """
+        你是一名专业的任务规划器，负责根据子图执行结果动态更新任务列表。
+
+        **你的职责**：
+        - 分析子图执行结果，判断任务完成情况
+        - 更新已完成任务的状态
+        - 根据结果调整后续任务
+        - 添加新的必要任务
+        - 删除不再需要的任务
+
+        **可用的子智能体**：
+        - statisticalAnalysisAgent: 统计分析（描述性统计、相关性分析、异常值检测）
+        - dataVisualizationAgent: 数据可视化（柱状图、饼图、散点图、折线图等）
+        - webSearchAgent: 网络搜索（实时信息搜索、新闻搜索、学术资料搜索）
+        - comprehensiveAnalysisAgent: 综合分析（处理复杂任务、评估分析、综合报告生成）
         """;
     }
 
     /**
-     * 获取任务调度器提示词
+     * 构建Planner的更新UserPrompt
      */
-    public String getSchedulerPrompt() {
-        return """
-        你是一名专业的任务调度器，负责为子图执行准备完整的上下文信息。
+    public String buildPlannerUpdateUserPrompt(String userQuery, String todoListInfo, Map<String, String> subgraphResults) {
+        // 构建子图结果信息
+        StringBuilder subgraphInfo = new StringBuilder();
+        for (Map.Entry<String, String> entry : subgraphResults.entrySet()) {
+            subgraphInfo.append(String.format("**%s执行结果**：\n%s\n\n", entry.getKey(), entry.getValue()));
+        }
+        
+        return String.format("""
+        **用户查询**：%s
 
-        **你的职责**：
-        - 分析已完成任务的结果
-        - 整合相关的子图执行结果
-        - 为下一步任务准备完整的上下文
-        - 确保子图能够获得执行所需的所有信息
+        **当前任务列表状态**：
+        %s
 
-        **输入信息**：
-        - 当前任务列表状态
-        - 已完成任务的结果
-        - 子图执行结果
-        - 下一步要执行的任务
+        **子图执行结果**：
+        %s
 
-        **输出要求**：
-        - 生成一个完整的上下文，包含任务描述、前序任务结果、相关分析数据和执行指导
-        - 确保子图能够获得执行所需的所有信息
-        - 输出应该是纯文本格式，直接作为子图的输入
+        **任务状态判断**：
+        - 如果子图返回成功信息且包含预期结果 → 任务完成
+        - 如果子图返回错误信息 → 任务失败
+        - 如果结果不完整或需要补充 → 添加新任务
+
+        **输出格式**：
+        你必须输出以下JSON格式：
+        {
+          "add": [
+            {
+              "description": "新任务描述",
+              "assignedAgent": "agentName",
+              "status": "pending",
+              "order": 任务顺序
+            }
+          ],
+          "delete": [
+            {
+              "uniqueId": "要删除的任务ID"
+            }
+          ],
+          "modify": [
+            {
+              "uniqueId": "要修改的任务ID",
+              "status": "completed"
+            }
+          ]
+        }
 
         **重要**：
-        - 不要调用任何工具
-        - 专注于上下文生成和任务描述
-        - 确保输出的上下文完整且准确
+        - 根据子图结果判断任务是否完成
+        - 如果任务完成，使用modify将状态改为completed
+        - 如果任务失败且失败次数<3，不修改状态（会重试）
+        - 如果任务失败且失败次数>=3，使用modify将状态改为failed
+        - 只输出JSON，不要其他内容
+        """, userQuery, todoListInfo, subgraphInfo);
+    }
+
+    // ==================== Scheduler专用的System/User拆分方法 ====================
+
+    /**
+     * 构建Scheduler的初始创建SystemPrompt
+     */
+    public String buildSchedulerInitialSystemPrompt() {
+        return """
+        你是一名专业的任务调度器，负责将Planner分配的任务翻译成具体的子图执行指令。
+
+        **你的职责**：
+        - 理解当前要执行的任务
+        - 根据任务需求生成精确的子图执行指令
+        - 确保指令清晰、具体，子图能够直接执行
+        - 输出纯文本格式的指令
+
+        **可用的子智能体**：
+        - statisticalAnalysisAgent: 统计分析（描述性统计、相关性分析、异常值检测）
+        - dataVisualizationAgent: 数据可视化（柱状图、饼图、散点图、折线图等）
+        - webSearchAgent: 网络搜索（实时信息搜索、新闻搜索、学术资料搜索）
+        - comprehensiveAnalysisAgent: 综合分析（处理复杂任务、评估分析、综合报告生成）
+
+        **输出格式要求**：
+        输出结构化的纯文本指令，包含以下内容：
+        1. 【执行指令】：具体的操作步骤和要求
+        2. 【上下文信息】：必要的背景信息和参考
+        3. 【期望输出】：期望的输出结果描述
+        
+        保持简洁明了，让子智能体能直接理解并执行。
         """;
     }
 
     /**
-     * 获取总结节点提示词
+     * 构建Scheduler的初始创建UserPrompt
      */
-    public String getSummaryPrompt() {
+    public String buildSchedulerInitialUserPrompt(String originalUserQuery, String currentTaskInfo) {
+        return String.format("""
+        **用户查询**：%s
+
+        **当前要执行的任务**：
+        %s
+
+        **输出格式要求**：
+        请按照以下结构化格式输出纯文本执行指令：
+
+        【执行指令】
+        [具体的操作步骤和要求，确保子智能体能直接理解和执行]
+
+        【上下文信息】 
+        [提供必要的背景信息、任务目标和执行约束]
+
+        【期望输出】
+        [描述子智能体需要生成的具体结果和格式]
+
+        **重要要求**：
+        - 执行指令必须具体明确，包含操作步骤
+        - 上下文信息要简洁相关
+        - 期望输出要清晰描述结果格式
+        - 根据任务类型选择合适的工具和参数
+        - 保持整体指令的连贯性和可执行性
+        """, originalUserQuery, currentTaskInfo);
+    }
+
+    /**
+     * 构建Scheduler的更新SystemPrompt
+     */
+    public String buildSchedulerUpdateSystemPrompt() {
         return """
-        你是一名专业的数据分析总结专家，负责整合所有子智能体的执行结果，为用户提供完整的数据分析报告。
+        你是一名专业的任务调度器，负责根据子图执行结果调整后续任务的调度策略。
 
         **你的职责**：
-        - 收集和整合所有子智能体的执行结果
-        - 分析任务执行的整体情况
-        - 生成结构化的数据分析报告
-        - 提供数据洞察和建议
-        - 以自然语言形式向用户呈现结果
+        - 分析已完成的子图执行结果
+        - 了解当前要执行的任务上下文
+        - 根据实际情况调整任务执行指令
+        - 确保后续任务能够基于已有结果正确执行
 
-        **报告结构**：
-        1. **执行摘要**：整体任务执行情况概述
-        2. **统计分析结果**：统计分析和数学计算发现
-        3. **可视化结果**：图表生成和可视化展示
-        4. **网络搜索结果**：外部信息获取和补充
-        5. **数据洞察**：基于分析结果的关键发现
-        6. **建议和后续行动**：基于分析结果的建议
+        **可用的子智能体**：
+        - statisticalAnalysisAgent: 统计分析（描述性统计、相关性分析、异常值检测）
+        - dataVisualizationAgent: 数据可视化（柱状图、饼图、散点图、折线图等）
+        - webSearchAgent: 网络搜索（实时信息搜索、新闻搜索、学术资料搜索）
+        - comprehensiveAnalysisAgent: 综合分析（处理复杂任务、评估分析、综合报告生成）
 
-        **输出要求**：
-        - 使用清晰的结构和标题
-        - 包含具体的数据和结果
-        - 提供可操作的洞察和建议
-        - 使用自然语言，避免技术术语
-        - 确保内容的完整性和准确性
-
-        **重要**：
-        - 基于所有子智能体的实际执行结果进行总结
-        - 突出关键发现和重要洞察
-        - 为用户提供有价值的数据分析结论
-        - 如果某些任务失败，要在总结中说明原因和影响
+        **输出格式要求**：
+        输出结构化的纯文本指令，包含以下内容：
+        1. 【执行指令】：结合之前结果的具体操作步骤
+        2. 【上下文信息】：包含对已有结果的引用和分析
+        3. 【期望输出】：期望的输出结果描述
         
-        **当前状态信息**：
-        请根据以下信息生成总结报告：
-        
-        原始用户查询：{originalQuery}
-        任务执行统计：{todoListStatistics}
-        子智能体执行结果：{subgraphResults}
-        
-        请基于以上信息生成完整的数据分析报告。
+        确保后续任务能够流畅地连接前面的工作。
         """;
     }
+
+    /**
+     * 构建Scheduler的更新UserPrompt
+     */
+    public String buildSchedulerUpdateUserPrompt(String originalUserQuery, String currentTaskInfo, String subgraphResultsResultsInfo) {
+        return String.format("""
+        **用户查询**：%s
+
+        **当前要执行的任务**：
+        %s
+
+        **已完成的子图执行结果**：
+        %s
+
+        **输出格式要求**：
+        请按照以下结构化格式输出纯文本执行指令：
+
+        【执行指令】
+        [结合之前的执行结果，提供更精确的操作步骤和要求]
+
+        【上下文信息】 
+        [包含对已有结果的引用和分析，确保后续任务能够流畅连接]
+
+        【期望输出】
+        [基于前面结果，描述本次执行期望生成的具体结果]
+
+        **重要要求**：
+        - 执行指令必须结合之前的执行结果
+        - 上下文信息要包含对已有结果的引用和分析
+        - 确保后续任务能够流畅地连接前面的工作
+        - 保持指令的连贯性和可执行性
+        """, originalUserQuery, currentTaskInfo, subgraphResultsResultsInfo);
+    }
+
+    // ==================== Summary专用的System/User拆分方法 ====================
+
+    /**
+     * 构建Summary的SystemPrompt
+     */
+    public String buildSummarySystemPrompt() {
+        return """
+        你是一名专业的数据分析报告汇总专家，负责整合所有子智能体的执行结果，生成全面、准确、易理解的分析报告。
+
+        **你的职责**：
+        - 汇总所有子智能体的分析结果
+        - 识别数据中的关键洞察和趋势
+        - 生成结构化的分析报告
+        - 提供实用的建议和结论
+        - 确保报告的专业性和可读性
+
+        **报告原则**：
+        - 数据驱动：基于实际分析结果
+        - 逻辑清晰：结构化呈现信息
+        - 重点突出：强调关键发现
+        - 实用导向：提供可行的建议
+        - 通俗易懂：避免过度技术化的表达
+        """;
+    }
+
+    /**
+        * 构建Summary的UserPrompt
+        */
+    public String buildSummaryUserPrompt(String originalUserQuery, String subgraphResultsInfo) {
+        return String.format("""
+        **用户原始查询**：%s
+
+        **所有子智能体执行结果**：
+        %s
+
+        **输出格式要求**：
+        请生成一份结构化的分析报告，包含以下部分：
+        ```json
+        {
+          "executiveSummary": "执行摘要，概述主要发现",
+          "detailedAnalysis": "详细分析结果，包含关键数据洞察",
+          "keyFindings": [
+            "重要发现1",
+            "重要发现2",
+            "重要发现3"
+          ],
+          "recommendations": [
+            "建议1",
+            "建议2",
+            "建议3"
+          ],
+          "conclusion": "结论总结"
+        }
+        ```
+
+        **重要要求**：
+        - 基于所有子智能体的真实执行结果
+        - 确保数据的准确性和一致性
+        - 提供实用、可操作的建议
+        - 语言简洁明了，便于理解
+        - 只输出JSON格式，不要其他内容
+        """, originalUserQuery, subgraphResultsInfo);
+    }
+
 }

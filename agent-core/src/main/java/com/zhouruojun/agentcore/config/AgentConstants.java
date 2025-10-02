@@ -12,6 +12,11 @@ public class AgentConstants {
     public static final String DATA_ANALYSIS_AGENT_URL = "http://localhost:8082/";
     public static final String DATA_ANALYSIS_AGENT_CARD_PATH = "/.well-known/agent.json";
     
+    // 求职智能体配置
+    public static final String JOB_SEARCH_AGENT_NAME = "job-search-agent";
+    public static final String JOB_SEARCH_AGENT_URL = "http://localhost:8083/";
+    public static final String JOB_SEARCH_AGENT_CARD_PATH = "/.well-known/agent.json";
+    
     // 会话配置
     public static final long SESSION_TTL_HOURS = 2;
     
@@ -24,6 +29,7 @@ public class AgentConstants {
     public static final String TASK_TYPE_DATA_ANALYSIS = "data_analysis";
     public static final String TASK_TYPE_LOAD_DATA = "load_data";
     public static final String TASK_TYPE_GENERATE_CHART = "generate_chart";
+    public static final String TASK_TYPE_JOB_SEARCH = "job_search";
     
     // 系统用户名
     public static final String SYSTEM_USERNAME = "system";

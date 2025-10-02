@@ -1,7 +1,7 @@
 package com.zhouruojun.agentcore.agent.actions;
 
-import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
+import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
@@ -41,7 +41,8 @@ public class AgentInvokeStateCheck implements NodeAction<AgentMessageState> {
         String response = agentResponse.orElse("");
         
         // 检查智能体健康状态
-        boolean isHealthy = a2aClientManager.checkAgentHealth(agentName);
+        boolean isHealthy = a2aClientManager != null ? 
+            a2aClientManager.checkAgentHealth(agentName) : true;
         if (!isHealthy) {
             log.warn("Agent {} is not healthy, finishing", agentName);
             return Map.of(

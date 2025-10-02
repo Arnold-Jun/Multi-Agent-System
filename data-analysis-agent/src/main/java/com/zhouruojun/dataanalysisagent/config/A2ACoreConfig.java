@@ -1,10 +1,10 @@
 package com.zhouruojun.dataanalysisagent.config;
 
-import com.zhouruojun.agentcore.core.PushNotificationSenderAuth;
-import com.zhouruojun.agentcore.spec.AgentCard;
-import com.zhouruojun.agentcore.spec.AgentCapabilities;
-import com.zhouruojun.agentcore.spec.AgentProvider;
-import com.zhouruojun.agentcore.spec.AgentSkill;
+import com.zhouruojun.a2acore.core.PushNotificationSenderAuth;
+import com.zhouruojun.a2acore.spec.AgentCard;
+import com.zhouruojun.a2acore.spec.AgentCapabilities;
+import com.zhouruojun.a2acore.spec.AgentProvider;
+import com.zhouruojun.a2acore.spec.AgentSkill;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -71,7 +71,7 @@ public class A2ACoreConfig {
         );
 
         return AgentCard.builder()
-                .name("数据分析智能体")
+                .name("data-analysis-agent")
                 .description("专业的数据分析智能体，支持数据加载、统计分析、可视化等功能")
                 .url("http://localhost:8082")
                 .provider(provider)

@@ -1,6 +1,6 @@
 package com.zhouruojun.dataanalysisagent.a2a;
 
-import com.zhouruojun.agentcore.spec.AgentCard;
+import com.zhouruojun.a2acore.spec.AgentCard;
 import com.zhouruojun.dataanalysisagent.agent.core.DataAnalysisControllerCore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

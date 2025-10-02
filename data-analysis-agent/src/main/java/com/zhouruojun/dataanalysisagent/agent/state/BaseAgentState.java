@@ -47,16 +47,6 @@ public abstract class BaseAgentState extends MessagesState<ChatMessage> {
         }
     }
 
-    /**
-     * 创建新的状态实例 - 通用方法
-     */
-    protected BaseAgentState withData(String key, Object value) {
-        Map<String, Object> newData = new java.util.HashMap<>(this.data());
-        newData.put(key, value);
-        return new BaseAgentState(newData) {
-            // 匿名实现，用于通用状态更新
-        };
-    }
 }
 
 

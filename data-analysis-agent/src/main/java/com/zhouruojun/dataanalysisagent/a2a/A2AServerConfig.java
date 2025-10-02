@@ -1,7 +1,7 @@
 package com.zhouruojun.dataanalysisagent.a2a;
 
-import com.zhouruojun.agentcore.core.server.A2AServer;
-import com.zhouruojun.agentcore.spec.AgentCard;
+import com.zhouruojun.a2acore.core.server.A2AServer;
+import com.zhouruojun.a2acore.spec.AgentCard;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

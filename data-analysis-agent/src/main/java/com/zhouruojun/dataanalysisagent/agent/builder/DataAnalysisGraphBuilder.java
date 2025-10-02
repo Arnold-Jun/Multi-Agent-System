@@ -8,8 +8,8 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 import com.zhouruojun.dataanalysisagent.agent.BaseAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.CallAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.TodoListParser;
-import com.zhouruojun.dataanalysisagent.agent.todo.TaskStatus;
 import com.zhouruojun.dataanalysisagent.config.ParallelExecutionConfig;
+import com.zhouruojun.dataanalysisagent.config.CheckpointConfig;
 import com.zhouruojun.dataanalysisagent.agent.builder.subgraph.StatisticalAnalysisSubgraphBuilder;
 import com.zhouruojun.dataanalysisagent.agent.builder.subgraph.DataVisualizationSubgraphBuilder;
 import com.zhouruojun.dataanalysisagent.agent.builder.subgraph.WebSearchSubgraphBuilder;
@@ -18,16 +18,18 @@ import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
 import com.zhouruojun.dataanalysisagent.agent.todo.TodoTask;
 import com.zhouruojun.dataanalysisagent.agent.todo.TodoList;
-import com.zhouruojun.dataanalysisagent.common.PromptTemplateManager;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import org.bsc.langgraph4j.checkpoint.BaseCheckpointSaver;
 
 import java.util.*;
 
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import lombok.extern.slf4j.Slf4j;
+import org.bsc.langgraph4j.action.AsyncNodeAction;
 import org.bsc.langgraph4j.prebuilt.MessagesState;
 import org.bsc.async.AsyncGenerator;
 import org.bsc.langgraph4j.CompiledGraph;
@@ -64,6 +66,10 @@ public class DataAnalysisGraphBuilder {
     private String username;
     @SuppressWarnings("unused")
     private String requestId;
+    
+    // Checkpoint相关配置
+    private BaseCheckpointSaver checkpointSaver;
+    private CheckpointConfig checkpointConfig;
 
     /**
      * 设置聊天语言模型
@@ -120,6 +126,22 @@ public class DataAnalysisGraphBuilder {
         this.requestId = requestId;
         return this;
     }
+    
+    /**
+     * 设置checkpoint保存器
+     */
+    public DataAnalysisGraphBuilder checkpointSaver(BaseCheckpointSaver checkpointSaver) {
+        this.checkpointSaver = checkpointSaver;
+        return this;
+    }
+    
+    /**
+     * 设置checkpoint配置
+     */
+    public DataAnalysisGraphBuilder checkpointConfig(CheckpointConfig checkpointConfig) {
+        this.checkpointConfig = checkpointConfig;
+        return this;
+    }
 
     /**
      * 构建状态图
@@ -144,80 +166,20 @@ public class DataAnalysisGraphBuilder {
         // 创建队列用于流式输出
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<MainGraphState>>> queue = new LinkedBlockingQueue<>();
 
-        // 创建Planner节点 - 使用特殊的CallAgent来处理动态prompt
-        final var callPlanner = new CallAgent<MainGraphState>("planner", agents.get("planner")) {
-            @Override
-            public Map<String, Object> apply(MainGraphState state) {
-                // 构建动态prompt
-                String dynamicPrompt = buildPlannerPrompt(state);
-                
-                // 创建包含动态prompt的消息
-                List<ChatMessage> messages = List.of(UserMessage.from(dynamicPrompt));
-                
-                // 创建新的状态，包含构建的消息
-                Map<String, Object> newState = new HashMap<>(state.data());
-                newState.put("messages", messages);
-                
-                // 调用父类的apply方法
-                return super.apply(new MainGraphState(newState));
-            }
-        };
+        // 创建Planner节点 - 使用专门的CallAgent
+        final var callPlanner = new CallAgent("planner", agents.get("planner"));
         callPlanner.setQueue(queue);
         
         // 创建TodoList解析器节点
         final var todoListParser = new TodoListParser();
 
-        // 创建Scheduler节点 - 使用特殊的CallAgent来处理动态prompt
-        final var callScheduler = new CallAgent<MainGraphState>("scheduler", agents.get("scheduler")) {
-            @Override
-            public Map<String, Object> apply(MainGraphState state) {
-                // 构建动态prompt
-                String dynamicPrompt = buildSchedulerPrompt(state);
-                
-                // 创建包含动态prompt的消息
-                List<ChatMessage> messages = List.of(UserMessage.from(dynamicPrompt));
-                
-                // 创建新的状态，包含构建的消息
-                Map<String, Object> newState = new HashMap<>(state.data());
-                newState.put("messages", messages);
-                
-                // 调用父类的apply方法
-                Map<String, Object> result = super.apply(new MainGraphState(newState));
-                
-                // 将Scheduler的输出保存到schedulerOutput状态中
-                if (result.containsKey("finalResponse")) {
-                    String schedulerOutput = (String) result.get("finalResponse");
-                    state.setSchedulerOutput(schedulerOutput);
-                    
-                    // 创建新的可变Map来返回结果
-                    Map<String, Object> newResult = new HashMap<>(result);
-                    newResult.put("schedulerOutput", schedulerOutput);
-
-                    return newResult;
-                }
-                
-                return result;
-            }
-        };
+        // 创建Scheduler节点 - 使用专门的CallAgent
+        final var callScheduler = new CallAgent("scheduler", agents.get("scheduler"));
         callScheduler.setQueue(queue);
 
 
-        // 创建Summary节点 - 使用特殊的CallAgent来处理状态信息
-        final var callSummary = new CallAgent<MainGraphState>("summary", agents.get("summary")) {
-            @Override
-            public Map<String, Object> apply(MainGraphState state) {
-                // 构建Summary上下文消息
-                String summaryContext = buildSummaryContext(state);
-                List<ChatMessage> messages = List.of(UserMessage.from(summaryContext));
-                
-                // 创建新的状态，包含构建的消息
-                Map<String, Object> newState = new HashMap<>(state.data());
-                newState.put("messages", messages);
-                
-                // 调用父类的apply方法
-                return super.apply(new MainGraphState(newState));
-            }
-        };
+        // 创建Summary节点 - 使用专门的CallAgent
+        final var callSummary = new CallAgent("summary", agents.get("summary"));
         callSummary.setQueue(queue);
 
         // 构建各个子图
@@ -355,7 +317,7 @@ public class DataAnalysisGraphBuilder {
             Optional<ChatMessage> lastMessageOpt = state.lastMessage();
             if (lastMessageOpt.isPresent()) {
                 ChatMessage lastMessage = lastMessageOpt.get();
-                String messageContent = lastMessage.text();
+                    String messageContent = lastMessage.text();
                 
                 // 尝试从消息内容中提取任务信息
                 if (messageContent.contains("统计分析") || messageContent.contains("statistical_analysis")) {
@@ -380,24 +342,27 @@ public class DataAnalysisGraphBuilder {
     }
 
     /**
-     * 创建任务消息 - 优先使用Scheduler输出
+     * 创建任务消息
      */
     private List<ChatMessage> createTaskMessage(TodoTask task, MainGraphState state) {
         List<ChatMessage> messages = new ArrayList<>();
         
-        // 优先使用Scheduler的输出
-        Optional<String> schedulerOutput = state.getSchedulerOutput();
-        if (schedulerOutput.isPresent()) {
-            messages.add(UserMessage.from(schedulerOutput.get()));
-            log.info("使用Scheduler输出作为子图输入");
-        } else {
-            // 如果Scheduler输出为空，使用任务描述作为backup
-            String taskMessage = String.format("请执行以下任务：%s", task.getDescription());
-            messages.add(UserMessage.from(taskMessage));
-            log.info("使用任务描述作为子图输入（Scheduler输出为空）");
-        }
+        String instructionContent = getSchedulerInstruction(state)
+            .orElse(String.format("请执行以下任务：%s", task.getDescription()));
+        
+        messages.add(UserMessage.from(instructionContent));
         
         return messages;
+    }
+    
+    /**
+     * 获取Scheduler的指令内容
+     */
+    private Optional<String> getSchedulerInstruction(MainGraphState state) {
+        return state.lastMessage()
+            .filter(msg -> msg instanceof AiMessage)
+            .map(msg -> ((AiMessage) msg).text())
+            .filter(instruction -> instruction != null && !instruction.trim().isEmpty());
     }
     
 
@@ -438,155 +403,6 @@ public class DataAnalysisGraphBuilder {
         return "子图执行完成";
     }
 
-    /**
-     * 构建Planner的动态prompt
-     */
-    private String buildPlannerPrompt(MainGraphState state) {
-        // 从messages中提取用户查询
-        String userQuery = extractUserQueryFromMessages(state);
-        
-        // 获取子图结果
-        Map<String, String> subgraphResults = state.getSubgraphResults().orElse(null);
-        
-        // 获取TodoList信息
-        String todoListInfo = state.getTodoList()
-                .map(TodoList::getSummary)
-                .orElse("无任务列表");
-        
-        // 使用PromptTemplateManager构建prompt
-        return PromptTemplateManager.instance.buildPlannerPrompt(userQuery, subgraphResults, todoListInfo);
-    }
-    
-    /**
-     * 构建Scheduler的动态prompt
-     */
-    private String buildSchedulerPrompt(MainGraphState state) {
-        // 获取输入信息
-        TodoList todoList = state.getTodoList().orElse(null);
-        Map<String, String> subgraphResults = state.getSubgraphResults().orElse(new HashMap<>());
-
-        if (todoList == null) {
-            return "无任务列表，无法生成上下文";
-        }
-
-        // 获取下一步要执行的任务
-        TodoTask nextTask = getNextExecutableTask(todoList);
-        if (nextTask == null) {
-            return "没有可执行的任务，所有任务已完成";
-        }
-
-        // 构建prompt
-        StringBuilder prompt = new StringBuilder();
-
-        // 1. 添加任务列表状态
-        prompt.append("**当前任务列表状态**：\n");
-        prompt.append(todoList.getSummary()).append("\n\n");
-
-        // 2. 添加已完成任务的结果
-        prompt.append("**已完成任务的结果**：\n");
-        todoList.getTasks().stream()
-            .filter(task -> task.getStatus() == TaskStatus.COMPLETED)
-            .forEach(task -> {
-                prompt.append("- ").append(task.getDescription())
-                      .append("：").append(task.getResult()).append("\n");
-            });
-        prompt.append("\n");
-
-        // 3. 添加子图执行结果
-        prompt.append("**子图执行结果**：\n");
-        subgraphResults.forEach((agent, result) -> {
-            prompt.append("- ").append(agent).append("：").append(result).append("\n");
-        });
-        prompt.append("\n");
-
-        // 4. 添加下一步任务
-        prompt.append("**下一步要执行的任务**：\n");
-        prompt.append(nextTask.getDescription()).append("\n\n");
-
-        // 5. 添加推理指导
-        prompt.append("**你的职责**：\n");
-        prompt.append("1. 分析已完成任务的结果\n");
-        prompt.append("2. 整合相关的子图执行结果\n");
-        prompt.append("3. 为下一步任务准备完整的上下文\n");
-        prompt.append("4. 确保子图能够获得执行所需的所有信息\n\n");
-
-        prompt.append("请输出一个完整的上下文，包含任务描述、前序任务结果、相关分析数据和执行指导。");
-
-        return prompt.toString();
-    }
-    
-    /**
-     * 获取下一个可执行的任务
-     */
-    private TodoTask getNextExecutableTask(TodoList todoList) {
-        return todoList.getTasks().stream()
-            .filter(task -> task.getStatus() == TaskStatus.PENDING)
-            .min(Comparator.comparing(TodoTask::getOrder))
-            .orElse(null);
-    }
-    
-    /**
-     * 从messages中提取用户查询
-     */
-    private String extractUserQueryFromMessages(MainGraphState state) {
-        // 首先尝试从originalUserQuery获取
-        Optional<String> originalQuery = state.getOriginalUserQuery();
-        if (originalQuery.isPresent()) {
-            return originalQuery.get();
-        }
-        
-        // 如果originalUserQuery为空，从messages中提取
-        List<ChatMessage> messages = state.messages();
-        for (ChatMessage message : messages) {
-            if (message instanceof UserMessage userMessage) {
-                String content = userMessage.text();
-                if (content != null && !content.trim().isEmpty()) {
-                    return content.trim();
-                }
-            }
-        }
-        
-        // 如果都没有找到，返回默认值
-        return "用户查询";
-    }
-    
-    private String buildSummaryContext(MainGraphState state) {
-        StringBuilder context = new StringBuilder();
-        
-        // 添加原始用户查询
-        state.getOriginalUserQuery().ifPresent(query -> {
-            context.append("原始用户查询: ").append(query).append("\n\n");
-        });
-        
-        // 添加任务列表统计
-        context.append("任务执行统计:\n");
-        context.append(state.getTodoListStatistics()).append("\n\n");
-        
-        // 添加各子智能体的执行结果
-        context.append("子智能体执行结果:\n");
-        state.getSubgraphResults().ifPresent(results -> {
-            if (results.isEmpty()) {
-                context.append("无子智能体执行结果\n");
-            } else {
-                for (Map.Entry<String, String> entry : results.entrySet()) {
-                    String agentName = entry.getKey();
-                    String result = entry.getValue();
-                    context.append("【").append(agentName).append("】\n");
-                    context.append(result).append("\n\n");
-                }
-            }
-        });
-        
-        // 添加任务列表详情
-        state.getTodoList().ifPresent(todoList -> {
-            context.append("任务列表详情:\n");
-            context.append(todoList.getSummary()).append("\n");
-        });
-        
-        context.append("\n请基于以上信息生成完整的数据分析报告。");
-        
-        return context.toString();
-    }
     
     /**
      * 构建所有子图
@@ -594,43 +410,49 @@ public class DataAnalysisGraphBuilder {
     private Map<String, CompiledGraph<MainGraphState>> buildSubgraphs() throws GraphStateException {
         Map<String, CompiledGraph<MainGraphState>> subgraphs = new HashMap<>();
         
+        // 构建子图的通用配置
+        boolean checkpointEnabled = checkpointConfig != null ? checkpointConfig.isEnabled() : true;
+        
         // 构建统计分析子图
         subgraphs.put("statistical_analysis_subgraph", 
-            new StatisticalAnalysisSubgraphBuilder()
-                .chatLanguageModel(chatLanguageModel)
-                .mainToolCollection(toolCollection)
-                .parallelExecutionConfig(parallelExecutionConfig)
-                .build()
-                .compile());
+            buildSubgraph(new StatisticalAnalysisSubgraphBuilder(), "statistical_analysis", checkpointEnabled));
                 
         // 构建数据可视化子图
-        subgraphs.put("data_visualization_subgraph",
-            new DataVisualizationSubgraphBuilder()
-                .chatLanguageModel(chatLanguageModel)
-                .mainToolCollection(toolCollection)
-                .parallelExecutionConfig(parallelExecutionConfig)
-                .build()
-                .compile());
+        subgraphs.put("data_visualization_subgraph", 
+            buildSubgraph(new DataVisualizationSubgraphBuilder(), "data_visualization", checkpointEnabled));
                 
         // 构建网络搜索子图
-        subgraphs.put("web_search_subgraph",
-            new WebSearchSubgraphBuilder()
-                .chatLanguageModel(chatLanguageModel)
-                .mainToolCollection(toolCollection)
-                .parallelExecutionConfig(parallelExecutionConfig)
-                .build()
-                .compile());
+        subgraphs.put("web_search_subgraph", 
+            buildSubgraph(new WebSearchSubgraphBuilder(), "web_search", checkpointEnabled));
                 
         // 构建综合分析子图
-        subgraphs.put("comprehensive_analysis_subgraph",
-            new ComprehensiveAnalysisSubgraphBuilder()
+        subgraphs.put("comprehensive_analysis_subgraph", 
+            buildSubgraph(new ComprehensiveAnalysisSubgraphBuilder(), "comprehensive_analysis", checkpointEnabled));
+                
+        return subgraphs;
+    }
+    
+    /**
+     * 构建单个子图的辅助方法
+     */
+    @SuppressWarnings("unchecked")
+    private CompiledGraph<MainGraphState> buildSubgraph(
+            BaseAgentGraphBuilder<?> builder,
+            String agentName, 
+            boolean checkpointEnabled) throws GraphStateException {
+        
+        String namespace = checkpointConfig != null ? 
+            checkpointConfig.getSubgraphNamespace(agentName) : agentName;
+            
+        return (CompiledGraph<MainGraphState>) (CompiledGraph<?>) builder
                 .chatLanguageModel(chatLanguageModel)
                 .mainToolCollection(toolCollection)
                 .parallelExecutionConfig(parallelExecutionConfig)
+                .checkpointSaver(checkpointSaver)
+                .enableCheckpoint(checkpointEnabled)
+                .checkpointNamespace(namespace)
                 .build()
-                .compile());
-                
-        return subgraphs;
+                .compile();
     }
     
     /**
@@ -645,7 +467,6 @@ public class DataAnalysisGraphBuilder {
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .tools(toolCollection.getToolsByAgentName("planner"))
                 .agentName("planner")
-                .prompt(PromptTemplateManager.instance.getPrompt("planner"))
                 .build());
                 
         // 创建Scheduler智能体
@@ -653,7 +474,6 @@ public class DataAnalysisGraphBuilder {
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .agentName("scheduler")
-                .prompt("你是一个智能调度器，负责为子图执行准备完整的上下文信息。") // 基础prompt，会被动态替换
                 .build());
                 
         // 创建Summary智能体
@@ -661,7 +481,6 @@ public class DataAnalysisGraphBuilder {
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .agentName("summary")
-                .prompt(PromptTemplateManager.instance.getPrompt("summary"))
                 .build());
                 
         return agents;
@@ -670,7 +489,7 @@ public class DataAnalysisGraphBuilder {
     /**
      * 创建子图节点
      */
-    private org.bsc.langgraph4j.action.AsyncNodeAction<MainGraphState> createSubgraphNode(
+    private AsyncNodeAction<MainGraphState> createSubgraphNode(
             CompiledGraph<MainGraphState> subgraph, String agentName) {
         return node_async((MainGraphState state) -> {
             TodoTask task = extractTaskFromState(state);

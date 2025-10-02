@@ -1,6 +1,6 @@
 package com.zhouruojun.a2a.client.autoconfiguration;
 
-import com.zhouruojun.agentcore.spec.PushNotificationConfig;
+import com.zhouruojun.a2acore.spec.PushNotificationConfig;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

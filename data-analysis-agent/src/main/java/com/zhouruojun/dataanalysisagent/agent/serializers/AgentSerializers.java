@@ -1,6 +1,5 @@
 package com.zhouruojun.dataanalysisagent.agent.serializers;
 
-import com.zhouruojun.dataanalysisagent.agent.state.AgentMessageState;
 import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
 import com.zhouruojun.dataanalysisagent.agent.state.SubgraphState;
 import org.bsc.langgraph4j.serializer.StateSerializer;
@@ -11,7 +10,6 @@ import org.bsc.langgraph4j.serializer.StateSerializer;
  */
 public enum AgentSerializers {
 
-    STD(new STDStateSerializer()),
     MAIN_GRAPH(new MainGraphStateSerializer()),
     SUBGRAPH(new SubgraphStateSerializer());
 
@@ -19,11 +17,6 @@ public enum AgentSerializers {
 
     AgentSerializers(StateSerializer<?> serializer) {
         this.serializer = serializer;
-    }
-
-    @SuppressWarnings("unchecked")
-    public StateSerializer<AgentMessageState> object() {
-        return (StateSerializer<AgentMessageState>) this.serializer;
     }
 
     /**

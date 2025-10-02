@@ -1,8 +1,10 @@
 package com.zhouruojun.agentcore.config;
 
 import com.zhouruojun.agentcore.agent.SupervisorAgent;
+import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import com.zhouruojun.agentcore.service.OllamaService;
-import com.zhouruojun.agentcore.tools.A2AInvokeTool;
+// import com.zhouruojun.agentcore.tools.A2AInvokeTool;
+import com.zhouruojun.a2acore.spec.AgentCard;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -18,7 +20,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static dev.langchain4j.agent.tool.ToolSpecifications.toolSpecificationsFrom;
 
@@ -131,30 +135,50 @@ public class AgentCoreConfig {
     }
 
     @Bean
-    public List<ToolSpecification> supervisorToolSpecs(A2AInvokeTool a2aInvokeTool) {
+    public List<ToolSpecification> supervisorToolSpecs() {
         log.info("Creating supervisor tool specifications");
         
-        return toolSpecificationsFrom(a2aInvokeTool);
+        // 暂时返回空列表，专注于路由逻辑修复
+        return List.of();
     }
 
     @Bean
     public SupervisorAgent supervisorAgent(
             OllamaService ollamaService,
-            List<ToolSpecification> supervisorToolSpecs) {
+            List<ToolSpecification> supervisorToolSpecs,
+            A2aClientManager a2aClientManager) {
         
-        List<String> availableAgents = List.of("data-analysis-agent");
-        
-        log.info("Creating supervisor agent with {} available agents", availableAgents.size());
+        log.info("Creating supervisor agent");
         
         // 直接使用fallback ChatLanguageModel，确保稳定性
         ChatLanguageModel chatModel = createFallbackChatLanguageModel(ollamaService);
+        
+        // 获取可用的智能体卡片信息
+        List<AgentCard> agentCards = new ArrayList<>();
+        if (a2aClientManager != null) {
+            try {
+                agentCards = a2aClientManager.getAgentCards();
+                if (agentCards != null && !agentCards.isEmpty()) {
+                    List<String> agentNames = agentCards.stream()
+                        .map(card -> card.getName())
+                        .collect(Collectors.toList());
+                    log.info("Found {} available agents for supervisor: {}", agentNames.size(), agentNames);
+                } else {
+                    log.warn("No agent cards found for supervisor, will use empty list");
+                }
+            } catch (Exception e) {
+                log.error("Error getting agent cards for supervisor, using empty list", e);
+            }
+        } else {
+            log.warn("A2aClientManager is null, supervisor will have no agents available");
+        }
         
         return SupervisorAgent.supervisorBuilder()
                 .chatLanguageModel(chatModel)
                 .streamingChatLanguageModel(null) // 暂时不使用streaming
                 .tools(supervisorToolSpecs)
                 .agentName("supervisor-agent")
-                .agentNames(availableAgents)
+                .agentCards(agentCards) // 设置智能体卡片信息
                 .build();
     }
 }

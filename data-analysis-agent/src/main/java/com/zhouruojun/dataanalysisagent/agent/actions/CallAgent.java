@@ -2,33 +2,37 @@ package com.zhouruojun.dataanalysisagent.agent.actions;
 
 import com.zhouruojun.dataanalysisagent.agent.BaseAgent;
 import com.zhouruojun.dataanalysisagent.agent.state.BaseAgentState;
+import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
+import com.zhouruojun.dataanalysisagent.agent.todo.TodoTask;
+import com.zhouruojun.dataanalysisagent.common.MessageFilter;
+import com.zhouruojun.dataanalysisagent.common.PromptTemplateManager;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.async.AsyncGenerator;
 import org.bsc.langgraph4j.action.NodeAction;
 import org.bsc.langgraph4j.streaming.StreamingOutput;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
 /**
- * 调用数据分析智能体的节点
- * 负责调用数据分析智能体进行推理
+ * 主图智能体调用节点
+ * 负责调用Planner、Scheduler、Summary等主图智能体
+ * 管理提示词构建和状态更新
  */
 @Slf4j
-public class CallAgent<T extends BaseAgentState> implements NodeAction<T> {
+public class CallAgent<T extends BaseAgentState>  implements NodeAction<MainGraphState> {
 
-    /**
-     * 智能体名称
-     */
-    final String agentName;
-
-    /**
-     * 智能体实例
-     */
-    final BaseAgent agent;
+    private static final int MAX_RETRIES = 3;
+    private final BaseAgent agent;
+    private final String agentName;
 
     /**
      * 流式输出队列
@@ -36,16 +40,11 @@ public class CallAgent<T extends BaseAgentState> implements NodeAction<T> {
     @SuppressWarnings("unused")
     private BlockingQueue<AsyncGenerator.Data<StreamingOutput<T>>> queue;
 
-    /**
-     * 构造函数
-     *
-     * @param agentName 智能体名称
-     * @param agent 智能体实例
-     */
     public CallAgent(@NonNull String agentName, @NonNull BaseAgent agent) {
         this.agentName = agentName;
         this.agent = agent;
     }
+
 
     /**
      * 设置流式输出队列
@@ -56,66 +55,54 @@ public class CallAgent<T extends BaseAgentState> implements NodeAction<T> {
         this.queue = queue;
     }
 
-    /**
-     * 应用智能体调用逻辑
-     *
-     * @param state 当前状态
-     * @return 包含智能体响应的映射
-     */
     @Override
-    public Map<String, Object> apply(T state) {
-        log.info("Calling agent: {}", agentName);
+    public Map<String, Object> apply(MainGraphState state) {
+        log.info("Calling main graph agent: {}", agentName);
 
-        return applyWithRetry(state);
+        try {
+            return applyWithRetry(state);
+        } catch (Exception e) {
+            log.error("Failed to call main graph agent: {}", agentName, e);
+            Map<String, Object> errorResult = new HashMap<>();
+            errorResult.put("error", e.getMessage());
+            return errorResult;
+        }
     }
 
     /**
      * 带重试机制的智能体调用
      */
-    private Map<String, Object> applyWithRetry(T state) {
-        // 根据智能体类型设置不同的重试策略
-        int maxRetries = getMaxRetries();
+    private Map<String, Object> applyWithRetry(MainGraphState state) {
         int retryCount = 0;
         Exception lastException = null;
 
-        while (retryCount < maxRetries) {
+        while (retryCount < MAX_RETRIES) {
             try {
-                // 获取消息列表
-                var messages = state.messages();
+                // 构建消息
+                List<ChatMessage> messages = buildMessages(state);
+                
+                log.info("Calling {} agent (attempt {}/{})",
+                        agentName, retryCount + 1, MAX_RETRIES);
 
                 // 调用智能体
                 var response = agent.execute(messages);
 
-                // 获取AI消息
                 AiMessage aiMessage = response.aiMessage();
-                
-                // 创建过滤后的AI消息，保留原始消息的所有属性，只替换文本内容
-                AiMessage filteredAiMessage = createFilteredAiMessage(aiMessage);
 
-                // 检查是否有工具调用请求
-                if (aiMessage.hasToolExecutionRequests()) {
-                    log.info("Agent {} requested tool execution: {}", agentName, aiMessage.toolExecutionRequests());
-                    return Map.of(
-                            "messages", List.of(filteredAiMessage),
-                            "toolExecutionRequests", aiMessage.toolExecutionRequests()
-                    );
-                } else {
-                    // 对于没有工具调用的响应，直接返回finalResponse
-                    log.info("Agent {} responded: {}", agentName, filteredAiMessage.text());
-                    return Map.of(
-                            "messages", List.of(filteredAiMessage),
-                            "finalResponse", filteredAiMessage.text()
-                    );
-                }
+                // 创建过滤后的AI消息，使用MessageFilter
+                AiMessage filteredAiMessage = MessageFilter.createSubGraphFilteredMessage(aiMessage);
+
+                return Map.of("messages", List.of(filteredAiMessage));
 
             } catch (Exception e) {
                 lastException = e;
                 retryCount++;
-                log.warn("Agent {} 调用失败，重试 {}/{}: {}", agentName, retryCount, maxRetries, e.getMessage());
+                log.warn("{} agent call failed (attempt {}/{}): {}",
+                        agentName, retryCount, MAX_RETRIES, e.getMessage());
                 
-                if (retryCount < maxRetries) {
+                if (retryCount < MAX_RETRIES) {
                     try {
-                        Thread.sleep(1000L * retryCount); // 递增延迟
+                        Thread.sleep(1000 * retryCount); // 递增延迟
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break;
@@ -124,89 +111,134 @@ public class CallAgent<T extends BaseAgentState> implements NodeAction<T> {
             }
         }
 
-        // 重试失败，抛出异常
-        log.error("Agent {} 调用失败，已达到最大重试次数 {}", agentName, maxRetries, lastException);
-        throw new RuntimeException("Failed to call agent: " + agentName + " after " + maxRetries + " retries", lastException);
+        throw new RuntimeException("Failed to call main graph agent: " + agentName + " after " + MAX_RETRIES + " retries", lastException);
     }
-    
+
     /**
-     * 根据智能体类型获取最大重试次数
+     * 构建发送给智能体的消息
      */
-    private int getMaxRetries() {
-        return switch (agentName) {
-            case "scheduler" -> Integer.MAX_VALUE; // Scheduler无限重试
-            case "planner" -> 3; // Planner重试3次
-            case "summary" -> 3; // Summary重试3次
-            default -> 3; // 其他智能体重试3次
-        };
+    private List<ChatMessage> buildMessages(MainGraphState state) {
+        switch (agentName) {
+            case "planner":
+                return buildPlannerMessages(state);
+            case "scheduler":
+                return buildSchedulerMessages(state);
+            case "summary":
+                return buildSummaryMessages(state);
+            default:
+                throw new IllegalArgumentException("Unknown agent: " + agentName);
+        }
     }
-    
+
+
+    // ==================== Prompt构建方法 ====================
+
     /**
-     * 创建过滤后的AI消息，保留原始消息的所有属性，只替换文本内容
-     * 
-     * @param originalAiMessage 原始AI消息
-     * @return 过滤后的AI消息
+     * 构建Planner的消息
+     * 使用PromptTemplateManager的动态System/User拆分方法
      */
-    private AiMessage createFilteredAiMessage(AiMessage originalAiMessage) {
-        // 过滤掉思考过程，只保留实际响应
-        String filteredText = filterThinkingContent(originalAiMessage.text());
+        private List<ChatMessage> buildPlannerMessages(MainGraphState state) {
+        List<ChatMessage> messages = new ArrayList<>();
         
-        // 创建新的AI消息，保留原始消息的所有属性，只替换文本内容
-        if (originalAiMessage.hasToolExecutionRequests()) {
-            // 如果有工具调用请求，保留工具调用请求
-            return AiMessage.from(filteredText, originalAiMessage.toolExecutionRequests());
+        // 获取动态数据
+        String originalUserQuery = state.getOriginalUserQuery().orElse("用户查询");
+        Map<String, String> subgraphResults = state.getSubgraphResults().orElse(new HashMap<>());
+        String todoListInfo = state.getTodoListStatistics();
+        
+        // 使用buildPlannerPrompt方法动态选择System/User提示词
+        if (subgraphResults.isEmpty() && todoListInfo.equals("无任务列表")) {
+            // 初始模式
+            String systemPrompt = PromptTemplateManager.instance.buildPlannerInitialSystemPrompt();
+            String userPrompt = PromptTemplateManager.instance.buildPlannerInitialUserPrompt(originalUserQuery);
+            messages.add(SystemMessage.from(systemPrompt));
+            messages.add(UserMessage.from(userPrompt));
         } else {
-            // 如果没有工具调用请求，只替换文本内容
-            return AiMessage.from(filteredText);
+            // 更新模式
+            String systemPrompt = PromptTemplateManager.instance.buildPlannerUpdateSystemPrompt();
+            String userPrompt = PromptTemplateManager.instance.buildPlannerUpdateUserPrompt(originalUserQuery, todoListInfo, subgraphResults);
+            messages.add(SystemMessage.from(systemPrompt));
+            messages.add(UserMessage.from(userPrompt));
         }
+        
+        return messages;
     }
-    
+
     /**
-     * 过滤掉思考过程内容和markdown标记
-     * 移除<think>...</think>标签包裹的内容，以及markdown代码块标记
-     * 虽然提示词已要求纯JSON输出，但保留过滤作为容错机制
-     *
-     * @param originalText 原始响应文本
-     * @return 过滤后的文本
+     * 构建Scheduler的消息
+     * 使用PromptTemplateManager的动态System/User拆分方法
      */
-    private String filterThinkingContent(String originalText) {
-        if (originalText == null || originalText.trim().isEmpty()) {
-            return originalText;
+    private List<ChatMessage> buildSchedulerMessages(MainGraphState state) {
+        List<ChatMessage> messages = new ArrayList<>();
+        
+        // 获取动态数据
+        String originalUserQuery = state.getOriginalUserQuery().orElse("用户查询");
+        Map<String, String> subgraphResults = state.getSubgraphResults().orElse(new HashMap<>());
+        
+        // 构建当前任务信息
+        StringBuilder currentTaskInfo = new StringBuilder();
+        state.getTodoList().ifPresent(todoList -> {
+            List<TodoTask> pendingTasks = todoList.getPendingTasks();
+            if (!pendingTasks.isEmpty()) {
+                TodoTask currentTask = pendingTasks.get(0);
+                currentTaskInfo.append("任务ID: ").append(currentTask.getUniqueId()).append("\n");
+                currentTaskInfo.append("任务描述: ").append(currentTask.getDescription()).append("\n");
+                currentTaskInfo.append("分配智能体: ").append(currentTask.getAssignedAgent()).append("\n");
+                currentTaskInfo.append("执行顺序: ").append(currentTask.getOrder()).append("\n");
+            }
+        });
+        
+        // 构建筑图结果信息
+        StringBuilder subgraphResultsInfo = new StringBuilder();
+        if (!subgraphResults.isEmpty()) {
+            subgraphResults.forEach((agent, result) -> {
+                subgraphResultsInfo.append(agent).append(": ").append(result).append("\n");
+            });
         }
         
-        String filteredText = originalText;
-        
-        // 1. 移除<think>...</think>标签及其内容（使用更精确的正则表达式）
-        // 使用DOTALL模式匹配换行符，使用非贪婪匹配
-        filteredText = filteredText.replaceAll("(?s)<think>.*?</think>", "");
-        
-        // 2. 移除单独的<think>标签（如果没有闭合标签）
-        filteredText = filteredText.replaceAll("(?s)<think>.*", "");
-        
-        // 3. 移除markdown代码块标记（容错处理）
-        // 移除开头的```json或```标记
-        filteredText = filteredText.replaceAll("^\\s*```(?:json)?\\s*", "");
-        
-        // 移除结尾的```标记
-        filteredText = filteredText.replaceAll("\\s*```\\s*$", "");
-        
-        // 4. 清理多余的空白字符和换行
-        filteredText = filteredText.trim();
-        
-        // 5. 如果过滤后为空，返回原始文本
-        if (filteredText.isEmpty()) {
-            log.warn("Filtered text is empty, returning original text");
-            return originalText;
+        // 直接使用PromptTemplateManager的方法进行System/User拆分
+        if (subgraphResults.isEmpty()) {
+            // 初始模式
+            String systemPrompt = PromptTemplateManager.instance.buildSchedulerInitialSystemPrompt();
+            String userPrompt = PromptTemplateManager.instance.buildSchedulerInitialUserPrompt(originalUserQuery, currentTaskInfo.toString());
+            messages.add(SystemMessage.from(systemPrompt));
+            messages.add(UserMessage.from(userPrompt));
+        } else {
+            // 更新模式
+            String systemPrompt = PromptTemplateManager.instance.buildSchedulerUpdateSystemPrompt();
+            String userPrompt = PromptTemplateManager.instance.buildSchedulerUpdateUserPrompt(originalUserQuery, currentTaskInfo.toString(), subgraphResultsInfo.toString());
+            messages.add(SystemMessage.from(systemPrompt));
+            messages.add(UserMessage.from(userPrompt));
         }
         
-        // 6. 记录过滤信息（仅在调试模式下）
-        if (log.isDebugEnabled()) {
-            log.debug("Original text length: {}, Filtered text length: {}", 
-                     originalText.length(), filteredText.length());
-            log.debug("Original text: {}", originalText);
-            log.debug("Filtered text: {}", filteredText);
+        return messages;
+    }
+
+    /**
+     * 构建Summary的消息
+     * 使用PromptTemplateManager的专用System/User拆分方法
+     */
+    private List<ChatMessage> buildSummaryMessages(MainGraphState state) {
+        List<ChatMessage> messages = new ArrayList<>();
+        
+        // 获取动态数据
+        String originalUserQuery = state.getOriginalUserQuery().orElse("用户查询");
+        Map<String, String> subgraphResults = state.getSubgraphResults().orElse(new HashMap<>());
+        
+        // 构建筑图结果信息
+        StringBuilder subgraphResultsInfo = new StringBuilder();
+        if (!subgraphResults.isEmpty()) {
+            subgraphResults.forEach((agent, result) -> {
+                subgraphResultsInfo.append(agent).append(": ").append(result).append("\n");
+            });
+        } else {
+            subgraphResultsInfo.append("暂无子图执行结果");
         }
         
-        return filteredText;
+        String systemPrompt = PromptTemplateManager.instance.buildSummarySystemPrompt();
+        String userPrompt = PromptTemplateManager.instance.buildSummaryUserPrompt(originalUserQuery, subgraphResultsInfo.toString());
+        messages.add(SystemMessage.from(systemPrompt));
+        messages.add(UserMessage.from(userPrompt));
+        
+        return messages;
     }
 }

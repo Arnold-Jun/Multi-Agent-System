@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Planner输出JSON解析器
@@ -37,12 +36,32 @@ public class PlannerJsonParser {
             TodoList updatedTodoList = currentTodoList != null ? 
                 new TodoList(currentTodoList) : new TodoList("用户查询");
             
-            // 1. 先执行delete操作
+            // 检测矛盾操作：同时出现的delete和modify
+            Set<String> deleteIds = new HashSet<>();
+            Set<String> modifyIds = new HashSet<>();
+            
             if (rootNode.has("delete")) {
-                executeDeleteOperations(rootNode.get("delete"), updatedTodoList);
+                deleteIds = extractUniqueIds(rootNode.get("delete"));
+            }
+            if (rootNode.has("modify")) {
+                modifyIds = extractUniqueIds(rootNode.get("modify"));
             }
             
-            // 2. 再执行modify操作
+            // 找出矛盾的任务（既被删除又被修改）
+            Set<String> conflictIds = new HashSet<>(deleteIds);
+            conflictIds.retainAll(modifyIds);
+            
+            if (!conflictIds.isEmpty()) {
+                log.warn("检测到矛盾操作：任务{}既被删除又被修改，优先执行修改操作: {}", 
+                    conflictIds, String.join(", ", conflictIds));
+            }
+            
+            // 1. 执行delete操作（跳过矛盾的任务）
+            if (rootNode.has("delete")) {
+                executeDeleteOperationsWithConflictDetection(rootNode.get("delete"), updatedTodoList, conflictIds);
+            }
+            
+            // 2. 执行modify操作
             if (rootNode.has("modify")) {
                 executeModifyOperations(rootNode.get("modify"), updatedTodoList);
             }
@@ -61,20 +80,6 @@ public class PlannerJsonParser {
         }
     }
     
-    /**
-     * 执行删除操作
-     */
-    private void executeDeleteOperations(JsonNode deleteNode, TodoList todoList) {
-        if (deleteNode.isArray()) {
-            for (JsonNode deleteItem : deleteNode) {
-                if (deleteItem.has("uniqueId")) {
-                    String uniqueId = deleteItem.get("uniqueId").asText();
-                    todoList.removeTaskByUniqueId(uniqueId);
-                    log.info("删除任务: {}", uniqueId);
-                }
-            }
-        }
-    }
     
     /**
      * 执行修改操作
@@ -149,7 +154,8 @@ public class PlannerJsonParser {
                     }
                     
                     todoList.addTask(newTask);
-                    log.info("添加新任务: {} - {} -> {}", uniqueId, description, assignedAgent);
+                    log.info("添加新任务: {} - {} -> {} (order: {})", 
+                            uniqueId, description, assignedAgent, order);
                     
                 } catch (Exception e) {
                     log.error("添加任务失败: {}", e.getMessage(), e);
@@ -191,6 +197,43 @@ public class PlannerJsonParser {
         return String.format("task_%d_%d_%03d", order, timestamp, random);
     }
     
+    /**
+     * 提取JSON节点中的uniqueId集合
+     */
+    private Set<String> extractUniqueIds(JsonNode jsonArray) {
+        Set<String> ids = new HashSet<>();
+        if (jsonArray.isArray()) {
+            for (JsonNode item : jsonArray) {
+                if (item.has("uniqueId")) {
+                    ids.add(item.get("uniqueId").asText());
+                }
+            }
+        }
+        return ids;
+    }
+    
+    /**
+     * 执行删除操作（跳过矛盾任务）
+     */
+    private void executeDeleteOperationsWithConflictDetection(JsonNode deleteNode, TodoList todoList, Set<String> conflictIds) {
+        if (deleteNode.isArray()) {
+            for (JsonNode deleteItem : deleteNode) {
+                if (deleteItem.has("uniqueId")) {
+                    String uniqueId = deleteItem.get("uniqueId").asText();
+                    
+                    // 跳过矛盾的任务（既被删除又被修改）
+                    if (conflictIds.contains(uniqueId)) {
+                        log.info("跳过删除任务 {}（由于矛盾操作），优先执行修改操作", uniqueId);
+                        continue;
+                    }
+                    
+                    todoList.removeTaskByUniqueId(uniqueId);
+                    log.info("删除任务: {}", uniqueId);
+                }
+            }
+        }
+    }
+
     /**
      * Planner解析异常
      */

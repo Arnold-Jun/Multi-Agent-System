@@ -27,6 +27,23 @@ logging:
   pattern:
     console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
 
+# A2A配置
+a2a:
+  host:
+    notification:
+      endpoint: "http://localhost:8081/a2a/notifications"
+    agents:
+      data-analysis-agent:
+        baseUrl: "http://localhost:8082"
+        agentCardPath: "/.well-known/agent.json"
+        notification:
+          endpoint: "http://localhost:8082/a2a/notifications"
+      job-search-agent:
+        baseUrl: "http://localhost:8083"
+        agentCardPath: "/.well-known/agent.json"
+        notification:
+          endpoint: "http://localhost:8083/a2a/notifications"
+
 # 管理端点配置
 management:
   endpoints:

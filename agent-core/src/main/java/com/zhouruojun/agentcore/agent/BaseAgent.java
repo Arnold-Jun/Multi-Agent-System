@@ -9,9 +9,7 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
-import lombok.Builder;
 import lombok.Singular;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,13 +18,25 @@ import java.util.Objects;
 /**
  * Represents an agent that can process chat messages and execute actions using specified tools.
  */
-@Builder
 public class BaseAgent {
 
     protected final ChatLanguageModel chatLanguageModel;
     protected final StreamingChatLanguageModel streamingChatLanguageModel;
     @Singular protected final List<ToolSpecification> tools;
     protected String agentName;
+
+    /**
+     * 构造函数
+     */
+    protected BaseAgent(ChatLanguageModel chatLanguageModel,
+                       StreamingChatLanguageModel streamingChatLanguageModel,
+                       List<ToolSpecification> tools,
+                       String agentName) {
+        this.chatLanguageModel = chatLanguageModel;
+        this.streamingChatLanguageModel = streamingChatLanguageModel;
+        this.tools = tools != null ? tools : new ArrayList<>();
+        this.agentName = agentName;
+    }
 
     /**
      * Checks if the agent is currently streaming.
@@ -53,12 +63,8 @@ public class BaseAgent {
     private ChatRequest prepareRequest(List<ChatMessage> messages, String... args ) {
         var reqMessages = new ArrayList<ChatMessage>();
 
-        String prompt = getPrompt();
-        if (StringUtils.isEmpty(prompt)) {
-            reqMessages.add(SystemMessage.from("You are a helpful assistant"));
-        } else {
-            reqMessages.add(SystemMessage.from(prompt));
-        }
+        reqMessages.add(SystemMessage.from(getPrompt()));
+
         reqMessages.addAll(messages);
 
         var parameters = ChatRequestParameters.builder()
@@ -117,6 +123,50 @@ public class BaseAgent {
     public ChatResponse execute(List<ChatMessage> messages, String... args ) {
         Objects.requireNonNull(chatLanguageModel, "chatLanguageModel is required!");
         return chatLanguageModel.chat(prepareRequest(messages, args));
+    }
+
+    /**
+     * 通用Builder基类
+     * 为所有Agent提供统一的构建模式
+     */
+    public static abstract class BaseAgentBuilder<T extends BaseAgent, B extends BaseAgentBuilder<T, B>> {
+        protected ChatLanguageModel chatLanguageModel;
+        protected StreamingChatLanguageModel streamingChatLanguageModel;
+        protected List<ToolSpecification> tools;
+        protected String agentName;
+
+        public B chatLanguageModel(ChatLanguageModel chatLanguageModel) {
+            this.chatLanguageModel = chatLanguageModel;
+            return self();
+        }
+
+        public B streamingChatLanguageModel(StreamingChatLanguageModel streamingChatLanguageModel) {
+            this.streamingChatLanguageModel = streamingChatLanguageModel;
+            return self();
+        }
+
+        public B tools(List<ToolSpecification> tools) {
+            this.tools = tools;
+            return self();
+        }
+
+        public B agentName(String agentName) {
+            this.agentName = agentName;
+            return self();
+        }
+
+        /**
+         * 构建Agent实例
+         */
+        public abstract T build();
+
+        /**
+         * 返回当前builder实例，用于链式调用
+         */
+        @SuppressWarnings("unchecked")
+        protected B self() {
+            return (B) this;
+        }
     }
 }
 
