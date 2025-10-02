@@ -11,9 +11,12 @@ import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import org.bsc.async.AsyncGenerator;
+import org.bsc.langgraph4j.CompileConfig;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.EdgeAction;
+import org.bsc.langgraph4j.checkpoint.BaseCheckpointSaver;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.bsc.langgraph4j.serializer.StateSerializer;
 import org.bsc.langgraph4j.streaming.StreamingOutput;
 
@@ -25,7 +28,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * 抽象智能体图构建器基类
  * 使用模板方法模式消除重复代码
  */
-public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
+public abstract class BaseAgentGraphBuilder<T extends BaseAgentState> {
     protected StreamingChatLanguageModel streamingChatLanguageModel;
     protected ChatLanguageModel chatLanguageModel;
     protected StateSerializer<T> stateSerializer;
@@ -33,11 +36,16 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     protected List<ToolSpecification> tools;
     protected BlockingQueue<AsyncGenerator.Data<StreamingOutput<T>>> queue;
     protected DataAnalysisToolCollection mainToolCollection;
+    
+    // Checkpoint相关配置
+    protected BaseCheckpointSaver checkpointSaver;
+    protected boolean enableCheckpoint = true;
+    protected String checkpointNamespace = "subgraph";
 
     /**
      * 设置聊天语言模型
      */
-    public AbstractAgentGraphBuilder<T> chatLanguageModel(ChatLanguageModel chatLanguageModel) {
+    public BaseAgentGraphBuilder<T> chatLanguageModel(ChatLanguageModel chatLanguageModel) {
         this.chatLanguageModel = chatLanguageModel;
         return this;
     }
@@ -45,7 +53,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置流式聊天语言模型
      */
-    public AbstractAgentGraphBuilder<T> streamingChatLanguageModel(StreamingChatLanguageModel streamingChatLanguageModel) {
+    public BaseAgentGraphBuilder<T> streamingChatLanguageModel(StreamingChatLanguageModel streamingChatLanguageModel) {
         this.streamingChatLanguageModel = streamingChatLanguageModel;
         return this;
     }
@@ -53,7 +61,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置状态序列化器
      */
-    public AbstractAgentGraphBuilder<T> stateSerializer(StateSerializer<T> stateSerializer) {
+    public BaseAgentGraphBuilder<T> stateSerializer(StateSerializer<T> stateSerializer) {
         this.stateSerializer = stateSerializer;
         return this;
     }
@@ -61,7 +69,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置工具列表
      */
-    public AbstractAgentGraphBuilder<T> tools(List<ToolSpecification> tools) {
+    public BaseAgentGraphBuilder<T> tools(List<ToolSpecification> tools) {
         this.tools = tools;
         return this;
     }
@@ -69,7 +77,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置并行执行配置
      */
-    public AbstractAgentGraphBuilder<T> parallelExecutionConfig(ParallelExecutionConfig parallelExecutionConfig) {
+    public BaseAgentGraphBuilder<T> parallelExecutionConfig(ParallelExecutionConfig parallelExecutionConfig) {
         this.parallelExecutionConfig = parallelExecutionConfig;
         return this;
     }
@@ -77,8 +85,32 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     /**
      * 设置主工具集合
      */
-    public AbstractAgentGraphBuilder<T> mainToolCollection(DataAnalysisToolCollection mainToolCollection) {
+    public BaseAgentGraphBuilder<T> mainToolCollection(DataAnalysisToolCollection mainToolCollection) {
         this.mainToolCollection = mainToolCollection;
+        return this;
+    }
+    
+    /**
+     * 设置checkpoint保存器
+     */
+    public BaseAgentGraphBuilder<T> checkpointSaver(BaseCheckpointSaver checkpointSaver) {
+        this.checkpointSaver = checkpointSaver;
+        return this;
+    }
+    
+    /**
+     * 设置是否启用checkpoint
+     */
+    public BaseAgentGraphBuilder<T> enableCheckpoint(boolean enableCheckpoint) {
+        this.enableCheckpoint = enableCheckpoint;
+        return this;
+    }
+    
+    /**
+     * 设置checkpoint命名空间
+     */
+    public BaseAgentGraphBuilder<T> checkpointNamespace(String checkpointNamespace) {
+        this.checkpointNamespace = checkpointNamespace;
         return this;
     }
 
@@ -99,8 +131,8 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
         CallSubAgent callAgent = createCallAgent(agent);
         ExecuteTools<T> executeTools = createExecuteTools(agent);
         
-        // 5. 构建图 - 子类实现
-        return buildGraph(callAgent, executeTools);
+        // 5. 构建图 - 使用带checkpoint的构建方法
+        return buildGraphWithCheckpoint(callAgent, executeTools);
     }
 
     /**
@@ -127,6 +159,11 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
         
         // 创建队列用于流式输出
         queue = new LinkedBlockingQueue<>();
+        
+        // 初始化checkpoint保存器
+        if (checkpointSaver == null && enableCheckpoint) {
+            checkpointSaver = new MemorySaver();
+        }
     }
 
     /**
@@ -149,7 +186,7 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
     }
 
     /**
-     * 创建智能体 - 使用工具集合的统一方式
+     * 创建智能体
      */
     protected BaseAgent createAgentWithToolCollection(DataAnalysisToolCollection toolCollection) {
         return BaseAgent.builder()
@@ -166,10 +203,9 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
      */
     protected CallSubAgent createCallAgent(BaseAgent agent) {
         CallSubAgent callAgent = new CallSubAgent(getAgentName(), agent);
-        // 注意：这里需要类型转换，因为CallSubAgent期望SubgraphState，但基类使用泛型T
-        // 由于子图构建器都使用SubgraphState，这个转换是安全的
+
         @SuppressWarnings("unchecked")
-        BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>> subgraphQueue = 
+        BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>> subgraphQueue =
             (BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>>) (BlockingQueue<?>) queue;
         callAgent.setQueue(subgraphQueue);
         return callAgent;
@@ -179,7 +215,6 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
      * 创建执行工具节点
      */
     protected ExecuteTools<T> createExecuteTools(BaseAgent agent) {
-        // 使用工厂方法创建轻量级的工具集合
         DataAnalysisToolCollection tempToolCollection = createTempToolCollection();
         return new ExecuteTools<>(getActionName(), agent, tempToolCollection, parallelExecutionConfig);
     }
@@ -196,6 +231,17 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
             CallSubAgent callAgent,
             ExecuteTools<T> executeTools
     ) throws GraphStateException;
+    
+    /**
+     * 构建带checkpoint的图 - 子类可以重写此方法来自定义checkpoint行为
+     */
+    protected StateGraph<T> buildGraphWithCheckpoint(
+            CallSubAgent callAgent,
+            ExecuteTools<T> executeTools
+    ) throws GraphStateException {
+        // 直接返回构建的图，checkpoint配置在编译时处理
+        return buildGraph(callAgent, executeTools);
+    }
 
 
     /**
@@ -236,6 +282,40 @@ public abstract class AbstractAgentGraphBuilder<T extends BaseAgentState> {
      */
     protected EdgeAction<T> getStandardActionShouldContinue() {
         return (state) -> "callback";
+    }
+    
+    /**
+     * 获取checkpoint保存器
+     */
+    protected BaseCheckpointSaver getCheckpointSaver() {
+        return checkpointSaver;
+    }
+    
+    /**
+     * 是否启用了checkpoint
+     */
+    protected boolean isCheckpointEnabled() {
+        return enableCheckpoint && checkpointSaver != null;
+    }
+    
+    /**
+     * 获取checkpoint命名空间
+     */
+    protected String getCheckpointNamespace() {
+        return checkpointNamespace;
+    }
+    
+    /**
+     * 创建checkpoint配置
+     */
+    protected CompileConfig createCheckpointConfig() {
+        if (!isCheckpointEnabled()) {
+            return CompileConfig.builder().build();
+        }
+        
+        return CompileConfig.builder()
+                .checkpointSaver(checkpointSaver)
+                .build();
     }
 
 }

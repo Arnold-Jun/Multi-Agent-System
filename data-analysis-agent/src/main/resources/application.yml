@@ -24,6 +24,11 @@ data-analysis:
     queue-capacity: 100             # 队列容量
     enable-logging: true            # 是否启用并行执行日志
     min-tools-for-parallel: 2       # 并行执行的最小工具数量阈值
+  
+  # Checkpoint配置
+  checkpoint:
+    enabled: true                    # 是否启用checkpoint功能
+    namespace-prefix: "data-analysis" # Checkpoint命名空间前缀
 
 # 日志配置
 logging:

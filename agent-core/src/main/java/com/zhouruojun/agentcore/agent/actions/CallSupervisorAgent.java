@@ -105,13 +105,16 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
         }
 
         String lowerText = filteredResponse.toLowerCase();
-        if (lowerText.contains("需要调用专业智能体") || lowerText.contains("数据分析") || 
-            lowerText.contains("data-analysis-agent") || lowerText.contains("发送给") ||
+        if (lowerText.contains("需要调用专业智能体") || lowerText.contains("发送给") ||
             lowerText.contains("路由到") || lowerText.contains("调用")) {
-            String taskInstruction = extractTaskInstructionFromLegacyResponse(filteredResponse);
+            
+            // 智能判断应该调用哪个智能体
+            String targetAgent = determineTargetAgent(filteredResponse);
+            String taskInstruction = extractTaskInstructionFromResponse(filteredResponse);
+            
             return Map.of(
                     "next", "agentInvoke",
-                    "nextAgent", AgentConstants.DATA_ANALYSIS_AGENT_NAME,
+                    "nextAgent", targetAgent,
                     "taskInstruction", taskInstruction,
                     "agent_response", filteredResponse,
                     "username", username
@@ -125,9 +128,35 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
         return Map.of("next", "FINISH", "agent_response", filteredResponse);
     }
 
-
-
-    private String extractTaskInstructionFromLegacyResponse(String responseText) {
+    /**
+     * 智能判断应该调用哪个智能体
+     */
+    private String determineTargetAgent(String responseText) {
+        String lowerText = responseText.toLowerCase();
+        
+        // 根据关键词判断智能体类型
+        if (lowerText.contains("job-search-agent") || lowerText.contains("求职") || 
+            lowerText.contains("岗位") || lowerText.contains("简历") || 
+            lowerText.contains("面试") || lowerText.contains("投递") ||
+            lowerText.contains("工作") || lowerText.contains("招聘")) {
+            return AgentConstants.JOB_SEARCH_AGENT_NAME;
+        }
+        
+        if (lowerText.contains("data-analysis-agent") || lowerText.contains("数据分析") || 
+            lowerText.contains("统计") || lowerText.contains("可视化") || 
+            lowerText.contains("图表") || lowerText.contains("数据")) {
+            return AgentConstants.DATA_ANALYSIS_AGENT_NAME;
+        }
+        
+        // 默认返回数据分析智能体（保持向后兼容）
+        log.warn("无法确定目标智能体，使用默认的数据分析智能体");
+        return AgentConstants.DATA_ANALYSIS_AGENT_NAME;
+    }
+    
+    /**
+     * 从响应中提取任务指令
+     */
+    private String extractTaskInstructionFromResponse(String responseText) {
         try {
             String[] lines = responseText.split("\n");
             for (String line : lines) {
@@ -142,11 +171,11 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
                 }
             }
         } catch (Exception e) {
-            log.warn("Error extracting legacy task instruction: {}", e.getMessage());
+            log.warn("Error extracting task instruction: {}", e.getMessage());
         }
 
         // 如果没有找到具体任务指令，返回通用任务
-        return "请根据用户需求进行数据分析处理";
+        return "请根据用户需求进行处理";
     }
 
     private boolean hasText(String value) {

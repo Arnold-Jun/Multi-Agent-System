@@ -73,6 +73,18 @@ public class A2aClientManager implements ApplicationContextAware {
                 log.warn("Failed to register {} during startup: {}. Will retry later.", AgentConstants.DATA_ANALYSIS_AGENT_NAME, e.getMessage());
             }
 
+            try {
+                // 注册求职智能体
+                A2aRegister jobSearchRegister = new A2aRegister();
+                jobSearchRegister.setName(AgentConstants.JOB_SEARCH_AGENT_NAME);
+                jobSearchRegister.setBaseUrl(AgentConstants.JOB_SEARCH_AGENT_URL);
+                jobSearchRegister.setAgentCardPath(AgentConstants.JOB_SEARCH_AGENT_CARD_PATH);
+                register(jobSearchRegister);
+                log.info("Successfully registered {} at {}", AgentConstants.JOB_SEARCH_AGENT_NAME, AgentConstants.JOB_SEARCH_AGENT_URL);
+            } catch (Exception e) {
+                log.warn("Failed to register {} during startup: {}. Will retry later.", AgentConstants.JOB_SEARCH_AGENT_NAME, e.getMessage());
+            }
+
             log.info("Initialized agents for distributed mode");
     }
     
@@ -145,6 +157,29 @@ public class A2aClientManager implements ApplicationContextAware {
                         AgentCard agentCard = register(a2aRegister);
                         log.info("Successfully re-registered {} at {}, agentCard: {}", 
                                 agentName, AgentConstants.DATA_ANALYSIS_AGENT_URL, agentCard.getName());
+                        
+                        // 重新获取 - 需要再次检查，因为register可能重写了AgentCard的name
+                        String actualAgentName = agentCard.getName();
+                        a2aClients = clientsMap.get(actualAgentName);
+                        
+                        if (!CollectionUtil.isEmpty(a2aClients)) {
+                            return a2aClients.get(0);
+                        }
+                        
+                        // 如果没有找到，也尝试原来的agentName（兼容性）
+                        a2aClients = clientsMap.get(agentName);
+                        if (!CollectionUtil.isEmpty(a2aClients)) {
+                            return a2aClients.get(0);
+                        }
+                    } else if (AgentConstants.JOB_SEARCH_AGENT_NAME.equals(agentName)) {
+                        A2aRegister jobSearchRegister = new A2aRegister();
+                        jobSearchRegister.setName(AgentConstants.JOB_SEARCH_AGENT_NAME);
+                        jobSearchRegister.setBaseUrl(AgentConstants.JOB_SEARCH_AGENT_URL);
+                        jobSearchRegister.setAgentCardPath(AgentConstants.JOB_SEARCH_AGENT_CARD_PATH);
+                        
+                        AgentCard agentCard = register(jobSearchRegister);
+                        log.info("Successfully re-registered {} at {}, agentCard: {}", 
+                                agentName, AgentConstants.JOB_SEARCH_AGENT_URL, agentCard.getName());
                         
                         // 重新获取 - 需要再次检查，因为register可能重写了AgentCard的name
                         String actualAgentName = agentCard.getName();

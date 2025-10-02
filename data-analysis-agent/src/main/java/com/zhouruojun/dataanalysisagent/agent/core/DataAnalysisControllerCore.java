@@ -10,6 +10,7 @@ import com.zhouruojun.dataanalysisagent.agent.AgentChatRequest;
 import com.zhouruojun.dataanalysisagent.agent.builder.DataAnalysisGraphBuilder;
 import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
 import com.zhouruojun.dataanalysisagent.config.ParallelExecutionConfig;
+import com.zhouruojun.dataanalysisagent.config.CheckpointConfig;
 import com.zhouruojun.dataanalysisagent.service.OllamaService;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
 import dev.langchain4j.data.message.*;
@@ -61,9 +62,11 @@ public class DataAnalysisControllerCore {
     @Autowired
     private OllamaService ollamaService;
     
-    
     @Autowired
     private ChatLanguageModel chatLanguageModel;
+    
+    @Autowired
+    private CheckpointConfig checkpointConfig;
     
     // 数据分析工具集合
     @Autowired
@@ -243,6 +246,8 @@ public class DataAnalysisControllerCore {
                 .chatLanguageModel(chatLanguageModel)
                 .toolCollection(toolCollection)
                 .parallelExecutionConfig(parallelExecutionConfig)
+                .checkpointSaver(checkpointSaver)
+                .checkpointConfig(checkpointConfig)  // 传递配置对象
                 .username(username)
                 .requestId(requestId)
                 .build();

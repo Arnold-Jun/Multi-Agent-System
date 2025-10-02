@@ -9,6 +9,7 @@ import com.zhouruojun.dataanalysisagent.agent.BaseAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.CallAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.TodoListParser;
 import com.zhouruojun.dataanalysisagent.config.ParallelExecutionConfig;
+import com.zhouruojun.dataanalysisagent.config.CheckpointConfig;
 import com.zhouruojun.dataanalysisagent.agent.builder.subgraph.StatisticalAnalysisSubgraphBuilder;
 import com.zhouruojun.dataanalysisagent.agent.builder.subgraph.DataVisualizationSubgraphBuilder;
 import com.zhouruojun.dataanalysisagent.agent.builder.subgraph.WebSearchSubgraphBuilder;
@@ -17,12 +18,12 @@ import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
 import com.zhouruojun.dataanalysisagent.agent.todo.TodoTask;
 import com.zhouruojun.dataanalysisagent.agent.todo.TodoList;
-import com.zhouruojun.dataanalysisagent.common.PromptTemplateManager;
 import com.zhouruojun.dataanalysisagent.tools.DataAnalysisToolCollection;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import org.bsc.langgraph4j.checkpoint.BaseCheckpointSaver;
 
 import java.util.*;
 
@@ -65,6 +66,10 @@ public class DataAnalysisGraphBuilder {
     private String username;
     @SuppressWarnings("unused")
     private String requestId;
+    
+    // Checkpoint相关配置
+    private BaseCheckpointSaver checkpointSaver;
+    private CheckpointConfig checkpointConfig;
 
     /**
      * 设置聊天语言模型
@@ -119,6 +124,22 @@ public class DataAnalysisGraphBuilder {
      */
     public DataAnalysisGraphBuilder requestId(String requestId) {
         this.requestId = requestId;
+        return this;
+    }
+    
+    /**
+     * 设置checkpoint保存器
+     */
+    public DataAnalysisGraphBuilder checkpointSaver(BaseCheckpointSaver checkpointSaver) {
+        this.checkpointSaver = checkpointSaver;
+        return this;
+    }
+    
+    /**
+     * 设置checkpoint配置
+     */
+    public DataAnalysisGraphBuilder checkpointConfig(CheckpointConfig checkpointConfig) {
+        this.checkpointConfig = checkpointConfig;
         return this;
     }
 
@@ -389,47 +410,49 @@ public class DataAnalysisGraphBuilder {
     private Map<String, CompiledGraph<MainGraphState>> buildSubgraphs() throws GraphStateException {
         Map<String, CompiledGraph<MainGraphState>> subgraphs = new HashMap<>();
         
+        // 构建子图的通用配置
+        boolean checkpointEnabled = checkpointConfig != null ? checkpointConfig.isEnabled() : true;
+        
         // 构建统计分析子图
-        @SuppressWarnings("unchecked")
-        CompiledGraph<MainGraphState> statisticalGraph = (CompiledGraph<MainGraphState>) (CompiledGraph<?>) new StatisticalAnalysisSubgraphBuilder()
-                .chatLanguageModel(chatLanguageModel)
-                .mainToolCollection(toolCollection)
-                .parallelExecutionConfig(parallelExecutionConfig)
-                .build()
-                .compile();
-        subgraphs.put("statistical_analysis_subgraph", statisticalGraph);
+        subgraphs.put("statistical_analysis_subgraph", 
+            buildSubgraph(new StatisticalAnalysisSubgraphBuilder(), "statistical_analysis", checkpointEnabled));
                 
         // 构建数据可视化子图
-        @SuppressWarnings("unchecked")
-        CompiledGraph<MainGraphState> visualizationGraph = (CompiledGraph<MainGraphState>) (CompiledGraph<?>) new DataVisualizationSubgraphBuilder()
-                .chatLanguageModel(chatLanguageModel)
-                .mainToolCollection(toolCollection)
-                .parallelExecutionConfig(parallelExecutionConfig)
-                .build()
-                .compile();
-        subgraphs.put("data_visualization_subgraph", visualizationGraph);
+        subgraphs.put("data_visualization_subgraph", 
+            buildSubgraph(new DataVisualizationSubgraphBuilder(), "data_visualization", checkpointEnabled));
                 
         // 构建网络搜索子图
-        @SuppressWarnings("unchecked")
-        CompiledGraph<MainGraphState> webSearchGraph = (CompiledGraph<MainGraphState>) (CompiledGraph<?>) new WebSearchSubgraphBuilder()
-                .chatLanguageModel(chatLanguageModel)
-                .mainToolCollection(toolCollection)
-                .parallelExecutionConfig(parallelExecutionConfig)
-                .build()
-                .compile();
-        subgraphs.put("web_search_subgraph", webSearchGraph);
+        subgraphs.put("web_search_subgraph", 
+            buildSubgraph(new WebSearchSubgraphBuilder(), "web_search", checkpointEnabled));
                 
         // 构建综合分析子图
-        @SuppressWarnings("unchecked")
-        CompiledGraph<MainGraphState> comprehensiveGraph = (CompiledGraph<MainGraphState>) (CompiledGraph<?>) new ComprehensiveAnalysisSubgraphBuilder()
+        subgraphs.put("comprehensive_analysis_subgraph", 
+            buildSubgraph(new ComprehensiveAnalysisSubgraphBuilder(), "comprehensive_analysis", checkpointEnabled));
+                
+        return subgraphs;
+    }
+    
+    /**
+     * 构建单个子图的辅助方法
+     */
+    @SuppressWarnings("unchecked")
+    private CompiledGraph<MainGraphState> buildSubgraph(
+            BaseAgentGraphBuilder<?> builder,
+            String agentName, 
+            boolean checkpointEnabled) throws GraphStateException {
+        
+        String namespace = checkpointConfig != null ? 
+            checkpointConfig.getSubgraphNamespace(agentName) : agentName;
+            
+        return (CompiledGraph<MainGraphState>) (CompiledGraph<?>) builder
                 .chatLanguageModel(chatLanguageModel)
                 .mainToolCollection(toolCollection)
                 .parallelExecutionConfig(parallelExecutionConfig)
+                .checkpointSaver(checkpointSaver)
+                .enableCheckpoint(checkpointEnabled)
+                .checkpointNamespace(namespace)
                 .build()
                 .compile();
-        subgraphs.put("comprehensive_analysis_subgraph", comprehensiveGraph);
-                
-        return subgraphs;
     }
     
     /**

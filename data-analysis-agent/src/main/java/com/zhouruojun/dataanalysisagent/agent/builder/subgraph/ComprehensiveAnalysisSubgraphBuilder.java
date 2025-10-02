@@ -1,6 +1,6 @@
 package com.zhouruojun.dataanalysisagent.agent.builder.subgraph;
 
-import com.zhouruojun.dataanalysisagent.agent.builder.AbstractAgentGraphBuilder;
+import com.zhouruojun.dataanalysisagent.agent.builder.BaseAgentGraphBuilder;
 import com.zhouruojun.dataanalysisagent.agent.actions.CallSubAgent;
 import com.zhouruojun.dataanalysisagent.agent.actions.ExecuteTools;
 import com.zhouruojun.dataanalysisagent.agent.serializers.AgentSerializers;
@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.EdgeAction;
 import org.bsc.langgraph4j.GraphStateException;
+import org.bsc.langgraph4j.prebuilt.MessagesState;
 
 import static org.bsc.langgraph4j.StateGraph.END;
 import static org.bsc.langgraph4j.StateGraph.START;
@@ -22,7 +23,7 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
  * 负责构建综合分析智能体的执行图
  */
 @Slf4j
-public class ComprehensiveAnalysisSubgraphBuilder extends AbstractAgentGraphBuilder<SubgraphState> {
+public class ComprehensiveAnalysisSubgraphBuilder extends BaseAgentGraphBuilder<SubgraphState> {
 
     /**
      * 获取智能体名称
@@ -80,7 +81,7 @@ public class ComprehensiveAnalysisSubgraphBuilder extends AbstractAgentGraphBuil
         EdgeAction<SubgraphState> actionShouldContinue = getStandardActionShouldContinue();
         
         // 构建简化的状态图 - 直接输出结果
-        return new StateGraph<>(org.bsc.langgraph4j.prebuilt.MessagesState.SCHEMA, stateSerializer)
+        return new StateGraph<>(MessagesState.SCHEMA, stateSerializer)
                 .addNode(getAgentName(), node_async(callAgent))
                 .addNode(getActionName(), node_async(executeTools))
                 .addEdge(START, getAgentName())

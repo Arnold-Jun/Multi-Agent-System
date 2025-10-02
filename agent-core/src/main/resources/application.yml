@@ -38,6 +38,11 @@ a2a:
         agentCardPath: "/.well-known/agent.json"
         notification:
           endpoint: "http://localhost:8082/a2a/notifications"
+      job-search-agent:
+        baseUrl: "http://localhost:8083"
+        agentCardPath: "/.well-known/agent.json"
+        notification:
+          endpoint: "http://localhost:8083/a2a/notifications"
 
 # 管理端点配置
 management:
