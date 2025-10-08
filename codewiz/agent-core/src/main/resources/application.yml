@@ -1,0 +1,25 @@
+server:
+  port: 8081
+
+logging:
+  level:
+    com.example.agentcore: DEBUG
+    org.springframework.web: DEBUG
+
+spring:
+  application:
+    name: agent-core
+
+# Ollama配置
+ollama:
+  base-url: http://localhost:11434
+  model: deepseek
+  timeout: 30000
+  temperature: 0.7
+  max-tokens: 4096
+
+# LangGraph Studio配置
+langgraph:
+  studio:
+    enabled: true
+    base-url: http://localhost:8123

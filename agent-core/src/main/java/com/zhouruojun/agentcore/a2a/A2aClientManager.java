@@ -118,6 +118,9 @@ public class A2aClientManager implements ApplicationContextAware {
         if (notification == null && a2aAgentsProperties != null) {
             notification = a2aAgentsProperties.getNotification();
         }
+        
+        log.info("Registering agent {} with push notification config: {}", 
+            register.getName(), notification != null ? notification.getUrl() : "null");
 
         AgentCardResolver resolver = new AgentCardResolver(register.getName(), register.getBaseUrl(), register.getAgentCardPath());
         try {
@@ -275,7 +278,7 @@ public class A2aClientManager implements ApplicationContextAware {
         
         try {
             // 等待最多30秒
-            boolean completed = latch.await(120, java.util.concurrent.TimeUnit.SECONDS);
+            boolean completed = latch.await(1200, java.util.concurrent.TimeUnit.SECONDS);
             if (!completed) {
                 return "A2A调用超时，请重试";
             }

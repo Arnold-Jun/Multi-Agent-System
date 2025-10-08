@@ -1,6 +1,9 @@
 package com.zhouruojun.agentcore.agent.core;
 
 import com.alibaba.fastjson.JSONObject;
+import com.zhouruojun.a2acore.spec.*;
+import com.zhouruojun.agentcore.a2a.A2aTaskManager;
+import com.zhouruojun.agentcore.a2a.A2aTaskUpdate;
 import com.zhouruojun.agentcore.agent.AgentChatRequest;
 import com.zhouruojun.agentcore.agent.builder.AgentGraphBuilder;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
@@ -8,15 +11,6 @@ import com.zhouruojun.agentcore.common.ContentFilter;
 import com.zhouruojun.agentcore.config.AgentConstants;
 import com.zhouruojun.agentcore.mcp.ToolProviderManager;
 import com.zhouruojun.agentcore.service.OllamaService;
-import com.zhouruojun.a2acore.spec.UpdateEvent;
-import com.zhouruojun.a2acore.spec.TaskStatusUpdateEvent;
-import com.zhouruojun.a2acore.spec.TaskArtifactUpdateEvent;
-import com.zhouruojun.a2acore.spec.TaskStatus;
-import com.zhouruojun.a2acore.spec.TaskState;
-import com.zhouruojun.a2acore.spec.Artifact;
-import com.zhouruojun.a2acore.spec.Message;
-import com.zhouruojun.a2acore.spec.Part;
-import com.zhouruojun.a2acore.spec.TextPart;
 import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -68,6 +62,9 @@ public class AgentControllerCore {
     
     @Autowired(required = false)
     private A2aClientManager a2aClientManager;
+    
+    @Autowired(required = false)
+    private com.zhouruojun.agentcore.a2a.A2aSseEventHandler a2aSseEventHandler;
 
     
     @Autowired
@@ -78,6 +75,10 @@ public class AgentControllerCore {
     private final Map<String, List<ChatMessage>> sessionHistory = new ConcurrentHashMap<>();
     private final Map<String, Object> sessionCache = new ConcurrentHashMap<>();
     private final Map<String, Long> sessionAccessTimes = new ConcurrentHashMap<>();
+    
+    // 异步结果管理 - 用于存储A2A异步执行的结果
+    private final Map<String, String> asyncResults = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> asyncCompleted = new ConcurrentHashMap<>();
     
     // 会话清理相关
     private static final long SESSION_TTL_MS = Duration.ofHours(AgentConstants.SESSION_TTL_HOURS).toMillis();
@@ -94,6 +95,12 @@ public class AgentControllerCore {
         
         // 初始化checkpoint saver
         checkpointSaver = new MemorySaver();
+        
+        // 设置A2A事件回调处理器
+        if (a2aSseEventHandler != null) {
+            a2aSseEventHandler.setEventCallback(this::a2aAiMessageOnEvent);
+            log.info("A2A SSE event callback registered");
+        }
         
         log.info("AgentControllerCore initialized successfully");
     }
@@ -368,114 +375,75 @@ public class AgentControllerCore {
         stateGraphCache.clear();
         compiledGraphCache.clear();
         sessionAccessTimes.clear();
+        asyncResults.clear();
+        asyncCompleted.clear();
         log.info("Cleared all graph caches");
     }
     
     /**
-     * 处理A2A AI消息事件
-     * @param updateEvent 更新事件
+     * 获取异步执行结果
+     * @param sessionId 会话ID
+     * @return 异步结果，如果未完成则返回null
      */
-    public void a2aAiMessageOnEvent(UpdateEvent updateEvent) {
-        log.info("Processing A2A event: {}", updateEvent);
+    public String getAsyncResult(String sessionId) {
+        if (asyncCompleted.getOrDefault(sessionId, false)) {
+            String result = asyncResults.get(sessionId);
+            // 获取后清理，避免内存泄漏
+            asyncResults.remove(sessionId);
+            asyncCompleted.remove(sessionId);
+            return result;
+        }
+        return null;
+    }
+    
+    /**
+     * 检查异步执行是否完成
+     * @param sessionId 会话ID
+     * @return 是否完成
+     */
+    public boolean isAsyncCompleted(String sessionId) {
+        return asyncCompleted.getOrDefault(sessionId, false);
+    }
+    
+    /**
+     * 清理响应内容，移除URL编码的重复数据
+     */
+    private String cleanResponseContent(String response) {
+        if (response == null || response.isEmpty()) {
+            return response;
+        }
         
-        try {
-            if (updateEvent instanceof TaskStatusUpdateEvent) {
-                TaskStatusUpdateEvent statusEvent = (TaskStatusUpdateEvent) updateEvent;
-                String taskId = statusEvent.getId();
-                TaskStatus status = statusEvent.getStatus();
-                boolean isFinal = statusEvent.isFinalFlag();
-                
-                log.info("Processing task status update: taskId={}, status={}, isFinal={}", 
-                    taskId, status.getState(), isFinal);
-                
-                // 如果任务完成，获取最终结果
-                if (isFinal && status.getState() == TaskState.COMPLETED) {
-                    String sessionId = extractSessionIdFromEvent(updateEvent);
-                    if (sessionId != null) {
-                        // 更新会话缓存中的最终响应
-                        updateSessionWithA2AResponse(sessionId, status);
+        // 移除URL编码的重复数据
+        String cleaned = response.replaceAll("%0A%0A", "\n\n");
+        cleaned = cleaned.replaceAll("%0A", "\n");
+        
+        // 移除重复的JSON数据块
+        if (cleaned.contains("{\"sessionId\"")) {
+            // 提取最后一个有效的结果
+            String[] parts = cleaned.split("\\{\"sessionId\"");
+            if (parts.length > 1) {
+                // 找到最后一个包含实际内容的部分
+                for (int i = parts.length - 1; i >= 0; i--) {
+                    String part = parts[i];
+                    if (part.contains("求职分析完成") || part.contains("搜索") || part.contains("岗位")) {
+                        // 提取实际的文本内容
+                        if (part.contains("\"text\":\"")) {
+                            int start = part.indexOf("\"text\":\"") + 8;
+                            int end = part.indexOf("\"", start);
+                            if (end > start) {
+                                String text = part.substring(start, end);
+                                return text.replace("\\n", "\n").replace("\\\"", "\"");
+                            }
+                        }
                     }
                 }
-                
-            } else if (updateEvent instanceof TaskArtifactUpdateEvent) {
-                TaskArtifactUpdateEvent artifactEvent = (TaskArtifactUpdateEvent) updateEvent;
-                log.info("Processing artifact update: taskId={}, artifact={}", 
-                    artifactEvent.getId(), artifactEvent.getArtifact().getName());
-                
-                // 处理制品更新，比如图表、文件等
-                String sessionId = extractSessionIdFromEvent(updateEvent);
-                if (sessionId != null) {
-                    updateSessionWithA2AArtifact(sessionId, artifactEvent.getArtifact());
-                }
-            }
-            
-        } catch (Exception e) {
-            log.error("Error processing A2A event", e);
-        }
-    }
-    
-    /**
-     * 从事件中提取会话ID
-     */
-    private String extractSessionIdFromEvent(UpdateEvent event) {
-        if (event.getMetadata() != null) {
-            Object sessionId = event.getMetadata().get("sessionId");
-            if (sessionId != null) {
-                return sessionId.toString();
             }
         }
-        return null;
+        
+        // 如果无法解析，返回清理后的原始内容
+        return cleaned.length() > 500 ? cleaned.substring(0, 500) + "..." : cleaned;
     }
     
-    /**
-     * 更新会话的A2A响应
-     */
-    private void updateSessionWithA2AResponse(String sessionId, TaskStatus status) {
-        if (status.getMessage() != null) {
-            String response = extractTextFromMessage(status.getMessage());
-            if (response != null && !response.isEmpty()) {
-                // 更新会话缓存
-                Object sessionDataObj = sessionCache.get(sessionId);
-                if (sessionDataObj instanceof Map) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> sessionData = (Map<String, Object>) sessionDataObj;
-                    sessionData.put("a2aResponse", response);
-                    sessionData.put("a2aTimestamp", System.currentTimeMillis());
-                    sessionCache.put(sessionId, sessionData);
-                    log.info("Updated session {} with A2A response: {}", sessionId, response);
-                }
-            }
-        }
-    }
-    
-    /**
-     * 更新会话的A2A制品
-     */
-    private void updateSessionWithA2AArtifact(String sessionId, Artifact artifact) {
-        Object sessionDataObj = sessionCache.get(sessionId);
-        if (sessionDataObj instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> sessionData = (Map<String, Object>) sessionDataObj;
-            sessionData.put("a2aArtifact", artifact);
-            sessionData.put("a2aArtifactTimestamp", System.currentTimeMillis());
-            sessionCache.put(sessionId, sessionData);
-            log.info("Updated session {} with A2A artifact: {}", sessionId, artifact.getName());
-        }
-    }
-    
-    /**
-     * 从消息中提取文本内容
-     */
-    private String extractTextFromMessage(Message message) {
-        if (message != null && message.getParts() != null) {
-            for (Part part : message.getParts()) {
-                if (part instanceof TextPart) {
-                    return ((TextPart) part).getText();
-                }
-            }
-        }
-        return null;
-    }
 
     /**
      * 恢复流式处理工具调用结果
@@ -500,7 +468,7 @@ public class AgentControllerCore {
                         "messages", UserMessage.from(JSONObject.toJSONString(toolResponse)),
                         "method", "tool_call"
                 );
-                RunnableConfig newConfig = graph.updateState(state.getConfig(), messages1);
+                RunnableConfig newConfig = graph.updateState(state.config(), messages1);
                 messages = graph.stream(null, newConfig);
             } catch (Exception e) {
                 log.error("resumeStreamWithTools error", e);
@@ -534,7 +502,7 @@ public class AgentControllerCore {
                         "messages", UserMessage.from(request.getChat()),
                         "method", "human_input"
                 );
-                RunnableConfig newConfig = graph.updateState(state.getConfig(), messages1);
+                RunnableConfig newConfig = graph.updateState(state.config(), messages1);
                 messages = graph.stream(null, newConfig);
             } catch (Exception e) {
                 log.error("humanInput error", e);
@@ -568,7 +536,7 @@ public class AgentControllerCore {
                         "messages", UserMessage.from(request.getChat()),
                         "method", "human_confirm"
                 );
-                RunnableConfig newConfig = graph.updateState(state.getConfig(), messages1);
+                RunnableConfig newConfig = graph.updateState(state.config(), messages1);
                 messages = graph.stream(null, newConfig);
             } catch (Exception e) {
                 log.error("humanConfirm error", e);
@@ -671,5 +639,98 @@ public class AgentControllerCore {
             }
             return false;
         });
+    }
+    
+    /**
+     * 处理来自其他Agent的A2A消息事件
+     * 实现interrupt恢复机制：当接收到其他Agent的响应时，恢复被中断的执行流程
+     */
+    public void a2aAiMessageOnEvent(UpdateEvent updateEvent) {
+        try {
+            TaskSendParams taskParams = A2aTaskManager.getInstance().getTaskParams(updateEvent.getId());
+            if (taskParams == null) {
+                log.warn("No task params found for updateEvent id: {}", updateEvent.getId());
+                return;
+            }
+            
+            String sessionId = taskParams.getSessionId();
+            log.info("Received A2A event for session: {}, taskId: {}", sessionId, updateEvent.getId());
+            
+            // 构建A2aTaskUpdate
+            A2aTaskUpdate a2aTaskUpdate = new A2aTaskUpdate();
+            a2aTaskUpdate.setTaskId(taskParams.getId());
+            a2aTaskUpdate.setSessionId(sessionId);
+            
+            if (updateEvent instanceof TaskStatusUpdateEvent taskStatusUpdateEvent) {
+                log.info("onEvent receive task status update: {}", taskStatusUpdateEvent);
+                a2aTaskUpdate.setUpdateType("status");
+                a2aTaskUpdate.setUpdateEvent(taskStatusUpdateEvent);
+            } else if (updateEvent instanceof TaskArtifactUpdateEvent taskArtifactUpdateEvent) {
+                log.info("onEvent receive artifact update: {}", JSONObject.toJSONString(taskArtifactUpdateEvent));
+                a2aTaskUpdate.setUpdateType("artifact");
+                a2aTaskUpdate.setUpdateEvent(taskArtifactUpdateEvent);
+            } else {
+                log.error("receive task streaming response error, result:{}", JSONObject.toJSONString(updateEvent));
+                throw new RuntimeException("receive task streaming response error" + JSONObject.toJSONString(updateEvent));
+            }
+            
+            // 异步恢复执行
+            CompletableFuture.runAsync(() -> {
+                try {
+                    RunnableConfig runnableConfig = RunnableConfig.builder()
+                            .threadId(sessionId)
+                            .build();
+                    
+                    CompiledGraph<AgentMessageState> graph = compiledGraphCache.get(sessionId);
+                    if (graph == null) {
+                        log.error("No compiled graph found for session: {}", sessionId);
+                        return;
+                    }
+                    
+                    StateSnapshot<AgentMessageState> state = graph.getState(runnableConfig);
+                    
+                    // 更新状态：添加包含A2A响应的AiMessage
+                    Map<String, Object> messages1 = Map.of(
+                            "messages", dev.langchain4j.data.message.AiMessage.from(JSONObject.toJSONString(a2aTaskUpdate))
+                    );
+                    RunnableConfig newConfig = graph.updateState(state.config(), messages1);
+                    
+                    // 恢复执行流程
+                    AsyncGenerator<NodeOutput<AgentMessageState>> stream = graph.stream(null, newConfig);
+                    
+                    // 处理流式响应
+                    String finalAsyncResponse = "";
+                    for (NodeOutput<AgentMessageState> agentMessageStateNodeOutput : stream) {
+                        log.info("onEvent receive agentMessageState node: {}", agentMessageStateNodeOutput.node());
+                        
+                        AgentMessageState currentState = agentMessageStateNodeOutput.state();
+                        if (currentState.agentResponse().isPresent()) {
+                            finalAsyncResponse = currentState.agentResponse().get();
+                        }
+                        
+                        // 如果到达FINISH节点，保存最终结果并通过SSE推送
+                        if ("FINISH".equals(agentMessageStateNodeOutput.node()) && !finalAsyncResponse.isEmpty()) {
+                            log.info("Saving async result for session {}: {}", sessionId, finalAsyncResponse);
+                            
+                            // 清理响应内容，移除URL编码的重复数据
+                            String cleanedResponse = cleanResponseContent(finalAsyncResponse);
+                            
+                            asyncResults.put(sessionId, cleanedResponse);
+                            asyncCompleted.put(sessionId, true);
+                            
+                            // 通过SSE推送结果
+                            if (a2aSseEventHandler != null) {
+                                a2aSseEventHandler.pushAsyncResult(sessionId, cleanedResponse);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("Error resuming execution after A2A event", e);
+                }
+            });
+            
+        } catch (Exception e) {
+            log.error("Error processing A2A event", e);
+        }
     }
 }

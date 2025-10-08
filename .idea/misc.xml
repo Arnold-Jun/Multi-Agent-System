@@ -8,6 +8,8 @@
         <option value="$PROJECT_DIR$/a2acore/pom.xml" />
         <option value="$PROJECT_DIR$/agent-core/pom.xml" />
         <option value="$PROJECT_DIR$/data-analysis-agent/pom.xml" />
+        <option value="$PROJECT_DIR$/job-search-agent/pom.xml" />
+        <option value="$PROJECT_DIR$/boss-mock-api/pom.xml" />
       </list>
     </option>
   </component>

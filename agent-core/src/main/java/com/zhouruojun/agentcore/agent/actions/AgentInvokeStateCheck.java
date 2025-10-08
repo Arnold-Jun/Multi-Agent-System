@@ -1,77 +1,126 @@
 package com.zhouruojun.agentcore.agent.actions;
 
+import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
 import com.zhouruojun.agentcore.a2a.A2aClientManager;
+import com.zhouruojun.agentcore.a2a.A2aTaskUpdate;
+import com.zhouruojun.a2acore.spec.TaskStatusUpdateEvent;
+import com.zhouruojun.a2acore.spec.TaskArtifactUpdateEvent;
+import com.zhouruojun.a2acore.spec.TaskState;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
 import java.util.Map;
-import java.util.Optional;
+// import java.util.Optional; // 未使用
 
 /**
  * Agent调用状态检查节点
  * 检查智能体调用的状态并决定下一步操作
- * 
+ * 实现codewiz的interrupt+resume机制
  */
 @Slf4j
 public class AgentInvokeStateCheck implements NodeAction<AgentMessageState> {
 
+    @SuppressWarnings("unused") // 暂时未使用，保留以备将来扩展
     private final A2aClientManager a2aClientManager;
+    private final ObjectMapper objectMapper;
 
     public AgentInvokeStateCheck(A2aClientManager a2aClientManager) {
         this.a2aClientManager = a2aClientManager;
+        this.objectMapper = new ObjectMapper();
     }
 
     @Override
     public Map<String, Object> apply(AgentMessageState state) throws Exception {
         log.info("=== AgentInvokeStateCheck executing ===");
-        log.info("AgentInvokeStateCheck state: {}", state.data());
+        log.info("AgentInvokeStateCheck state data: {}", JSONObject.toJSONString(state.data()));
         
-        Optional<String> currentAgent = state.currentAgent();
-        Optional<String> agentResponse = state.agentResponse();
-        
-        log.info("Current agent: {}, Agent response present: {}", currentAgent, agentResponse.isPresent());
-        
-        if (currentAgent.isEmpty()) {
-            log.warn("No current agent specified, finishing");
-            return Map.of("next", "FINISH");
+        var messages = state.messages();
+        if (messages.isEmpty()) {
+            throw new IllegalArgumentException("no input provided!");
         }
+
+        // 检查sessionId
+        if (state.sessionId().isEmpty()) {
+            throw new IllegalArgumentException("sessionId is empty");
+        }
+
+        ChatMessage chatMessage = state.lastMessage().get();
         
-        String agentName = currentAgent.get();
-        String response = agentResponse.orElse("");
-        
-        // 检查智能体健康状态
-        boolean isHealthy = a2aClientManager != null ? 
-            a2aClientManager.checkAgentHealth(agentName) : true;
-        if (!isHealthy) {
-            log.warn("Agent {} is not healthy, finishing", agentName);
-            return Map.of(
-                "next", "FINISH",
-                "agent_response", "智能体 " + agentName + " 状态异常"
+        if (chatMessage instanceof UserMessage userMessage) {
+            // 用户输入，场景为对工具的确认、重试。对流程的取消，中断
+            if (state.method().isEmpty()) {
+                throw new IllegalArgumentException("method is empty");
+            }
+            // 用户输入，直接透传给下游，下游自行决定根据当前入参进行续订或状态变更。
+            String currentAgent = state.currentAgent().orElse("");
+            if (currentAgent.isEmpty()) {
+                log.warn("currentAgent is empty, using nextAgent as fallback");
+                currentAgent = state.nextAgent().orElse("");
+            }
+            Map<String, Object> result = Map.of("next", "subscribe",
+                    "method", state.method().get(),
+                    "nextAgent", currentAgent,
+                    "messages", userMessage.singleText()
             );
-        }
-        
-        // 检查响应内容
-        if (response.isEmpty()) {
-            log.warn("Empty response from agent {}, retrying", agentName);
-            return Map.of("next", "continue");
-        }
-        
-        // 检查是否包含错误信息
-        if (response.toLowerCase().contains("error") || response.toLowerCase().contains("错误")) {
-            log.warn("Agent {} returned error response: {}", agentName, response);
-            return Map.of(
-                "next", "FINISH",
-                "agent_response", response
+            log.info("AgentInvokeStateCheck returning (user input): {}", JSONObject.toJSONString(result));
+            return result;
+            
+        } else if (chatMessage instanceof AiMessage aiMessage) {
+            // 来自其他Agent的事件响应
+            String text = aiMessage.text();
+            A2aTaskUpdate a2aTaskUpdate = objectMapper.readValue(text, A2aTaskUpdate.class);
+            
+            if ("status".equals(a2aTaskUpdate.getUpdateType())) {
+                TaskStatusUpdateEvent taskStatusUpdateEvent = (TaskStatusUpdateEvent) a2aTaskUpdate.getUpdateEvent();
+                TaskState taskState = taskStatusUpdateEvent.getStatus().getState();
+                
+                if (TaskState.CANCELED.equals(taskState)
+                        || TaskState.UNKNOWN.equals(taskState)
+                        || TaskState.FAILED.equals(taskState)
+                        || TaskState.COMPLETED.equals(taskState)
+                ) {
+                    log.info("Task completed with state: {}, finishing", taskState);
+                    Map<String, Object> result = Map.of("next", "FINISH");
+                    log.info("AgentInvokeStateCheck returning (task completed): {}", JSONObject.toJSONString(result));
+                    return result;
+                }
+                
+                log.info("Task still working, continuing to wait");
+                Map<String, Object> result = Map.of("next", "continue");
+                log.info("AgentInvokeStateCheck returning (task working): {}", JSONObject.toJSONString(result));
+                return result;
+                
+            } else {
+                // Artifact更新
+                TaskArtifactUpdateEvent artifactUpdateEvent = (TaskArtifactUpdateEvent) a2aTaskUpdate.getUpdateEvent();
+                log.info("task update, artifactUpdateEvent:{}", JSONObject.toJSONString(artifactUpdateEvent));
+                Map<String, Object> result = Map.of("next", "continue");
+                log.info("AgentInvokeStateCheck returning (artifact update): {}", JSONObject.toJSONString(result));
+                return result;
+            }
+            
+        } else if (chatMessage instanceof ToolExecutionResultMessage toolExecutionResultMessage) {
+            // 本地IDE工具调用请求执行
+            String currentAgent = state.currentAgent().orElse("");
+            if (currentAgent.isEmpty()) {
+                log.warn("currentAgent is empty, using nextAgent as fallback");
+                currentAgent = state.nextAgent().orElse("");
+            }
+            Map<String, Object> result = Map.of("next", "subscribe",
+                    "method", state.method().get(),
+                    "nextAgent", currentAgent,
+                    "messages", toolExecutionResultMessage
             );
+            log.info("AgentInvokeStateCheck returning (tool execution): {}", JSONObject.toJSONString(result));
+            return result;
         }
         
-        // 成功处理，返回到supervisor进行最终推理
-        log.info("Agent {} completed successfully, returning to supervisor for final reasoning", agentName);
-        return Map.of(
-            "next", "supervisor",
-            "agent_response", response,
-            "processingStage", "final_reasoning"  // 标记为最终推理阶段
-        );
+        throw new IllegalArgumentException("unknown chat message type: " + chatMessage.getClass().getSimpleName());
     }
 }

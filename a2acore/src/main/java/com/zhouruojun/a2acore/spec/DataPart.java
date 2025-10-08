@@ -8,8 +8,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * json数据
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#653-datapart-object">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#653-datapart-object">/a>
  * </p>
  *
  */

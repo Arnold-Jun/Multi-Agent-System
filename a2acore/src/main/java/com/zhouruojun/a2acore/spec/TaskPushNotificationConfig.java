@@ -7,8 +7,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 任务推送的消息通知配置
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#610-taskpushnotificationconfig-object">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#610-taskpushnotificationconfig-object"></a>
  * </p>
  *
  */

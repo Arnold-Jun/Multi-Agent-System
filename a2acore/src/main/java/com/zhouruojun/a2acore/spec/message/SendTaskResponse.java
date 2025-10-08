@@ -9,7 +9,7 @@ import lombok.ToString;
 /**
  * <p>
  *     tasks/send
- *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#71-taskssend">µã»÷Ìø×ª</a>
+ *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#71-taskssend"></a>
  * </p>
  *
  */

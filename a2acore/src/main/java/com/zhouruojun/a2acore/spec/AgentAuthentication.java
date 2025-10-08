@@ -8,7 +8,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * ÖÇÄÜÌå¼ø??* <a href="https://github.com/google/A2A/blob/main/docs/specification/agent-card.md">µã»÷Ìø×ª</a>
+ * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½??* <a href="https://github.com/google/A2A/blob/main/docs/specification/agent-card.md">ï¿½ï¿½ï¿½ï¿½ï¿½×ª</a>
  * </p>
  *
  */

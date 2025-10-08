@@ -12,16 +12,23 @@
         </processorPath>
         <module name="a2acore" />
       </profile>
-      <profile name="Annotation profile for data-analysis-agent" enabled="true">
+      <profile name="Annotation profile for job-search-agent" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <processorPath useClasspath="false">
           <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.38/lombok-1.18.38.jar" />
         </processorPath>
+        <module name="a2a" />
+        <module name="job-search-agent" />
         <module name="data-analysis-agent" />
         <module name="agent-core" />
-        <module name="a2a" />
+      </profile>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="boss-mock-api" />
       </profile>
     </annotationProcessing>
   </component>
@@ -30,7 +37,9 @@
       <module name="a2a" options="-parameters -Xlint:all" />
       <module name="a2acore" options="-parameters" />
       <module name="agent-core" options="-parameters -Xlint:all" />
+      <module name="boss-mock-api" options="-parameters" />
       <module name="data-analysis-agent" options="-parameters -Xlint:all" />
+      <module name="job-search-agent" options="-parameters -Xlint:all" />
     </option>
   </component>
 </project>

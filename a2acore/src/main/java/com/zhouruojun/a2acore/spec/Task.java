@@ -11,8 +11,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 任务实体
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#61-task-object">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#61-task-object"></a>
  * </p>
  *
  */

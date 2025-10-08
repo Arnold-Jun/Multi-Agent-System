@@ -1,5 +1,6 @@
 package com.zhouruojun.a2a.client.autoconfiguration;
 
+import com.zhouruojun.a2a.notification.mvc.autoconfiguration.A2aNotificationProperties;
 import com.zhouruojun.a2acore.client.A2AClient;
 import com.zhouruojun.a2acore.client.AgentCardResolver;
 import com.zhouruojun.a2acore.client.sse.SseEventHandler;
@@ -21,7 +22,7 @@ import java.util.stream.Collectors;
 
 
 @Slf4j
-@EnableConfigurationProperties(A2aAgentsProperties.class)
+@EnableConfigurationProperties({A2aAgentsProperties.class, A2aNotificationProperties.class})
 @Configuration(proxyBeanMethods = false)
 public class A2aHostAutoConfiguration {
 

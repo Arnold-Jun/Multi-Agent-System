@@ -1,9 +1,9 @@
 package com.zhouruojun.agentcore.agent.actions;
 
 import com.alibaba.fastjson.JSONObject;
+import com.zhouruojun.a2acore.spec.message.util.Uuid;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
 import com.zhouruojun.agentcore.a2a.A2aClientManager;
-import com.zhouruojun.agentcore.a2a.A2AInvocationResult;
 import com.zhouruojun.agentcore.a2a.A2aTaskManager;
 import com.zhouruojun.a2acore.spec.*;
 import dev.langchain4j.data.message.AiMessage;
@@ -64,6 +64,9 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
         Optional<String> username = state.username();
         Optional<String> sessionId = state.sessionId();
 
+        log.info("AgentInvoke state data: {}", JSONObject.toJSONString(data));
+        log.info("nextAgent: {}, username: {}, sessionId: {}", nextAgent, username, sessionId);
+
         if (nextAgent.isEmpty()) {
             log.error("nextAgent is null, data:{}", JSONObject.toJSONString(data));
             return Map.of("next", "userInput", "agent_response", "nextAgent值为空");
@@ -108,47 +111,26 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
             log.warn("Failed to get registration status: {}", e.getMessage());
         }
         
-        // 使用A2A客户端管理器进行调用
-        A2AInvocationResult invocationResult = invokeAgentWithA2A(agentName, taskInstruction, sessionId.get());
-
-        if (!invocationResult.isSuccess()) {
-            String errorMessage = invocationResult.getError() != null ? invocationResult.getError() : "智能体服务不可用";
-            log.error("Agent {} invocation failed: {}", agentName, errorMessage);
-            return Map.of(
-                "next", "userInput",
-                "agent_response", "调用智能体失败: " + errorMessage,
-                "username", username.get()
-            );
-        }
-
-        String filteredResponse = invocationResult.getResponse();
+        // 使用A2A协议发送任务订阅（异步，不等待响应）
+        String taskId = invokeAgentWithA2AAsync(agentName, taskInstruction, sessionId.get(), username.get());
+        
+        // 返回agentInvokeStateCheck，流程会在此之前interrupt等待
         Map<String, Object> result = Map.of(
-                "next", "supervisor",
-                "nextAgent", "",
+                "next", "agentInvokeStateCheck",
+                "nextAgent", agentName,  // 保持nextAgent为agentName，不要清空
                 "currentAgent", agentName,
-                "agent_response", filteredResponse,
-                "processingStage", "final_reasoning"
+                "taskId", taskId
         );
 
-        log.info("AgentInvoke returning result: {}", result);
+        log.info("AgentInvoke sent task to {} with taskId: {}, will interrupt before agentInvokeStateCheck", agentName, taskId);
         return result;
     }
 
     /**
-     * 使用A2A协议调用智能体
+     * 使用A2A协议异步调用智能体（不等待响应，使用interrupt机制）
      */
-    private A2AInvocationResult invokeAgentWithA2A(String agentName, String taskInstruction, String sessionId) {
+    private String invokeAgentWithA2AAsync(String agentName, String taskInstruction, String sessionId, String userEmail) {
         try {
-            // 首先验证Agent是否可用
-            log.info("Checking if agent {} is available...", agentName);
-            boolean isHealthy = a2aClientManager.checkAgentHealth(agentName);
-            if (!isHealthy) {
-                log.warn("Agent {} is not healthy, attempting to register...", agentName);
-            }
-            
-            // 使用A2A客户端管理器进行实际的A2A调用
-            // A2AClient a2aClient = a2aClientManager.getA2aClient(agentName);
-            
             // 构建A2A消息
             TextPart textPart = new TextPart();
             textPart.setText(taskInstruction);
@@ -157,37 +139,63 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
                 .role(Role.USER)
                 .parts(Arrays.asList(textPart))
                 .metadata(Map.of(
-                    "method", "data_analysis",
+                    "method", "chat",
                     "sessionId", sessionId,
-                    "userEmail", "agent-core@system.com"
+                    "userEmail", userEmail
                 ))
                 .build();
+            
+            // 生成任务ID
+            String taskId = Uuid.uuid4hex();
+            
+            // 获取Agent Card以确定支持的输出模式
+            AgentCard agentCard = a2aClientManager.getA2aClient(agentName).getAgentCard();
+            List<String> acceptedOutputModes = getAgentAcceptedOutputModes(agentCard);
+            
+            // 获取push notification配置
+            PushNotificationConfig pushNotificationConfig = a2aClientManager.getA2aClient(agentName).getPushNotificationConfig();
+            log.info("Push notification config for {}: {}", agentName, 
+                pushNotificationConfig != null ? pushNotificationConfig.getUrl() : "null");
             
             // 构建任务参数
             TaskSendParams taskSendParams = TaskSendParams.builder()
-                .id("task-" + System.currentTimeMillis())
+                .id(taskId)
                 .sessionId(sessionId)
                 .message(message)
-                .acceptedOutputModes(Arrays.asList("text", "data"))
+                .acceptedOutputModes(acceptedOutputModes)
+                .pushNotification(pushNotificationConfig)
                 .metadata(Map.of(
-                    "method", "data_analysis",
-                    "userEmail", "agent-core@system.com",
-                    "userTools", "[]"
+                    "method", "chat",
+                    "userEmail", userEmail,
+                    "userTools", JSONObject.toJSONString(jsonTools)
                 ))
+                .historyLength(1)
                 .build();
             
-            // 发送流式任务订阅并等待响应
-            String response = a2aClientManager.sendTaskSubscribeAndWait(agentName, taskSendParams, sessionId);
+            // 异步发送流式任务订阅（不等待响应）
+            a2aClientManager.sendTaskSubscribe(agentName, taskSendParams);
             
             // 保存任务参数用于后续处理
             A2aTaskManager.getInstance().saveTaskParams(taskSendParams);
             
-            return A2AInvocationResult.success(response, taskSendParams.getId(), sessionId);
+            log.info("Sent A2A task subscription to {} with taskId: {}", agentName, taskId);
+            
+            return taskId;
             
         } catch (Exception e) {
-            log.error("A2A调用失败", e);
-            return A2AInvocationResult.failure("A2A调用异常: " + e.getMessage());
+            log.error("A2A异步调用失败", e);
+            throw new RuntimeException("A2A调用异常: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * 获取Agent支持的输出模式
+     */
+    private List<String> getAgentAcceptedOutputModes(AgentCard agentCard) {
+        List<String> systemSupportModes = a2aClientManager.getSystemSupportModes();
+        return agentCard.getDefaultOutputModes().stream()
+                .filter(systemSupportModes::contains)
+                .collect(Collectors.toList());
     }
 
     private String getTaskInstruction(AgentMessageState state) {

@@ -9,7 +9,6 @@ import lombok.ToString;
 
 /**
  * <p>
- * 任务状态变更事件，用于tasks/sendSubscribe场景
  * </p>
  *
  */

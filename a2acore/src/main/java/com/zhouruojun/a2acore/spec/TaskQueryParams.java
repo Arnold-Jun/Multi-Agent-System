@@ -9,8 +9,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 任务查询请求入参，用于tasks/get场景
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#731-taskqueryparams-object">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#731-taskqueryparams-object"></a>
  * </p>
  */
 @ToString

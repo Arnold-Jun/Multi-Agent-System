@@ -39,8 +39,8 @@ import reactor.core.publisher.Mono;
 
 /**
  * <p>
- * 基于内存的任务管理器
- * 该任务管理器用于快速验证使用，线上使用，请切换成redis或者db等分布式的管理器
+ * 锟斤拷锟斤拷锟节达拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
+ * 锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷诳锟斤拷锟斤拷锟街な癸拷茫锟斤拷锟斤拷锟绞癸拷茫锟斤拷锟斤拷谢锟斤拷锟絩edis锟斤拷锟斤拷db锟饺分诧拷式锟侥癸拷锟斤拷锟斤拷
  * </p>
  *
  */
@@ -286,7 +286,7 @@ public abstract class InMemoryTaskManager implements TaskManager {
     }
 
     /**
-     * 获取task快照，并返回最多historyLength条历史消??     *
+     * 锟斤拷取task锟斤拷锟秸ｏ拷锟斤拷锟斤拷锟斤拷锟斤拷锟絟istoryLength锟斤拷锟斤拷史锟斤拷??     *
      * @param task          the task to copy
      * @param historyLength return history length
      * @return Task snapshot

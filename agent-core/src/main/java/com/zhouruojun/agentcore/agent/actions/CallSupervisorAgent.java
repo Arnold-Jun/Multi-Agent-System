@@ -112,11 +112,15 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
             String targetAgent = determineTargetAgent(filteredResponse);
             String taskInstruction = extractTaskInstructionFromResponse(filteredResponse);
             
+            log.info("CallSupervisorAgent determined targetAgent: {}, taskInstruction: {}", targetAgent, taskInstruction);
+
+            String userFriendlyMessage = generateAgentInvokeMessage(targetAgent, taskInstruction);
+            
             return Map.of(
                     "next", "agentInvoke",
                     "nextAgent", targetAgent,
                     "taskInstruction", taskInstruction,
-                    "agent_response", filteredResponse,
+                    "agent_response", userFriendlyMessage,  // 使用用户友好的消息
                     "username", username
             );
         }
@@ -129,16 +133,32 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
     }
 
     /**
+     * 生成用户友好的提示消息
+     */
+    private String generateAgentInvokeMessage(String targetAgent, String taskInstruction) {
+        String agentDisplayName = switch (targetAgent) {
+            case "job-search-agent" -> "求职智能体";
+            case "data-analysis-agent" -> "数据分析智能体";
+            default -> "专业智能体";
+        };
+        
+        return String.format("正在为您调用%s处理您的请求，请稍候...", agentDisplayName);
+    }
+    
+    /**
      * 智能判断应该调用哪个智能体
      */
     private String determineTargetAgent(String responseText) {
         String lowerText = responseText.toLowerCase();
+        
+        log.info("CallSupervisorAgent determining target agent from response: {}", responseText);
         
         // 根据关键词判断智能体类型
         if (lowerText.contains("job-search-agent") || lowerText.contains("求职") || 
             lowerText.contains("岗位") || lowerText.contains("简历") || 
             lowerText.contains("面试") || lowerText.contains("投递") ||
             lowerText.contains("工作") || lowerText.contains("招聘")) {
+            log.info("Detected job search keywords, returning job-search-agent");
             return AgentConstants.JOB_SEARCH_AGENT_NAME;
         }
         

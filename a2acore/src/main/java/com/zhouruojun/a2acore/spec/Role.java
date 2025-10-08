@@ -5,13 +5,6 @@ import java.io.Serializable;
 import lombok.Getter;
 import lombok.ToString;
 
-/**
- * <p>
- * 权限规则枚举
- * 仅有 user、agent
- * </p>
- *
- */
 @ToString
 @Getter
 public enum Role implements Serializable {

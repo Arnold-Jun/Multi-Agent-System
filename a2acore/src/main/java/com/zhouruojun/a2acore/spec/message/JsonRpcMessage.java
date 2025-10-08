@@ -6,7 +6,7 @@ import lombok.ToString;
 
 /**
  * <p>
- *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#7-protocol-rpc-methods">µã»÷Ìø×ª</a>
+ *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#7-protocol-rpc-methods"></a>
  * </p>
  *
  */

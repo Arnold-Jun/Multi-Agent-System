@@ -1,0 +1,84 @@
+{
+  "name": "job-search-agent",
+  "version": "1.0.0",
+  "description": "求职智能体，专门处理简历分析、岗位搜索、匹配度评估和职业建议等求职相关任务",
+  "url": "http://localhost:8083",
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "stateTransitionHistory": true
+  },
+  "defaultInputModes": ["text", "file"],
+  "defaultOutputModes": ["text", "data", "report"],
+  "skills": [
+    {
+      "id": "resumeAnalysis",
+      "name": "resumeAnalysis",
+      "description": "简历解析和信息提取",
+      "inputModes": ["text", "file"],
+      "outputModes": ["text", "data"],
+      "tags": ["resume", "analysis", "parsing"],
+      "examples": [
+        "解析简历文件，提取个人信息",
+        "分析工作经历和技能",
+        "评估简历质量和完整性",
+        "生成简历分析报告"
+      ]
+    },
+    {
+      "id": "jobSearch",
+      "name": "jobSearch",
+      "description": "岗位搜索和筛选",
+      "inputModes": ["text", "data"],
+      "outputModes": ["text", "data"],
+      "tags": ["job", "search", "recruitment"],
+      "examples": [
+        "搜索匹配的招聘岗位",
+        "按薪资和地点筛选岗位",
+        "获取岗位详细信息",
+        "分析岗位要求和职责"
+      ]
+    },
+    {
+      "id": "matchingAnalysis",
+      "name": "matchingAnalysis",
+      "description": "简历与岗位匹配度分析",
+      "inputModes": ["text", "data"],
+      "outputModes": ["text", "data"],
+      "tags": ["matching", "analysis", "evaluation"],
+      "examples": [
+        "计算简历与岗位的匹配度",
+        "分析技能匹配情况",
+        "评估经验匹配度",
+        "生成匹配度报告"
+      ]
+    },
+    {
+      "id": "careerAdvice",
+      "name": "careerAdvice",
+      "description": "职业建议和求职指导",
+      "inputModes": ["text", "data"],
+      "outputModes": ["text", "report"],
+      "tags": ["career", "advice", "guidance"],
+      "examples": [
+        "提供职业发展建议",
+        "制定求职策略",
+        "建议技能提升方向",
+        "准备面试技巧"
+      ]
+    },
+    {
+      "id": "chat",
+      "name": "chat",
+      "description": "与用户进行自然语言对话，回答求职相关问题",
+      "inputModes": ["text"],
+      "outputModes": ["text"],
+      "tags": ["chat", "conversation", "nlp"],
+      "examples": [
+        "解释求职分析结果",
+        "回答职业发展问题",
+        "提供求职建议"
+      ]
+    }
+  ]
+}

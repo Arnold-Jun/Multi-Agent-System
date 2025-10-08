@@ -1,6 +1,6 @@
 package com.zhouruojun.dataanalysisagent.agent.actions;
 
-import com.zhouruojun.dataanalysisagent.agent.state.AgentMessageState;
+import com.zhouruojun.dataanalysisagent.agent.state.MainGraphState;
 import dev.langchain4j.data.message.UserMessage;
 import org.junit.jupiter.api.Test;
 
@@ -14,43 +14,43 @@ public class CallAgentTest {
 
     @Test
     public void testCallAgentWithValidState() {
-        // ´´½¨²âÊÔÏûÏ¢
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
         UserMessage userMsg = UserMessage.from("Hello, world!");
         
-        // ´´½¨×´Ì¬Êý??
+        // ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½??
         Map<String, Object> stateData = new HashMap<>();
         stateData.put("messages", List.of(userMsg));
         stateData.put("sessionId", "test-session");
         
-        // ´´½¨×´??
-        AgentMessageState state = new AgentMessageState(stateData);
+        // ï¿½ï¿½ï¿½ï¿½×´??
+        MainGraphState state = new MainGraphState(stateData);
         
-        // ²âÊÔ×´Ì¬ÊÇ·ñÕýÈ·³õÊ¼»¯
+        // ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½Ç·ï¿½ï¿½ï¿½È·ï¿½ï¿½Ê¼ï¿½ï¿½
         assertNotNull(state);
         assertFalse(state.messages().isEmpty());
         assertEquals(1, state.messages().size());
         assertEquals("Hello, world!", state.messages().get(0).text());
         
-        // ²âÊÔ×´Ì¬µÄÆäËû×Ö¶Î
+        // ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¶ï¿½
         assertTrue(state.value("sessionId").isPresent());
         assertEquals("test-session", state.value("sessionId").get());
     }
     
     @Test
     public void testCallAgentWithEmptyState() {
-        // ´´½¨¿Õ×´Ì¬£¬µ«°üº¬messages×Ö¶Î
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½messagesï¿½Ö¶ï¿½
         Map<String, Object> stateData = new HashMap<>();
         stateData.put("messages", List.of());
         stateData.put("sessionId", "test-session");
         
-        // ´´½¨×´??
-        AgentMessageState state = new AgentMessageState(stateData);
+        // ï¿½ï¿½ï¿½ï¿½×´??
+        MainGraphState state = new MainGraphState(stateData);
         
-        // ²âÊÔ×´Ì¬ÊÇ·ñÕýÈ·³õÊ¼»¯
+        // ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½Ç·ï¿½ï¿½ï¿½È·ï¿½ï¿½Ê¼ï¿½ï¿½
         assertNotNull(state);
         assertTrue(state.messages().isEmpty());
         
-        // ²âÊÔ×´Ì¬µÄÆäËû×Ö¶Î
+        // ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¶ï¿½
         assertTrue(state.value("sessionId").isPresent());
         assertEquals("test-session", state.value("sessionId").get());
     }

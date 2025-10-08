@@ -6,7 +6,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 文件数据的内 * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#66-filecontent-object">点击跳转</a>
+ *<a href="https://github.com/google/A2A/blob/main/docs/specification.md#66-filecontent-object"></a>
  * </p>
  *
  */

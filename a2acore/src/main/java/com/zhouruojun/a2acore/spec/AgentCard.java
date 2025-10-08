@@ -15,10 +15,10 @@ import lombok.ToString;
 @NoArgsConstructor
 public class AgentCard {
     /**
-     * ÖÇÄÜÌåÃû??    */
+     * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½??    */
     private String name;
     /**
-     * ÖÇÄÜÌåÃè??    */
+     * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½??    */
     @Nullable
     private String description;
     private String url;

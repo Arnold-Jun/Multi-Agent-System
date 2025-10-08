@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    @page { 
+      size: A4; 
+      margin: 18mm 16mm; 
+    }
+    
+    /* 中文/英文通用字体 */
+    @font-face {
+      font-family: 'NotoSansSC';
+      src: url('classpath:fonts/NotoSansSC-Regular.otf');
+    }
+    
+    html, body { 
+      font-family: 'NotoSansSC', 'Arial', sans-serif; 
+      font-size: 11pt; 
+      line-height: 1.4; 
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    
+    h1 { 
+      font-size: 20pt; 
+      margin: 0 0 6pt; 
+      color: #2c3e50;
+      font-weight: bold;
+    }
+    
+    h2 { 
+      font-size: 12pt; 
+      margin: 12pt 0 6pt; 
+      border-bottom: 1px solid #999; 
+      padding-bottom: 3pt; 
+      color: #34495e;
+      font-weight: bold;
+    }
+    
+    .header { 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: flex-end; 
+      margin-bottom: 20pt;
+    }
+    
+    .muted { 
+      color: #666; 
+      font-size: 10pt;
+    }
+    
+    .tag { 
+      display: inline-block; 
+      border: 1px solid #999; 
+      padding: 2pt 6pt; 
+      border-radius: 12px; 
+      margin-right: 6pt; 
+      margin-bottom: 4pt;
+      font-size: 9pt;
+      background-color: #f8f9fa;
+    }
+    
+    .bullet { 
+      margin-left: 14pt; 
+      margin-bottom: 2pt;
+    }
+    
+    .two-col { 
+      display: grid; 
+      grid-template-columns: 1fr 1fr; 
+      gap: 10pt; 
+    }
+    
+    .right { 
+      text-align: right; 
+    }
+    
+    .experience-item {
+      margin-bottom: 12pt;
+    }
+    
+    .experience-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 4pt;
+    }
+    
+    .company-role {
+      font-weight: bold;
+    }
+    
+    .experience-location {
+      color: #666;
+      font-size: 10pt;
+      margin-bottom: 4pt;
+    }
+    
+    .experience-bullets {
+      margin-left: 0;
+    }
+    
+    .education-item {
+      margin-bottom: 8pt;
+    }
+    
+    .education-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 2pt;
+    }
+    
+    .project-item {
+      margin-bottom: 10pt;
+    }
+    
+    .project-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 4pt;
+    }
+    
+    .certification-item {
+      margin-bottom: 6pt;
+    }
+    
+    .language-item {
+      margin-bottom: 4pt;
+    }
+    
+    .summary {
+      margin-bottom: 16pt;
+      line-height: 1.5;
+    }
+    
+    .skills-container {
+      margin-bottom: 16pt;
+    }
+    
+    .section {
+      margin-bottom: 16pt;
+    }
+    
+    /* 打印优化 */
+    @media print {
+      body {
+        font-size: 10pt;
+      }
+      
+      .tag {
+        border: 1px solid #ccc;
+        background-color: #f5f5f5;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 个人信息头部 -->
+  <div class="header">
+    <div>
+      <h1 th:text="${name}">姓名</h1>
+      <div class="muted" th:text="${title}">职位/方向</div>
+    </div>
+    <div class="right muted">
+      <div th:text="${email}">email@example.com</div>
+      <div th:text="${phone}">+86 138 0000 0000</div>
+      <div th:text="${location}">Shanghai, CN</div>
+    </div>
+  </div>
+
+  <!-- 个人简介 -->
+  <div class="section" th:if="${summary != null and summary != ''}">
+    <h2>个人简介</h2>
+    <div class="summary" th:text="${summary}">
+      在此填写一段 2-3 行的简介……
+    </div>
+  </div>
+
+  <!-- 技能 -->
+  <div class="section" th:if="${skills != null and !skills.empty}">
+    <h2>技能</h2>
+    <div class="skills-container">
+      <span class="tag" th:each="s : ${skills}" th:text="${s}">Java</span>
+    </div>
+  </div>
+
+  <!-- 工作经历 -->
+  <div class="section" th:if="${experiences != null and !experiences.empty}">
+    <h2>工作经历</h2>
+    <div th:each="exp : ${experiences}" class="experience-item">
+      <div class="experience-header">
+        <div class="company-role">
+          <span th:text="${exp.company}">公司A</span> · 
+          <span th:text="${exp.role}">后端工程师</span>
+        </div>
+        <div class="muted" th:text="${exp.range}">2022-2025</div>
+      </div>
+      <div class="experience-location" th:if="${exp.location != null and exp.location != ''}" th:text="${exp.location}">Shanghai</div>
+      <ul class="experience-bullets" th:if="${exp.bullets != null and !exp.bullets.empty}">
+        <li class="bullet" th:each="b : ${exp.bullets}" th:text="${b}">
+          • 关键业绩……
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 项目经验 -->
+  <div class="section" th:if="${projects != null and !projects.empty}">
+    <h2>项目经验</h2>
+    <div th:each="project : ${projects}" class="project-item">
+      <div class="project-header">
+        <div class="company-role" th:text="${project.name}">项目名称</div>
+        <div class="muted" th:text="${project.range}">2022-2023</div>
+      </div>
+      <div class="muted" th:if="${project.role != null and project.role != ''}" th:text="${project.role}">项目角色</div>
+      <div th:if="${project.description != null and project.description != ''}" th:text="${project.description}">项目描述</div>
+      <div th:if="${project.technologies != null and !project.technologies.empty}" class="skills-container">
+        <span class="tag" th:each="tech : ${project.technologies}" th:text="${tech}">技术</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 教育经历 -->
+  <div class="section" th:if="${education != null and !education.empty}">
+    <h2>教育经历</h2>
+    <div th:each="edu : ${education}" class="education-item">
+      <div class="education-header">
+        <div class="company-role">
+          <span th:text="${edu.school}">某大学</span> · 
+          <span th:text="${edu.degree}">硕士</span>
+          <span th:if="${edu.major != null and edu.major != ''}"> · <span th:text="${edu.major}">专业</span></span>
+        </div>
+        <div class="muted" th:text="${edu.range}">2018-2021</div>
+      </div>
+      <div class="muted" th:if="${edu.location != null and edu.location != ''}" th:text="${edu.location}">地点</div>
+    </div>
+  </div>
+
+  <!-- 认证证书 -->
+  <div class="section" th:if="${certifications != null and !certifications.empty}">
+    <h2>认证证书</h2>
+    <div th:each="cert : ${certifications}" class="certification-item">
+      <div class="company-role" th:text="${cert.name}">认证名称</div>
+      <div class="muted" th:text="${cert.issuer}">颁发机构</div>
+      <div class="muted" th:text="${cert.date}">获得日期</div>
+    </div>
+  </div>
+
+  <!-- 语言能力 -->
+  <div class="section" th:if="${languages != null and !languages.empty}">
+    <h2>语言能力</h2>
+    <div th:each="lang : ${languages}" class="language-item">
+      <span th:text="${lang.language}">语言</span> - 
+      <span th:text="${lang.proficiency}">熟练程度</span>
+      <span th:if="${lang.score != null and lang.score != ''}"> (<span th:text="${lang.score}">分数</span>)</span>
+    </div>
+  </div>
+
+  <!-- 附加信息 -->
+  <div class="section" th:if="${additionalInfo != null and additionalInfo != ''}">
+    <h2>附加信息</h2>
+    <div th:text="${additionalInfo}">附加信息内容</div>
+  </div>
+</body>
+</html>

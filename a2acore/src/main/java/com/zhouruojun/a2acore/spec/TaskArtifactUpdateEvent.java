@@ -8,8 +8,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 任务制品状态变更事件，用于tasks/sendSubscribe场景
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#723-taskartifactupdateevent-object">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#723-taskartifactupdateevent-object"></a>
  * </p>
  *
  */
