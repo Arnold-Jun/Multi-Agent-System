@@ -8,7 +8,7 @@ import lombok.ToString;
 /**
  * <p>
  *     tasks/cancel
- *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#74-taskscancel">µã»÷Ìø×ª</a>
+ *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#74-taskscancel"></a>
  * </p>
  */
 @ToString(callSuper = true)

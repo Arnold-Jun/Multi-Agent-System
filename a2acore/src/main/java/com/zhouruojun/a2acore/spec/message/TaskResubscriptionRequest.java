@@ -8,7 +8,7 @@ import lombok.ToString;
 /**
  * <p>
  *    tasks/resubscribe
- *    <a href="https://github.com/google/A2A/blob/main/docs/specification.md#77-tasksresubscribe">µã»÷Ìø×ª</a>
+ *    <a href="https://github.com/google/A2A/blob/main/docs/specification.md#77-tasksresubscribe"></a>
  * </p>
  *
  */

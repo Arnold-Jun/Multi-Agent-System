@@ -82,9 +82,9 @@ public class ComprehensiveAnalysisSubgraphBuilder extends BaseAgentGraphBuilder<
         
         // 构建简化的状态图 - 直接输出结果
         return new StateGraph<>(MessagesState.SCHEMA, stateSerializer)
+                .addEdge(START, getAgentName())
                 .addNode(getAgentName(), node_async(callAgent))
                 .addNode(getActionName(), node_async(executeTools))
-                .addEdge(START, getAgentName())
                 .addConditionalEdges(getAgentName(),
                         edge_async(agentShouldContinue),
                         java.util.Map.of("action", getActionName(), "FINISH", END))

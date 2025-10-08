@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static dev.langchain4j.agent.tool.ToolSpecifications.toolSpecificationsFrom;
+// import static dev.langchain4j.agent.tool.ToolSpecifications.toolSpecificationsFrom; // 未使用
 
 /**
  * Agent Core配置类

@@ -10,7 +10,7 @@ import lombok.ToString;
 /**
  * <p>
  * AuthenticationInfo
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#69-authenticationinfo-object">µã»÷Ìø×ª</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#69-authenticationinfo-object"></a>
  * </p>
  *
  */

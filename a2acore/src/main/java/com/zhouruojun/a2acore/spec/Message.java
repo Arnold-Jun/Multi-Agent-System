@@ -11,7 +11,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 消息 * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#64-message-object">点击跳转</a>
+* <a href="https://github.com/google/A2A/blob/main/docs/specification.md#64-message-object"></a>
  * </p>
  *
  */

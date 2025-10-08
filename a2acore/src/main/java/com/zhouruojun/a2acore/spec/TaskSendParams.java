@@ -8,13 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
-/**
- * <p>
- * 任务发送请求，用于tasks/send场景
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#711-tasksendparams-object">点击跳转</a>
- * </p>
- *
- */
+
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor

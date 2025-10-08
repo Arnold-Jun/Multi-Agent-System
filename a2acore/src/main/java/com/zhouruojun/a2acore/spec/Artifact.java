@@ -12,8 +12,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 任务产物
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#67-artifact-object">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#67-artifact-object"></a>
  * </p>
  *
  */

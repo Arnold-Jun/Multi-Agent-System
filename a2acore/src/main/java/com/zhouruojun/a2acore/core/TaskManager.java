@@ -19,8 +19,7 @@ import reactor.core.publisher.Mono;
 
 /**
  * <p>
- * 任务管理?? * 依靠 <a href="https://github.com/google/A2A/blob/main/docs/specification.md#7-protocol-rpc-methods">点击跳转</a>
- * 定义对应接口
+<a href="https://github.com/google/A2A/blob/main/docs/specification.md#7-protocol-rpc-methods"></a>
  * </p>
  *
  */

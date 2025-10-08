@@ -8,8 +8,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 任务Id与元数据，用于tasks/cancel场景
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#74-taskscancel">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#74-taskscancel"></a>
  * </p>
  *
  */

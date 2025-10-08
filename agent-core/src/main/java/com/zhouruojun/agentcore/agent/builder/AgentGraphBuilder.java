@@ -193,6 +193,7 @@ public class AgentGraphBuilder {
                 .addConditionalEdges("agentInvoke",
                         edge_async(state -> state.next().orElse("supervisor")),
                         Map.of(
+                                "agentInvokeStateCheck", "agentInvokeStateCheck",  // ✅ 添加缺失的映射
                                 "supervisor", "supervisor",
                                 "userInput", "userInput"
                         ))
@@ -203,6 +204,7 @@ public class AgentGraphBuilder {
                         Map.of(
                                 "continue", "agentInvokeStateCheck",
                                 "subscribe", "agentInvoke",
+                                "agentInvoke", "agentInvoke",  // 添加缺失的映射
                                 "FINISH", "supervisor"
                         ))
                 

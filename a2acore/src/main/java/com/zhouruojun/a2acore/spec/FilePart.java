@@ -8,8 +8,7 @@ import lombok.ToString;
 
 /**
  * <p>
- * 文件数据
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#652-filepart-object">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#652-filepart-object"></a>
  * </p>
  *
  */

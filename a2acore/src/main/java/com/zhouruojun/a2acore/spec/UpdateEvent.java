@@ -10,7 +10,6 @@ import lombok.ToString;
 
 /**
  * <p>
- * 更新事件基类
  * </p>
  */
 @JsonTypeInfo(

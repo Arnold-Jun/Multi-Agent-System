@@ -31,18 +31,23 @@ logging:
 a2a:
   host:
     notification:
-      endpoint: "http://localhost:8081/a2a/notifications"
+      url: "http://localhost:8081/a2a/notifications"
     agents:
       data-analysis-agent:
         baseUrl: "http://localhost:8082"
         agentCardPath: "/.well-known/agent.json"
         notification:
-          endpoint: "http://localhost:8082/a2a/notifications"
+          url: "http://localhost:8082/a2a/notifications"
       job-search-agent:
         baseUrl: "http://localhost:8083"
         agentCardPath: "/.well-known/agent.json"
         notification:
-          endpoint: "http://localhost:8083/a2a/notifications"
+          url: "http://localhost:8083/a2a/notifications"
+  # A2A通知配置
+  notification:
+    endpoint: "http://localhost:8081/a2a/notifications"
+    jwksUrls:
+      - "http://localhost:8081/.well-known/jwks.json"
 
 # 管理端点配置
 management:

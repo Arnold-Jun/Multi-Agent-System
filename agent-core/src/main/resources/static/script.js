@@ -2,6 +2,8 @@
 let currentSessionId = null;
 let messageCount = 0;
 let isLoading = false;
+let sseConnection = null;
+let fallbackPolling = false;
 
 // DOM元素
 const chatMessages = document.getElementById('chatMessages');
@@ -26,6 +28,90 @@ function initializeSession() {
     currentSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     sessionIdDisplay.textContent = `会话ID: ${currentSessionId}`;
     console.log('Session initialized:', currentSessionId);
+    
+    // 建立SSE连接
+    establishSSEConnection();
+}
+
+// 建立SSE连接
+function establishSSEConnection() {
+    if (sseConnection) {
+        sseConnection.close();
+    }
+    
+    sseConnection = new EventSource(`/api/agent/sse/${currentSessionId}`);
+    
+    sseConnection.onopen = function(event) {
+        console.log('SSE connection established');
+    };
+    
+    sseConnection.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            handleSSEMessage(data);
+        } catch (e) {
+            console.error('Error parsing SSE message:', e);
+        }
+    };
+    
+    sseConnection.addEventListener('async_result', function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            handleAsyncResult(data);
+        } catch (e) {
+            console.error('Error parsing async result:', e);
+        }
+    });
+    
+    sseConnection.addEventListener('heartbeat', function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('Received heartbeat:', data.message);
+        } catch (e) {
+            console.error('Error parsing heartbeat:', e);
+        }
+    });
+    
+    sseConnection.onerror = function(event) {
+        console.error('SSE connection error:', event);
+        showPollingLoading(false);
+        
+        // 尝试重连
+        setTimeout(() => {
+            if (sseConnection.readyState === EventSource.CLOSED) {
+                console.log('Attempting to reconnect SSE...');
+                establishSSEConnection();
+            }
+        }, 3000);
+    };
+}
+
+// 处理SSE消息
+function handleSSEMessage(data) {
+    console.log('Received SSE message:', data);
+    
+    switch (data.type) {
+        case 'connection':
+            console.log('SSE connection confirmed:', data.message);
+            break;
+        case 'async_result':
+            handleAsyncResult(data);
+            break;
+        default:
+            console.log('Unknown SSE message type:', data.type);
+    }
+}
+
+// 处理异步结果
+function handleAsyncResult(data) {
+    showPollingLoading(false);
+    
+    if (data.message) {
+        // 替换等待消息为最终结果
+        replaceLastBotMessage(data.message);
+    } else {
+        addMessage('任务已完成，但未返回结果', 'bot', 'error');
+    }
 }
 
 // 设置事件监听器
@@ -107,6 +193,16 @@ async function sendMessage() {
         
         if (data.success) {
             addMessage(data.response, 'bot');
+            
+            // 如果返回的是等待消息，显示轮询加载状态
+            if (data.response.includes('正在为您调用') || data.response.includes('请稍候')) {
+                showPollingLoading(true);
+                
+                // 如果SSE连接失败，启动备用轮询机制
+                if (sseConnection && sseConnection.readyState === EventSource.CLOSED) {
+                    startFallbackPolling();
+                }
+            }
         } else {
             addMessage(`❌ 错误: ${data.error}`, 'bot', 'error');
         }
@@ -116,6 +212,66 @@ async function sendMessage() {
         addMessage(`❌ 发送消息失败: ${error.message}`, 'bot', 'error');
     } finally {
         showLoading(false);
+    }
+}
+
+// 备用轮询机制（当SSE连接失败时使用）
+async function startFallbackPolling() {
+    if (fallbackPolling) return; // 避免重复启动
+    
+    fallbackPolling = true;
+    const maxAttempts = 60; // 最多轮询60次，每次2秒，总共2分钟
+    let attempts = 0;
+    
+    console.log('Starting fallback polling mechanism...');
+    
+    const pollInterval = setInterval(async () => {
+        attempts++;
+        
+        try {
+            const response = await fetch(`/api/agent/async-result/${currentSessionId}`);
+            const data = await response.json();
+            
+            if (data.completed) {
+                clearInterval(pollInterval);
+                showPollingLoading(false);
+                fallbackPolling = false;
+                
+                if (data.result) {
+                    // 替换等待消息为最终结果
+                    replaceLastBotMessage(data.result);
+                } else {
+                    addMessage('任务已完成，但未返回结果', 'bot', 'error');
+                }
+            } else if (attempts >= maxAttempts) {
+                clearInterval(pollInterval);
+                showPollingLoading(false);
+                fallbackPolling = false;
+                addMessage('⏰ 任务处理超时，请重试', 'bot', 'error');
+            }
+            
+        } catch (error) {
+            console.error('Error in fallback polling:', error);
+            if (attempts >= maxAttempts) {
+                clearInterval(pollInterval);
+                showPollingLoading(false);
+                fallbackPolling = false;
+                addMessage('❌ 获取结果失败，请重试', 'bot', 'error');
+            }
+        }
+    }, 2000); // 每2秒轮询一次
+}
+
+// 替换最后一条机器人消息
+function replaceLastBotMessage(newContent) {
+    const messages = chatMessages.querySelectorAll('.bot-message');
+    if (messages.length > 0) {
+        const lastMessage = messages[messages.length - 1];
+        const messageBubble = lastMessage.querySelector('.message-bubble');
+        if (messageBubble) {
+            const formattedContent = formatMessage(newContent);
+            messageBubble.innerHTML = formattedContent;
+        }
     }
 }
 
@@ -198,6 +354,14 @@ function showLoading(show) {
         sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     } else {
         sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
+    }
+}
+
+// 显示/隐藏轮询加载状态（不阻塞发送按钮）
+function showPollingLoading(show) {
+    loadingIndicator.style.display = show ? 'block' : 'none';
+    if (show) {
+        loadingIndicator.querySelector('p').textContent = '智能体正在处理中，请稍候...';
     }
 }
 
@@ -364,6 +528,11 @@ window.addEventListener('beforeunload', function(e) {
     if (messageCount > 0) {
         e.preventDefault();
         e.returnValue = '确定要离开吗？当前对话记录将会保存在服务器中。';
+    }
+    
+    // 关闭SSE连接
+    if (sseConnection) {
+        sseConnection.close();
     }
 });
 

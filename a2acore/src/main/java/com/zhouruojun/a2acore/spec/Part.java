@@ -11,14 +11,13 @@ import lombok.ToString;
 
 /**
  * <p>
- * 数据基类
- * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#65-part-union-type">点击跳转</a>
+ * <a href="https://github.com/google/A2A/blob/main/docs/specification.md#65-part-union-type"></a>
  * </p>
  */
 @JsonTypeInfo(
         use = JsonTypeInfo.Id.NAME,
         include = JsonTypeInfo.As.PROPERTY,
-        // 根据此类型反序列??
+        // 锟斤拷锟捷达拷锟斤拷锟酵凤拷锟斤拷锟斤拷??
         property = "_type"
 )
 @JsonSubTypes({

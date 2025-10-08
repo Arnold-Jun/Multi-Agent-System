@@ -6,8 +6,12 @@ import com.zhouruojun.agentcore.agent.ChatRequest;
 import com.zhouruojun.agentcore.agent.ChatResponse;
 import com.zhouruojun.agentcore.agent.core.AgentControllerCore;
 import com.zhouruojun.agentcore.service.OllamaTestService;
+import com.zhouruojun.agentcore.a2a.A2aSseEventHandler;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,6 +26,9 @@ public class AgentController {
 
     private final AgentControllerCore agentControllerCore;
     private final OllamaTestService ollamaTestService;
+    
+    @Autowired(required = false)
+    private A2aSseEventHandler a2aSseEventHandler;
 
     public AgentController(AgentControllerCore agentControllerCore, OllamaTestService ollamaTestService) {
         this.agentControllerCore = agentControllerCore;
@@ -177,6 +184,48 @@ public class AgentController {
             response.put("error", e.getMessage());
             return response;
         }
+    }
+    
+    @GetMapping("/async-result/{sessionId}")
+    public Map<String, Object> getAsyncResult(@PathVariable String sessionId) {
+        try {
+            boolean completed = agentControllerCore.isAsyncCompleted(sessionId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("completed", completed);
+            
+            if (completed) {
+                String result = agentControllerCore.getAsyncResult(sessionId);
+                response.put("result", result);
+                response.put("status", "success");
+            } else {
+                response.put("status", "pending");
+                response.put("message", "任务仍在处理中，请稍候...");
+            }
+            
+            return response;
+        } catch (Exception e) {
+            log.error("Get async result error", e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("error", e.getMessage());
+            return response;
+        }
+    }
+    
+    /**
+     * 建立SSE连接用于实时推送异步结果
+     */
+    @GetMapping(value = "/sse/{sessionId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter connectSSE(@PathVariable String sessionId) {
+        log.info("Establishing SSE connection for session: {}", sessionId);
+        
+        SseEmitter emitter = new SseEmitter(600_000L); // 10分钟超时，给足够时间处理任务
+        
+        if (a2aSseEventHandler != null) {
+            a2aSseEventHandler.registerFrontendConnection(sessionId, emitter);
+        }
+        
+        return emitter;
     }
 }
 

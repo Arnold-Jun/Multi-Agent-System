@@ -8,7 +8,7 @@ import lombok.ToString;
 /**
  * <p>
  *     tasks/pushNotification/get
- *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#76-taskspushnotificationget">µã»÷Ìø×ª</a>
+ *     <a href="https://github.com/google/A2A/blob/main/docs/specification.md#76-taskspushnotificationget"></a>
  * </p>
  *
  */
