@@ -1,9 +1,0 @@
-#配置swagger配置
-knife4j:
-  basic:
-    username: admin
-    password: admin
-    #开启认证
-    enable: false
-  #是否开启swagger
-  enable: true
