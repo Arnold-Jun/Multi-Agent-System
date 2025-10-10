@@ -21,7 +21,6 @@ import java.util.Map;
 /**
  * Agent调用状态检查节点
  * 检查智能体调用的状态并决定下一步操作
- * 实现codewiz的interrupt+resume机制
  */
 @Slf4j
 public class AgentInvokeStateCheck implements NodeAction<AgentMessageState> {
