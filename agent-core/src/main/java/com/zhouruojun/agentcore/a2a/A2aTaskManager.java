@@ -46,6 +46,9 @@ public class A2aTaskManager {
         List<String> taskIdList = taskWithSessionIdMap.getOrDefault(taskSendParams.getSessionId(), new LinkedList<>());
         taskIdList.add(taskSendParams.getId());
         taskWithSessionIdMap.put(taskSendParams.getSessionId(), taskIdList);
+        
+        log.info("Saved task params: taskId={}, sessionId={}, totalTasks={}", 
+                taskSendParams.getId(), taskSendParams.getSessionId(), taskIdList.size());
     }
 
     /**

@@ -1,7 +1,5 @@
 package com.zhouruojun.jobsearchagent.agent.state;
 
-
-import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 
@@ -23,19 +21,6 @@ public class SubgraphState extends BaseAgentState {
         return this.value("toolExecutionResult");
     }
 
-    /**
-     * 获取子图智能体的最终响应
-     */
-    public Optional<String> getFinalResponse() {
-        return this.value("finalResponse");
-    }
-
-    /**
-     * 获取子图执行状态
-     */
-    public Optional<String> getExecutionStatus() {
-        return this.value("executionStatus");
-    }
 
     /**
      * 获取当前任务
@@ -64,29 +49,5 @@ public class SubgraphState extends BaseAgentState {
     public Optional<String> getSubgraphTaskDescription() {
         return this.value("subgraphTaskDescription");
     }
-
-    // === 状态更新方法 ===
-
-    /**
-     * 更新工具执行结果 - 使用Builder模式
-     */
-    public SubgraphState withToolExecutionResult(String result) {
-        return withData("toolExecutionResult", result, SubgraphState.class);
-    }
-
-    /**
-     * 更新最终响应 - 使用Builder模式
-     */
-    public SubgraphState withFinalResponse(String finalResponse) {
-        return withData("finalResponse", finalResponse, SubgraphState.class);
-    }
-
-    /**
-     * 更新执行状态 - 使用Builder模式
-     */
-    public SubgraphState withExecutionStatus(String status) {
-        return withData("executionStatus", status, SubgraphState.class);
-    }
-
 
 }

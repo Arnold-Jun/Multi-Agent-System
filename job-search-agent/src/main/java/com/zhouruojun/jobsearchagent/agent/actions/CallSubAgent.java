@@ -87,22 +87,16 @@ public class CallSubAgent extends CallAgent<SubgraphState> {
      * 根据子图类型获取系统提示词
      */
     private String getSystemPromptForSubgraphType(String subgraphType) {
-        return PromptTemplateManager.instance.buildSubgraphSystemPrompt(subgraphType);
+        return PromptTemplateManager.getInstance().buildSubgraphSystemPrompt(subgraphType);
     }
 
     /**
      * 构建用户提示词
      */
     private String buildUserPromptForSubgraph(TodoTask currentTask, SubgraphState state) {
-        // currentTask.getDescription()已经是Scheduler提供的最新描述（如果有的话）
-        // 因为JobSearchGraphBuilder.createSubgraphNode中创建了effectiveTask
-        // 所以这里不需要再传递detailedTaskDescription
-        return PromptTemplateManager.instance.buildSubgraphUserPrompt(
+        return PromptTemplateManager.getInstance().buildSubgraphUserPrompt(
             currentTask.getDescription(),  // 已经是最新的任务描述
-            null,  // taskId不再需要
-            null,  // assignedAgent不再需要
             state.getSubgraphContext().orElse(null),  // Scheduler的上下文
-            null,  // 不再需要detailedTaskDescription，因为currentTask已经包含了
             state.getToolExecutionResult().orElse(null),
             state.getSubgraphType().orElse("unknown")
         );

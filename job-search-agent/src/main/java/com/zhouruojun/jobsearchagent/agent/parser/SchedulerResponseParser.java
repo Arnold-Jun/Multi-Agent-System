@@ -1,7 +1,7 @@
 package com.zhouruojun.jobsearchagent.agent.parser;
 
 import com.alibaba.fastjson.JSONObject;
-import com.zhouruojun.jobsearchagent.agent.dto.SchedulerResponse;
+import com.zhouruojun.jobsearchagent.agent.SchedulerResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

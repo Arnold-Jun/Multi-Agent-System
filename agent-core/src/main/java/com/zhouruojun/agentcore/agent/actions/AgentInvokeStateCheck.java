@@ -57,16 +57,10 @@ public class AgentInvokeStateCheck implements NodeAction<AgentMessageState> {
             if (state.method().isEmpty()) {
                 throw new IllegalArgumentException("method is empty");
             }
-            // 用户输入，直接透传给下游，下游自行决定根据当前入参进行续订或状态变更。
-            String currentAgent = state.currentAgent().orElse("");
-            if (currentAgent.isEmpty()) {
-                log.warn("currentAgent is empty, using nextAgent as fallback");
-                currentAgent = state.nextAgent().orElse("");
-            }
-            Map<String, Object> result = Map.of("next", "subscribe",
-                    "method", state.method().get(),
-                    "nextAgent", currentAgent,
-                    "messages", userMessage.singleText()
+            // 用户输入，直接回到supervisor让用户重新开始对话，避免重复调用
+            log.info("User input received during task execution: '{}', returning to supervisor", userMessage.singleText());
+            Map<String, Object> result = Map.of("next", "FINISH",
+                    "agent_response", "用户输入已接收，请重新开始对话"
             );
             log.info("AgentInvokeStateCheck returning (user input): {}", JSONObject.toJSONString(result));
             return result;
@@ -106,16 +100,10 @@ public class AgentInvokeStateCheck implements NodeAction<AgentMessageState> {
             }
             
         } else if (chatMessage instanceof ToolExecutionResultMessage toolExecutionResultMessage) {
-            // 本地IDE工具调用请求执行
-            String currentAgent = state.currentAgent().orElse("");
-            if (currentAgent.isEmpty()) {
-                log.warn("currentAgent is empty, using nextAgent as fallback");
-                currentAgent = state.nextAgent().orElse("");
-            }
-            Map<String, Object> result = Map.of("next", "subscribe",
-                    "method", state.method().get(),
-                    "nextAgent", currentAgent,
-                    "messages", toolExecutionResultMessage
+            // 本地IDE工具调用请求执行，直接完成当前任务
+            log.info("Tool execution result received: '{}', completing task", toolExecutionResultMessage.text());
+            Map<String, Object> result = Map.of("next", "FINISH",
+                    "agent_response", "工具执行完成"
             );
             log.info("AgentInvokeStateCheck returning (tool execution): {}", JSONObject.toJSONString(result));
             return result;

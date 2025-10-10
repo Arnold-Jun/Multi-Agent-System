@@ -12,6 +12,12 @@
         </processorPath>
         <module name="a2acore" />
       </profile>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="boss-mock-api" />
+      </profile>
       <profile name="Annotation profile for job-search-agent" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
@@ -23,12 +29,6 @@
         <module name="job-search-agent" />
         <module name="data-analysis-agent" />
         <module name="agent-core" />
-      </profile>
-      <profile name="Maven default annotation processors profile" enabled="true">
-        <sourceOutputDir name="target/generated-sources/annotations" />
-        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
-        <outputRelativeToContentRoot value="true" />
-        <module name="boss-mock-api" />
       </profile>
     </annotationProcessing>
   </component>

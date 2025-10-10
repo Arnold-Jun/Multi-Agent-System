@@ -48,6 +48,36 @@ public class MainGraphState extends BaseAgentState {
         return state;
     }
 
+    /**
+     * 获取重规划次数
+     */
+    public int getReplanCount() {
+        return (Integer) state.getOrDefault("replanCount", 0);
+    }
+
+    /**
+     * 设置重规划次数
+     */
+    public void setReplanCount(int count) {
+        state.put("replanCount", count);
+    }
+
+    /**
+     * 增加重规划次数
+     */
+    public void incrementReplanCount() {
+        int currentCount = getReplanCount();
+        setReplanCount(currentCount + 1);
+        log.info("重规划次数增加: {} -> {}", currentCount, currentCount + 1);
+    }
+
+    /**
+     * 检查是否超过重规划限制
+     */
+    public boolean isReplanLimitExceeded() {
+        return getReplanCount() >= 1; // 限制为1次重规划
+    }
+
     public void addMessage(ChatMessage message) {
         messages.add(message);
         state.put("messages", messages);
@@ -87,13 +117,7 @@ public class MainGraphState extends BaseAgentState {
         return Optional.ofNullable((Map<String, String>) state.get("subgraphResults"));
     }
 
-    /**
-     * 获取指定子图的结果
-     */
-    public Optional<String> getSubgraphResult(String agentName) {
-        return getSubgraphResults()
-                .map(results -> results.get(agentName));
-    }
+
 
     /**
      * 获取Todo列表统计信息
@@ -101,6 +125,52 @@ public class MainGraphState extends BaseAgentState {
     public String getTodoListStatistics() {
         return getTodoList()
                 .map(TodoList::getStatistics)
+                .orElse("无任务列表");
+    }
+
+    /**
+     * 获取当前任务的上下文信息（用于初始调度场景）
+     */
+    public String getCurrentTaskContext() {
+        return getTodoList()
+                .map(todoList -> {
+                    TodoTask currentTask = todoList.getNextExecutableTask();
+                    if (currentTask == null) {
+                        return "没有可执行的任务";
+                    }
+                    
+                    StringBuilder info = new StringBuilder();
+                    info.append("=== 当前执行任务 ===\n");
+                    info.append(String.format("任务ID: %s\n", currentTask.getTaskId()));
+                    info.append(String.format("任务描述: %s\n", currentTask.getDescription()));
+                    info.append(String.format("分配智能体: %s\n", currentTask.getAssignedAgent()));
+                    info.append(String.format("任务状态: %s\n", currentTask.getStatus().getDescription()));
+                    info.append(String.format("失败次数: %d\n", currentTask.getFailureCount()));
+                    info.append(String.format("任务顺序: %d\n", currentTask.getOrder()));
+                    
+                    // 检查是否有下一个待执行任务
+                    List<TodoTask> pendingTasks = todoList.getPendingTasks();
+                    TodoTask nextTask = pendingTasks.stream()
+                            .filter(task -> !task.getTaskId().equals(currentTask.getTaskId()))
+                            .findFirst()
+                            .orElse(null);
+                    
+                    if (nextTask != null) {
+                        info.append("\n=== 下一个待执行任务 ===\n");
+                        info.append(String.format("任务ID: %s\n", nextTask.getTaskId()));
+                        info.append(String.format("任务描述: %s\n", nextTask.getDescription()));
+                        info.append(String.format("分配智能体: %s\n", nextTask.getAssignedAgent()));
+                        if (nextTask.getFailureCount() > 0) {
+                            info.append(String.format("失败次数: %d\n", nextTask.getFailureCount()));
+                        }
+                        info.append(String.format("任务顺序: %d\n", nextTask.getOrder()));
+                    } else {
+                        info.append("\n=== 后续任务状态 ===\n");
+                        info.append("当前任务是最后一个待执行任务，没有后续任务\n");
+                    }
+                    
+                    return info.toString();
+                })
                 .orElse("无任务列表");
     }
 
@@ -119,8 +189,13 @@ public class MainGraphState extends BaseAgentState {
                     if (!todoList.getPendingTasks().isEmpty()) {
                         info.append("=== 待执行任务 ===\n");
                         for (TodoTask task : todoList.getPendingTasks()) {
-                            info.append(String.format("- [%s] %s (智能体: %s)\n", 
-                                task.getTaskId(), task.getDescription(), task.getAssignedAgent()));
+                            if (task.getFailureCount() > 0) {
+                                info.append(String.format("- [%s] %s (智能体: %s, 失败%d次)\n", 
+                                    task.getTaskId(), task.getDescription(), task.getAssignedAgent(), task.getFailureCount()));
+                            } else {
+                                info.append(String.format("- [%s] %s (智能体: %s)\n", 
+                                    task.getTaskId(), task.getDescription(), task.getAssignedAgent()));
+                            }
                         }
                         info.append("\n");
                     }
@@ -160,17 +235,6 @@ public class MainGraphState extends BaseAgentState {
                 .orElse("无任务列表");
     }
 
-    /**
-     * 更新TodoList状态（兼容性方法）
-     */
-    public void updateTodoList(TodoList todoList) {
-        // 确保todoList不为null
-        if (todoList == null) {
-            log.warn("尝试设置null的TodoList，创建空的TodoList");
-            todoList = new TodoList();
-        }
-        state.put("todoList", todoList);
-    }
     
     /**
      * 更新子图结果 - 使用Builder模式
@@ -182,15 +246,7 @@ public class MainGraphState extends BaseAgentState {
         newState.state.put("subgraphResults", results);
         return newState;
     }
-    
-    /**
-     * 更新TodoList - 使用Builder模式
-     */
-    public MainGraphState withTodoList(TodoList todoList) {
-        MainGraphState newState = new MainGraphState(new java.util.HashMap<>(state));
-        newState.state.put("todoList", todoList);
-        return newState;
-    }
+
     
     /**
      * 获取原始用户查询
@@ -199,21 +255,6 @@ public class MainGraphState extends BaseAgentState {
         return Optional.ofNullable((String) state.get("originalUserQuery"));
     }
     
-    /**
-     * 获取子图执行上下文（由Scheduler设置）
-     * context包含详细的执行指令和要求
-     */
-    public Optional<String> getSubgraphContext() {
-        return Optional.ofNullable((String) state.get("subgraphContext"));
-    }
-    
-    /**
-     * 获取子图任务描述（由Scheduler设置）
-     * taskDescription是任务的概要描述
-     */
-    public Optional<String> getSubgraphTaskDescription() {
-        return Optional.ofNullable((String) state.get("subgraphTaskDescription"));
-    }
 
     private List<ChatMessage> extractMessages(Map<String, Object> state) {
         Object messagesObj = state.get("messages");

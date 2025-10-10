@@ -310,8 +310,7 @@ public class JobSearchToolCollection {
      */
     public String executeTool(ToolExecutionRequest request, BaseAgentState state) {
         try {
-            log.info("Executing tool: " + request.name());
-            
+
             // 通过反射调用工具方法
             return executeToolByReflection(request, state);
         } catch (Exception e) {
@@ -417,7 +416,6 @@ public class JobSearchToolCollection {
                         args[i] = convertValue(value, paramType);
                     } else {
                         args[i] = getDefaultValue(paramType);
-                        log.warning("参数未找到: " + paramName + ", 使用默认值");
                     }
                 }
             } else {

@@ -182,7 +182,7 @@ public class TodoTask implements Serializable {
      * 获取任务摘要信息
      */
     public String getSummary() {
-        return String.format("[%s] %s (%s) -> %s", 
-                uniqueId != null ? uniqueId : taskId, description, status.getDescription(), assignedAgent);
+        return String.format("[%s] %s (%s, 失败%d次) -> %s", 
+                uniqueId != null ? uniqueId : taskId, description, status.getDescription(), failureCount, assignedAgent);
     }
 }

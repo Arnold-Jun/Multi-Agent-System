@@ -44,7 +44,7 @@ public class JobInfoCollectionSubgraphBuilder extends BaseSubgraphBuilder<Subgra
 
     @Override
     protected String getPrompt() {
-        return PromptTemplateManager.instance.getJobInfoCollectionPrompt();
+        return PromptTemplateManager.getInstance().getJobInfoCollectionPrompt();
     }
 
     @Override

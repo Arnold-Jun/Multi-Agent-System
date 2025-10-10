@@ -245,9 +245,7 @@ public class PromptTemplateManager {
               "status": "pending",
               "order": 1
             }
-          ],
-          "delete": [],
-          "modify": []
+          ]
         }
 
         **重要**：
@@ -366,8 +364,7 @@ public class PromptTemplateManager {
         if (isInitialState(state)) {
             return PlannerScenario.INITIAL;
         }
-        
-        // 不应该到达这里
+
         throw new IllegalStateException("Planner不应该在此状态下被调用");
     }
     
@@ -377,10 +374,12 @@ public class PromptTemplateManager {
      */
     private boolean hasReplanMessage(MainGraphState state) {
         // 检查整个消息历史，寻找重新规划消息
-        return state.messages().stream()
-            .filter(msg -> msg instanceof UserMessage)
-            .map(msg -> ((UserMessage) msg).singleText())
-            .anyMatch(text -> text.contains("【Scheduler建议重新规划】"));
+        log.info("replan last message, {}", state.lastMessage().toString());
+        return state.lastMessage()
+                .filter(msg -> msg instanceof UserMessage)
+                .map(msg -> ((UserMessage) msg).singleText())
+                .filter(text -> text.contains("【Scheduler建议重新规划】"))
+                .isPresent();
     }
     
     /**
@@ -554,9 +553,9 @@ public class PromptTemplateManager {
         %s
 
         **你的任务**：
-        1. 查看TodoList状态统计，判断是否所有任务都已完成
-        2. 如果所有任务都已完成，将next设置为"summary"
-        3. 如果还有任务待执行，分析当前任务并：
+        1. 查看"后续任务状态"部分，判断当前任务是否是最后一个任务
+        2. 如果显示"当前任务是最后一个待执行任务，没有后续任务"，且当前任务完成后，将next设置为"summary"
+        3. 如果还有下一个待执行任务，分析当前任务并：
            - 将当前任务状态更新为"in_progress"
            - 根据任务的分配智能体确定路由到哪个子图
            - 为子图提供详细的任务描述和执行上下文
@@ -597,19 +596,21 @@ public class PromptTemplateManager {
         **你的核心职责**：
         1. **判断任务状态** - 根据子图执行结果判断任务是完成、失败还是需要重试
         2. **更新任务状态** - 将任务标记为completed、failed或retry
-        3. **确定路由目标** - 决定下一步是执行下一个任务、重试当前任务还是生成总结
+        3. **智能路由决策** - 决定下一步是执行下一个任务、重试当前任务、重新规划还是生成总结
         4. **提供执行上下文** - 为下一个节点提供详细的任务描述和上下文信息
 
         **重要说明**：
         - 你只负责更新TodoList中任务的状态，不能改变TodoList的结构（不能添加或删除任务）
         - 根据子图执行结果客观判断任务是否完成
         - 如果任务失败但可以重试，将状态设置为retry
-        - 如果任务失败且不适合重试，将状态设置为failed（系统会自动检查失败次数并在达到阈值时路由到planner）
+        - 如果任务失败且不适合重试，将状态设置为failed
+        - **智能重规划判断**：当任务失败次数过多或遇到无法通过重试解决的问题时，建议重新规划
 
         **可用的路由节点**：
         - job_info_collection_subgraph: 岗位信息收集子图
         - resume_analysis_optimization_subgraph: 简历分析优化子图
         - job_search_execution_subgraph: 求职执行子图
+        - planner: 重新规划任务列表（当需要调整策略时）
         - summary: 所有任务完成，生成最终报告
 
         **任务状态说明**：
@@ -638,7 +639,29 @@ public class PromptTemplateManager {
         - 如果当前任务completed且TodoList显示所有任务都已完成 → next设置为"summary"
         - 如果当前任务completed且还有其他待执行任务 → next设置为下一个任务对应的子图
         - 如果当前任务retry → next设置为当前任务对应的子图（重新执行）
-        - 如果当前任务failed → next可以设置为summary或继续执行其他任务（系统会检查失败阈值）
+        - 如果当前任务failed → 根据情况决定：
+          * 如果失败次数较少（<3次）且问题可以通过调整参数解决 → next设置为当前任务对应的子图（重试）
+          * 如果失败次数较多（≥3次）或遇到根本性问题 → next设置为"planner"（重新规划）
+          * 如果所有任务都已完成 → next设置为"summary"
+
+        **重规划判断标准**：
+        - 任务失败次数达到3次或以上
+        - 遇到无法通过参数调整解决的根本性问题（如：岗位不存在、API限制等）
+        - 需要调整整体策略或任务分解方式
+        - 用户需求发生变化或需要重新理解
+
+        **重规划时的输出要求**：
+        当建议重规划时，请在reason中详细说明：
+        - 失败的具体原因
+        - 为什么需要重新规划
+        - 建议的新策略或方向
+        在taskDescription中提供：
+        - 重新规划的具体建议
+        - 需要调整的任务描述
+        在context中提供：
+        - 当前执行情况的完整分析
+        - 失败任务的详细上下文
+        - 对重新规划的具体建议
         """;
     }
 
@@ -660,11 +683,20 @@ public class PromptTemplateManager {
            - 如果子图执行成功且任务目标达成 → status设置为"completed"
            - 如果子图执行失败但可以重试 → status设置为"retry"
            - 如果子图执行失败且不适合重试 → status设置为"failed"
-        3. 查看TodoList状态统计，决定下一步行动：
-           - 如果所有任务都已完成 → next设置为"summary"
-           - 如果还有待执行任务 → next设置为下一个任务对应的子图
+        3. **智能重试/重规划判断**：
+           - 查看当前任务的失败次数（在任务摘要中显示）
+           - **重试条件**：失败次数<3次且问题可以通过参数调整解决（如网络问题、参数优化等）
+           - **重规划条件**：
+             * 失败次数≥3次
+             * 遇到根本性问题（如岗位不存在、API限制、策略问题等）
+             * 需要调整整体策略或搜索范围
+           - 根据判断结果设置status为"retry"或"failed"，next为子图或"planner"
+        4. 查看"后续任务状态"部分，决定下一步行动：
+           - 如果显示"当前任务是最后一个待执行任务，没有后续任务"且当前任务完成 → next设置为"summary"
+           - 如果还有下一个待执行任务 → next设置为下一个任务对应的子图
            - 如果当前任务需要重试 → next设置为当前任务对应的子图
-        4. 为下一个节点提供详细的任务描述和上下文（要结合之前的执行结果）
+           - 如果需要重新规划 → next设置为"planner"
+        5. 为下一个节点提供详细的任务描述和上下文（要结合之前的执行结果）
 
         %s
 
@@ -700,12 +732,29 @@ public class PromptTemplateManager {
         }
         ```
 
+        **输出示例3（建议重新规划）**：
+        ```json
+        {
+          "taskUpdate": {
+            "taskId": "task_001",
+            "status": "failed",
+            "reason": "岗位搜索连续失败3次，可能因搜索关键词过窄或目标岗位在当前地区不存在。建议重新规划搜索策略，扩大搜索范围或调整岗位类型。"
+          },
+          "nextAction": {
+            "next": "planner",
+            "taskDescription": "重新规划求职策略，调整岗位搜索范围和关键词",
+            "context": "当前任务'搜索上海地区AI Agent研发工程师校招岗位'已失败3次，主要问题包括：1. 搜索关键词'AI Agent研发工程师'过于具体，可能该地区此类岗位较少；2. 校招时间窗口可能不匹配；3. 需要扩大搜索范围到长三角地区或调整岗位类型为'AI算法工程师'、'机器学习工程师'等。建议重新规划任务分解，调整搜索策略和范围。"
+          }
+        }
+        ```
+
         **重要提醒**：
         - taskId必须与当前任务的uniqueId完全一致
-        - nextAction.next必须是子图名称（如job_info_collection_subgraph），不能是智能体名称（如jobInfoCollectorAgent）
+        - nextAction.next可以是子图名称（如job_info_collection_subgraph）、planner或summary，不能是智能体名称（如jobInfoCollectorAgent）
         - 客观判断任务执行结果，不要过度乐观或悲观
         - context要结合之前的执行结果提供连贯的上下文
         - 根据TodoList的所有任务概览判断是否应该路由到summary
+        - 当建议重规划时，确保reason、taskDescription和context提供充分的上下文信息
         """, originalUserQuery, todoListInfo, subgraphResultsInfo, getAgentMappingInstructions());
     }
 
@@ -1139,20 +1188,14 @@ public class PromptTemplateManager {
      * 根据是否有工具执行结果生成不同的提示词
      * 
      * @param taskDescription 任务描述
-     * @param taskId 任务ID
-     * @param assignedAgent 分配的智能体
      * @param executionContext 执行上下文
-     * @param detailedTaskDescription 详细任务描述
      * @param toolExecutionResult 工具执行结果（可为null或空）
      * @param subgraphType 子图类型
      * @return 构建好的用户提示词
      */
     public String buildSubgraphUserPrompt(
             String taskDescription,  // 已经是最新的任务描述（JobSearchGraphBuilder已处理）
-            String taskId,  // 不再使用，保留只为兼容性
-            String assignedAgent,  // 不再使用，保留只为兼容性
             String executionContext,  // Scheduler提供的执行上下文
-            String detailedTaskDescription,  // 废弃的参数，保留只为兼容性
             String toolExecutionResult,
             String subgraphType) {
         
@@ -1291,8 +1334,9 @@ public class PromptTemplateManager {
         1. 分析失败原因，调整任务策略
         2. 考虑Scheduler提供的建议和上下文
         3. 可能需要添加新任务来解决之前的问题
-        4. 删除或修改有问题的任务
+        4. 保留失败任务的历史记录，通过modify操作更新状态
         5. 确保任务顺序合理，避免重复失败
+        6. **重要**：不要删除失败的任务，保留完整的执行历史用于分析
         """;
     }
     
@@ -1310,11 +1354,6 @@ public class PromptTemplateManager {
               "assignedAgent": "agentName",
               "status": "pending",
               "order": 任务顺序
-            }
-          ],
-          "delete": [
-            {
-              "uniqueId": "要删除的任务ID"
             }
           ],
           "modify": [

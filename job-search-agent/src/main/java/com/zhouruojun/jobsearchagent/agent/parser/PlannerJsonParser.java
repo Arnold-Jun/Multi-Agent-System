@@ -8,8 +8,6 @@ import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
 import com.zhouruojun.jobsearchagent.agent.todo.TaskStatus;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -37,9 +35,6 @@ public class PlannerJsonParser {
             // 创建新的TodoList或使用现有的
             TodoList todoList = existingTodoList != null ? existingTodoList : new TodoList();
             
-            // 处理删除操作
-            processDeleteOperations(jsonObject, todoList);
-            
             // 处理修改操作
             processModifyOperations(jsonObject, todoList);
             
@@ -55,31 +50,6 @@ public class PlannerJsonParser {
         }
     }
     
-    /**
-     * 处理删除操作
-     */
-    private void processDeleteOperations(JSONObject jsonObject, TodoList todoList) {
-        JSONArray deleteArray = jsonObject.getJSONArray("delete");
-        if (deleteArray != null && !deleteArray.isEmpty()) {
-            log.info("处理删除操作，数量: {}", deleteArray.size());
-            
-            for (int i = 0; i < deleteArray.size(); i++) {
-                JSONObject deleteItem = deleteArray.getJSONObject(i);
-                String uniqueId = deleteItem.getString("uniqueId");
-                
-                if (uniqueId != null && !uniqueId.trim().isEmpty()) {
-                    boolean removed = todoList.removeTask(uniqueId);
-                    if (removed) {
-                        log.info("成功删除任务: {}", uniqueId);
-                    } else {
-                        log.warn("删除任务失败，任务不存在: {}", uniqueId);
-                    }
-                } else {
-                    log.warn("删除操作缺少uniqueId字段");
-                }
-            }
-        }
-    }
     
     /**
      * 处理修改操作

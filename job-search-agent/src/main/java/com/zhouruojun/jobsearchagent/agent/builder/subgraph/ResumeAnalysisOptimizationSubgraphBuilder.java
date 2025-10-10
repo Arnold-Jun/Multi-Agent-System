@@ -44,7 +44,7 @@ public class ResumeAnalysisOptimizationSubgraphBuilder extends BaseSubgraphBuild
 
     @Override
     protected String getPrompt() {
-        return PromptTemplateManager.instance.getResumeAnalysisOptimizationPrompt();
+        return PromptTemplateManager.getInstance().getResumeAnalysisOptimizationPrompt();
     }
 
     @Override

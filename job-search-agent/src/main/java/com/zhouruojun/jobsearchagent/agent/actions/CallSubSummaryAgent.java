@@ -47,7 +47,7 @@ public class CallSubSummaryAgent extends CallAgent<SubgraphState> {
         TodoTask currentTask = currentTaskOpt.get();
         
         // 获取系统提示词
-        String systemPrompt = PromptTemplateManager.instance.getSubgraphSummaryPrompt();
+        String systemPrompt = PromptTemplateManager.getInstance().getSubgraphSummaryPrompt();
         
         // 构建用户提示词
         String userPrompt = buildUserPromptForSummary(currentTask, state);
@@ -85,7 +85,7 @@ public class CallSubSummaryAgent extends CallAgent<SubgraphState> {
         String toolExecutionResult = state.getToolExecutionResult().orElse("无工具执行结果");
         
         // 使用PromptTemplateManager构建用户提示词
-        return PromptTemplateManager.instance.buildSubgraphSummaryUserPrompt(
+        return PromptTemplateManager.getInstance().buildSubgraphSummaryUserPrompt(
                 originalQuery, 
                 taskDescription, 
                 toolExecutionResult

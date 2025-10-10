@@ -45,7 +45,7 @@ public class JobSearchExecutionSubgraphBuilder extends BaseSubgraphBuilder<Subgr
 
     @Override
     protected String getPrompt() {
-        return PromptTemplateManager.instance.getJobSearchExecutionPrompt();
+        return PromptTemplateManager.getInstance().getJobSearchExecutionPrompt();
     }
 
     @Override

@@ -211,8 +211,18 @@ public class TodoList implements Serializable {
         long completed = getCompletedTasks().size();
         long failed = getFailedTasks().size();
         
-        return String.format("总任务: %d, 待执行: %d, 执行中: %d, 已完成: %d, 失败: %d", 
-                total, pending, inProgress, completed, failed);
+        // 统计有失败记录的任务（包括重试中的任务）
+        long tasksWithFailures = tasks.stream()
+                .filter(task -> task.getFailureCount() > 0)
+                .count();
+        
+        if (tasksWithFailures > 0) {
+            return String.format("总任务: %d, 待执行: %d, 执行中: %d, 已完成: %d, 失败: %d (其中%d个任务有失败记录)", 
+                    total, pending, inProgress, completed, failed, tasksWithFailures);
+        } else {
+            return String.format("总任务: %d, 待执行: %d, 执行中: %d, 已完成: %d, 失败: %d", 
+                    total, pending, inProgress, completed, failed);
+        }
     }
     
     /**

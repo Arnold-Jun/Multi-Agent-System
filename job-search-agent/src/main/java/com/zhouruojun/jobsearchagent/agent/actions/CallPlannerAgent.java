@@ -36,7 +36,7 @@ public class CallPlannerAgent extends CallAgent<MainGraphState> {
     @Override
     protected List<ChatMessage> buildMessages(MainGraphState state) {
         // 使用PromptTemplateManager构建消息，它会根据状态自动判断场景
-        List<ChatMessage> messages = PromptTemplateManager.instance.buildPlannerMessages(state);
+        List<ChatMessage> messages = PromptTemplateManager.getInstance().buildPlannerMessages(state);
         
         log.debug("规划智能体消息构建完成，消息数量: {}", messages.size());
         
@@ -60,10 +60,8 @@ public class CallPlannerAgent extends CallAgent<MainGraphState> {
             }
             
             // 记录规划结果
-            log.info("规划智能体 {} 完成规划，响应长度: {}", agentName, responseText.length());
             log.debug("规划智能体响应内容: {}", responseText);
             
-            // 返回结果，总是路由到todoListParser进行JSON解析
             return Map.of(
                     "messages", List.of(filteredMessage),
                     "next", "todoListParser"

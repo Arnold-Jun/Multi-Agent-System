@@ -10,12 +10,10 @@ import com.zhouruojun.jobsearchagent.agent.actions.CallPlannerAgent;
 import com.zhouruojun.jobsearchagent.agent.actions.CallSchedulerAgent;
 import com.zhouruojun.jobsearchagent.agent.actions.CallSummaryAgent;
 import com.zhouruojun.jobsearchagent.agent.actions.TodoListParser;
-import com.zhouruojun.jobsearchagent.agent.actions.UserInput;
 import com.zhouruojun.jobsearchagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.jobsearchagent.agent.state.SubgraphState;
 import com.zhouruojun.jobsearchagent.config.ParallelExecutionConfig;
 import com.zhouruojun.jobsearchagent.config.CheckpointConfig;
-import com.zhouruojun.jobsearchagent.config.FailureThresholdConfig;
 import com.zhouruojun.jobsearchagent.agent.builder.subgraph.JobInfoCollectionSubgraphBuilder;
 import com.zhouruojun.jobsearchagent.agent.builder.subgraph.ResumeAnalysisOptimizationSubgraphBuilder;
 import com.zhouruojun.jobsearchagent.agent.builder.subgraph.JobSearchExecutionSubgraphBuilder;
@@ -71,7 +69,6 @@ public class JobSearchGraphBuilder {
     
     // Scheduler相关依赖
     private SchedulerResponseParser schedulerResponseParser;
-    private FailureThresholdConfig failureThresholdConfig;
 
     /**
      * 设置聊天语言模型
@@ -153,13 +150,6 @@ public class JobSearchGraphBuilder {
         return this;
     }
 
-    /**
-     * 设置失败阈值配置
-     */
-    public JobSearchGraphBuilder failureThresholdConfig(FailureThresholdConfig failureThresholdConfig) {
-        this.failureThresholdConfig = failureThresholdConfig;
-        return this;
-    }
 
     /**
      * 构建状态图
@@ -191,7 +181,7 @@ public class JobSearchGraphBuilder {
 
         // 创建Scheduler节点
         final var callScheduler = new CallSchedulerAgent("scheduler", agents.get("scheduler"), 
-                schedulerResponseParser, failureThresholdConfig);
+                schedulerResponseParser);
         callScheduler.setQueue(queue);
 
         // 创建Summary节点 - 使用CallSummaryAgent
@@ -242,9 +232,6 @@ public class JobSearchGraphBuilder {
                 // Summary节点
                 .addNode("summary", node_async(callSummary))
                 
-                // UserInput节点 - 用于A2A交互中的用户输入
-                .addNode("userInput", node_async(new UserInput()))
-                
                 // 子图节点
                 .addNode("job_info_collection_subgraph", createSubgraphNode(subgraphs.get("job_info_collection_subgraph"), "jobInfoCollectorAgent"))
                 .addNode("resume_analysis_optimization_subgraph", createSubgraphNode(subgraphs.get("resume_analysis_optimization_subgraph"), "resumeAnalysisOptimizationAgent"))
@@ -266,10 +253,7 @@ public class JobSearchGraphBuilder {
                                 "resume_analysis_optimization_subgraph", "resume_analysis_optimization_subgraph",
                                 "job_search_execution_subgraph", "job_search_execution_subgraph",
                                 "planner", "planner",
-                                "summary", "summary",
-                                "userInput", "userInput"))  // 添加userInput路由
-                // UserInput返回Scheduler
-                .addEdge("userInput", "scheduler")
+                                "summary", "summary"))  // 添加userInput路由
                 // 子图返回Scheduler的路由
                 .addConditionalEdges("job_info_collection_subgraph", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("resume_analysis_optimization_subgraph", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
@@ -408,7 +392,7 @@ public class JobSearchGraphBuilder {
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .tools(toolCollection.getToolsByAgentName("planner"))
                 .agentName("planner")
-                .prompt(PromptTemplateManager.instance.getPlannerPrompt())
+                .prompt(PromptTemplateManager.getInstance().getPlannerPrompt())
                 .build());
                 
         // 创建Scheduler智能体
@@ -416,7 +400,7 @@ public class JobSearchGraphBuilder {
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .agentName("scheduler")
-                .prompt(PromptTemplateManager.instance.getSchedulerPrompt())
+                .prompt(PromptTemplateManager.getInstance().getSchedulerPrompt())
                 .build());
                 
         // 创建Summary智能体
@@ -424,7 +408,7 @@ public class JobSearchGraphBuilder {
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .agentName("summary")
-                .prompt(PromptTemplateManager.instance.getSummaryPrompt())
+                .prompt(PromptTemplateManager.getInstance().getSummaryPrompt())
                 .build());
                 
         return agents;

@@ -203,8 +203,6 @@ public class AgentGraphBuilder {
                         edge_async(state -> state.next().orElse("FINISH")),
                         Map.of(
                                 "continue", "agentInvokeStateCheck",
-                                "subscribe", "agentInvoke",
-                                "agentInvoke", "agentInvoke",  // 添加缺失的映射
                                 "FINISH", "supervisor"
                         ))
                 

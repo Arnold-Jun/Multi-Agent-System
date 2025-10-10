@@ -5,7 +5,6 @@ import com.zhouruojun.jobsearchagent.agent.AgentChatRequest;
 import com.zhouruojun.jobsearchagent.agent.state.MainGraphState;
 import com.zhouruojun.jobsearchagent.config.ParallelExecutionConfig;
 import com.zhouruojun.jobsearchagent.config.CheckpointConfig;
-import com.zhouruojun.jobsearchagent.config.FailureThresholdConfig;
 import com.zhouruojun.jobsearchagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.jobsearchagent.service.OllamaService;
 import com.zhouruojun.jobsearchagent.tools.JobSearchToolCollection;
@@ -66,8 +65,6 @@ public class JobSearchControllerCore {
     @Autowired
     private SchedulerResponseParser schedulerResponseParser;
     
-    @Autowired
-    private FailureThresholdConfig failureThresholdConfig;
     
     // 会话管理 - 从数据分析智能体迁移
     private final Map<String, List<ChatMessage>> sessionHistory = new ConcurrentHashMap<>();
@@ -203,7 +200,6 @@ public class JobSearchControllerCore {
                 .checkpointSaver(checkpointSaver)
                 .checkpointConfig(checkpointConfig)  // 传递配置对象
                 .schedulerResponseParser(schedulerResponseParser)
-                .failureThresholdConfig(failureThresholdConfig)
                 .username(username)
                 .requestId(sessionId)
                 .build();
@@ -211,15 +207,10 @@ public class JobSearchControllerCore {
     
     /**
      * 构建编译配置
-     * 参考codewiz中cr-agent的interrupt配置
      */
     private CompileConfig buildCompileConfig() {
         return CompileConfig.builder()
                 .checkpointSaver(checkpointSaver)
-                // 暂时不设置interrupt，因为job-search-agent的主图流程不需要中断
-                // 如果未来需要支持A2A中的复杂交互（如humanConfirm），可以添加：
-                // .interruptBefore("actionWaiting", "humanConfirm", "humanPostConfirm")
-                // .interruptAfter("userInput")
                 .build();
     }
 
@@ -471,7 +462,6 @@ public class JobSearchControllerCore {
 
     /**
      * 处理用户输入（用于A2A交互中的用户确认环节）
-     * 参考codewiz中cr-agent的humanInput实现
      */
     public void humanInput(AgentChatRequest request) {
         java.util.concurrent.CompletableFuture.runAsync(() -> {

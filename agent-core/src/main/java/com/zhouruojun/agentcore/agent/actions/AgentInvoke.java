@@ -18,9 +18,11 @@ import org.bsc.langgraph4j.action.NodeAction;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -109,6 +111,17 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
             log.info("Agent registration status for {}: {}", agentName, registrationStatus);
         } catch (Exception e) {
             log.warn("Failed to get registration status: {}", e.getMessage());
+        }
+        
+        // 检查是否已经为这个会话发送了相同的任务（防止重复发送）
+        if (isDuplicateTask(sessionId.get(), agentName, taskInstruction)) {
+            log.warn("Duplicate task detected for session {} and agent {}, skipping", sessionId.get(), agentName);
+            return Map.of(
+                "next", "agentInvokeStateCheck",
+                "nextAgent", agentName,
+                "currentAgent", agentName,
+                "agent_response", "任务已在进行中，请稍候..."
+            );
         }
         
         // 使用A2A协议发送任务订阅（异步，不等待响应）
@@ -221,6 +234,121 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
         } else {
             return message.toString();
         }
+    }
+    
+    /**
+     * 检查是否为重复任务
+     * 防止同一个会话在短时间内发送相同的任务给同一个智能体
+     */
+    private boolean isDuplicateTask(String sessionId, String agentName, String taskInstruction) {
+        try {
+            // 获取会话的所有任务
+            List<String> sessionTaskIds = A2aTaskManager.getInstance().getSessionTaskIds(sessionId);
+            if (sessionTaskIds.isEmpty()) {
+                return false;
+            }
+            
+            // 检查最近的任务（最多检查最近3个任务）
+            int checkCount = Math.min(3, sessionTaskIds.size());
+            for (int i = sessionTaskIds.size() - checkCount; i < sessionTaskIds.size(); i++) {
+                String taskId = sessionTaskIds.get(i);
+                TaskSendParams taskParams = A2aTaskManager.getInstance().getTaskParams(taskId);
+                
+                if (taskParams != null) {
+                    // 检查是否为同一个智能体
+                    String taskAgentName = extractAgentNameFromTask(taskParams);
+                    if (agentName.equals(taskAgentName)) {
+                        // 检查任务指令是否相似（简单的字符串比较）
+                        String existingInstruction = extractTaskInstruction(taskParams);
+                        if (isSimilarTask(taskInstruction, existingInstruction)) {
+                            log.warn("Found similar task: existing='{}', new='{}'", existingInstruction, taskInstruction);
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        } catch (Exception e) {
+            log.error("Error checking duplicate task", e);
+            return false; // 出错时不阻止任务执行
+        }
+    }
+    
+    /**
+     * 从任务参数中提取智能体名称
+     */
+    private String extractAgentNameFromTask(TaskSendParams taskParams) {
+        // 这里需要根据实际的TaskSendParams结构来提取智能体名称
+        // 暂时返回空字符串，需要根据实际情况调整
+        return "";
+    }
+    
+    /**
+     * 从任务参数中提取任务指令
+     */
+    private String extractTaskInstruction(TaskSendParams taskParams) {
+        try {
+            if (taskParams.getMessage() != null && 
+                taskParams.getMessage().getParts() != null && 
+                !taskParams.getMessage().getParts().isEmpty()) {
+                
+                for (com.zhouruojun.a2acore.spec.Part part : taskParams.getMessage().getParts()) {
+                    if (part instanceof com.zhouruojun.a2acore.spec.TextPart) {
+                        return ((com.zhouruojun.a2acore.spec.TextPart) part).getText();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error extracting task instruction", e);
+        }
+        return "";
+    }
+    
+    /**
+     * 检查两个任务是否相似
+     */
+    private boolean isSimilarTask(String task1, String task2) {
+        if (task1 == null || task2 == null) {
+            return false;
+        }
+        
+        // 简单的相似度检查：去除空格后比较
+        String normalized1 = task1.trim().replaceAll("\\s+", " ");
+        String normalized2 = task2.trim().replaceAll("\\s+", " ");
+        
+        // 如果完全相同，认为是重复任务
+        if (normalized1.equals(normalized2)) {
+            return true;
+        }
+        
+        // 如果长度差异很大，认为不是重复任务
+        if (Math.abs(normalized1.length() - normalized2.length()) > normalized1.length() * 0.3) {
+            return false;
+        }
+        
+        // 简单的编辑距离检查（这里可以优化为更复杂的算法）
+        return calculateSimilarity(normalized1, normalized2) > 0.8;
+    }
+    
+    /**
+     * 计算两个字符串的相似度（简单的Jaccard相似度）
+     */
+    private double calculateSimilarity(String s1, String s2) {
+        if (s1.length() == 0 && s2.length() == 0) {
+            return 1.0;
+        }
+        
+        Set<String> set1 = new HashSet<>(Arrays.asList(s1.split(" ")));
+        Set<String> set2 = new HashSet<>(Arrays.asList(s2.split(" ")));
+        
+        Set<String> intersection = new HashSet<>(set1);
+        intersection.retainAll(set2);
+        
+        Set<String> union = new HashSet<>(set1);
+        union.addAll(set2);
+        
+        return (double) intersection.size() / union.size();
     }
 
 }

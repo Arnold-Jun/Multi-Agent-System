@@ -68,8 +68,8 @@ public class CallSummaryAgent extends CallAgent<MainGraphState> {
             subgraphResultsInfo.append("暂无子图执行结果");
         }
         
-        String systemPrompt = PromptTemplateManager.instance.buildSummarySystemPrompt();
-        String userPrompt = PromptTemplateManager.instance.buildSummaryUserPrompt(originalUserQuery, subgraphResultsInfo.toString());
+        String systemPrompt = PromptTemplateManager.getInstance().buildSummarySystemPrompt();
+        String userPrompt = PromptTemplateManager.getInstance().buildSummaryUserPrompt(originalUserQuery, subgraphResultsInfo.toString());
         messages.add(SystemMessage.from(systemPrompt));
         messages.add(UserMessage.from(userPrompt));
         
