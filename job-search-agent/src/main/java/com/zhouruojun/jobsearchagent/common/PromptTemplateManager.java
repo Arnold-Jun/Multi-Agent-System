@@ -225,6 +225,24 @@ public class PromptTemplateManager {
         - 如果连续多个子任务都分配给同一个子智能体，必须合并成一个任务
         - 合并后的任务描述要包含所有子任务的要求
         - 这样可以减少任务数量，提高执行效率
+
+        **输出格式要求**：
+        你必须输出以下JSON格式：
+        {
+          "add": [
+            {
+              "description": "新任务描述",
+              "assignedAgent": "agentName",
+              "status": "pending",
+              "order": 任务顺序
+            }
+          ]
+        }
+
+        **重要**：
+        - 只输出JSON，不要其他内容
+        - 确保任务描述清晰具体
+        - 合理分配任务顺序
         """;
     }
 
@@ -282,8 +300,37 @@ public class PromptTemplateManager {
         - 仔细分析失败原因，调整任务策略
         - 考虑Scheduler的建议和上下文信息
         - 可能需要添加新的任务来解决之前的问题
-        - 删除或修改有问题的任务
+        - 通过modify操作更新失败任务的状态
         - 确保任务顺序合理，避免重复失败
+
+        **任务合并规则**：
+        - 如果连续多个子任务都分配给同一个子智能体，必须合并成一个任务
+        - 合并后的任务描述要包含所有子任务的要求
+        - 这样可以减少任务数量，提高执行效率
+
+        **输出格式要求**：
+        你必须输出以下JSON格式：
+        {
+          "add": [
+            {
+              "description": "新任务描述",
+              "assignedAgent": "agentName",
+              "status": "pending",
+              "order": 任务顺序
+            }
+          ],
+          "modify": [
+            {
+              "uniqueId": "要修改的任务ID",
+              "status": "completed|failed|pending"
+            }
+          ]
+        }
+
+        **重要**：
+        - 只输出JSON，不要其他内容
+        - 不要删除失败的任务，保留完整的执行历史
+        - 通过modify操作更新任务状态
         """;
     }
 
@@ -336,9 +383,38 @@ public class PromptTemplateManager {
                 
                 String errorPrompt = buildJsonParseErrorPrompt(errorMessage, lastJsonOutput);
                 
-                messages.add(SystemMessage.from(
-                    "你是一名专业的任务规划器，负责处理JSON解析错误并重新生成正确的任务列表。"
-                ));
+                messages.add(SystemMessage.from("""
+                你是一名专业的任务规划器，负责处理JSON解析错误并重新生成正确的任务列表。
+
+                **你的职责**：
+                - 分析JSON解析错误的原因
+                - 重新生成符合格式要求的任务列表
+                - 确保输出正确的JSON格式
+
+                **输出格式要求**：
+                你必须输出以下JSON格式：
+                {
+                  "add": [
+                    {
+                      "description": "新任务描述",
+                      "assignedAgent": "agentName",
+                      "status": "pending",
+                      "order": 任务顺序
+                    }
+                  ],
+                  "modify": [
+                    {
+                      "uniqueId": "要修改的任务ID",
+                      "status": "completed|failed|pending"
+                    }
+                  ]
+                }
+
+                **重要**：
+                - 只输出JSON，不要其他内容
+                - 确保JSON格式完全正确
+                - 修复之前的格式错误
+                """));
                 messages.add(UserMessage.from(errorPrompt));
             }
         }
@@ -508,15 +584,14 @@ public class PromptTemplateManager {
         3. **提供执行上下文** - 为下一个节点提供详细的任务描述和上下文信息
 
         **重要说明**：
-        - 你只负责更新TodoList中任务的状态，不能改变TodoList的结构（不能添加或删除任务）
+        - 你只负责更新TodoList中任务的状态，不能改变TodoList的结构
         - 你的任务是分析当前要执行的任务，并为其准备执行环境
         - 根据完整的TodoList状态，判断是否所有任务都已完成
 
         **可用的路由节点**：
-        - job_info_collection_subgraph: 岗位信息收集子图
-        - resume_analysis_optimization_subgraph: 简历分析优化子图
-        - job_search_execution_subgraph: 求职执行子图
-        - summary: 所有任务完成，生成最终报告
+        - jobInfoCollectorAgent: 岗位信息收集
+        - resumeAnalysisOptimizationAgent: 简历分析优化
+        - jobSearchExecutionAgent: 求职执行
 
         **输出格式要求**：
         必须输出严格的JSON格式：
@@ -536,8 +611,7 @@ public class PromptTemplateManager {
         ```
         
         **路由决策规则**：
-        - 如果TodoList显示所有任务都已完成 → next设置为"summary"
-        - 如果当前任务需要执行 → next设置为对应的子图节点
+        - 如果当前任务需要执行 → next设置为对应的子图路由节点
         - taskId必须与输入的任务ID完全一致
         - context必须包含子图执行所需的所有信息
         """;
@@ -554,13 +628,11 @@ public class PromptTemplateManager {
 
         **你的任务**：
         1. 查看"后续任务状态"部分，判断当前任务是否是最后一个任务
-        2. 如果显示"当前任务是最后一个待执行任务，没有后续任务"，且当前任务完成后，将next设置为"summary"
-        3. 如果还有下一个待执行任务，分析当前任务并：
+        2. 当前任务是第一次执行，状态应该设置为"in_progress"，next应该设置为对应的智能体
+        4. 分析当前任务并：
            - 将当前任务状态更新为"in_progress"
-           - 根据任务的分配智能体确定路由到哪个子图
-           - 为子图提供详细的任务描述和执行上下文
-
-        %s
+           - 根据任务的分配智能体确定路由到哪个智能体
+           - 为智能体提供详细的任务描述和执行上下文
 
         **输出示例**：
         ```json
@@ -571,7 +643,7 @@ public class PromptTemplateManager {
             "reason": "开始执行岗位信息收集任务"
           },
           "nextAction": {
-            "next": "job_info_collection_subgraph",
+            "next": "jobInfoCollectorAgent",
             "taskDescription": "搜索并收集Java开发工程师相关岗位信息",
             "context": "用户需要寻找Java开发工程师岗位，要求具备Spring Boot、微服务等技术栈。请搜索相关岗位，重点关注薪资、技术要求和公司背景。"
           }
@@ -580,10 +652,9 @@ public class PromptTemplateManager {
 
         **重要提醒**：
         - taskId必须与当前任务的uniqueId完全一致
-        - nextAction.next必须是子图名称（如job_info_collection_subgraph），不能是智能体名称（如jobInfoCollectorAgent）
-        - 根据任务的assignedAgent确定正确的子图
+        - nextAction.next直接使用路由节点名称
         - context要结合用户原始查询和任务描述提供详细信息
-        """, originalUserQuery, todoListInfo, getAgentMappingInstructions());
+        """, originalUserQuery, todoListInfo);
     }
 
     /**
@@ -607,9 +678,9 @@ public class PromptTemplateManager {
         - **智能重规划判断**：当任务失败次数过多或遇到无法通过重试解决的问题时，建议重新规划
 
         **可用的路由节点**：
-        - job_info_collection_subgraph: 岗位信息收集子图
-        - resume_analysis_optimization_subgraph: 简历分析优化子图
-        - job_search_execution_subgraph: 求职执行子图
+        - jobInfoCollectorAgent: 岗位信息收集
+        - resumeAnalysisOptimizationAgent: 简历分析优化
+        - jobSearchExecutionAgent: 求职执行
         - planner: 重新规划任务列表（当需要调整策略时）
         - summary: 所有任务完成，生成最终报告
 
@@ -698,7 +769,7 @@ public class PromptTemplateManager {
            - 如果需要重新规划 → next设置为"planner"
         5. 为下一个节点提供详细的任务描述和上下文（要结合之前的执行结果）
 
-        %s
+        
 
         **输出示例1（任务完成，继续下一个）**：
         ```json
@@ -750,12 +821,12 @@ public class PromptTemplateManager {
 
         **重要提醒**：
         - taskId必须与当前任务的uniqueId完全一致
-        - nextAction.next可以是子图名称（如job_info_collection_subgraph）、planner或summary，不能是智能体名称（如jobInfoCollectorAgent）
+        - nextAction.next可以是智能体名称（如jobInfoCollectorAgent）、planner或summary
         - 客观判断任务执行结果，不要过度乐观或悲观
         - context要结合之前的执行结果提供连贯的上下文
         - 根据TodoList的所有任务概览判断是否应该路由到summary
         - 当建议重规划时，确保reason、taskDescription和context提供充分的上下文信息
-        """, originalUserQuery, todoListInfo, subgraphResultsInfo, getAgentMappingInstructions());
+        """, originalUserQuery, todoListInfo, subgraphResultsInfo);
     }
 
     // ==================== Summary专用的System/User拆分方法 ====================
@@ -1310,19 +1381,6 @@ public class PromptTemplateManager {
         return info.toString();
     }
     
-    /**
-     * 获取智能体映射说明
-     */
-    private String getAgentMappingInstructions() {
-        return """
-        **智能体到子图的映射**：
-        - jobInfoCollectorAgent → job_info_collection_subgraph
-        - resumeAnalysisOptimizationAgent → resume_analysis_optimization_subgraph
-        - jobSearchExecutionAgent → job_search_execution_subgraph
-        
-        **重要**：nextAction.next必须是子图名称，不是智能体名称！
-        """;
-    }
     
     /**
      * 获取重新规划指导

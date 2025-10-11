@@ -1,7 +1,7 @@
 package com.zhouruojun.jobsearchagent.a2a;
 
 import com.zhouruojun.jobsearchagent.agent.core.JobSearchControllerCore;
-import com.zhouruojun.jobsearchagent.agent.AgentChatRequest;
+import com.zhouruojun.jobsearchagent.agent.dto.AgentChatRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;

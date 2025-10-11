@@ -1,7 +1,7 @@
 package com.zhouruojun.jobsearchagent.agent.controller;
 
 import com.alibaba.fastjson.JSONObject;
-import com.zhouruojun.jobsearchagent.agent.AgentChatRequest;
+import com.zhouruojun.jobsearchagent.agent.dto.AgentChatRequest;
 import com.zhouruojun.jobsearchagent.agent.core.JobSearchControllerCore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

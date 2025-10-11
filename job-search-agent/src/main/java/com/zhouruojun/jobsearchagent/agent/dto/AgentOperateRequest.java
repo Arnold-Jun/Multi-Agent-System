@@ -1,4 +1,4 @@
-package com.zhouruojun.jobsearchagent.agent;
+package com.zhouruojun.jobsearchagent.agent.dto;
 
 import lombok.Data;
 
@@ -6,7 +6,6 @@ import java.util.List;
 
 /**
  * Agent操作请求类
- * 与agent-core保持完全一致
  */
 @Data
 public class AgentOperateRequest {

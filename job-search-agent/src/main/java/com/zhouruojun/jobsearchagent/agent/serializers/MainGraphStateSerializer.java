@@ -1,8 +1,8 @@
 package com.zhouruojun.jobsearchagent.agent.serializers;
 
 import com.zhouruojun.jobsearchagent.agent.state.MainGraphState;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoList;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoList;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.ChatMessage;
 import org.bsc.langgraph4j.langchain4j.serializer.std.ToolExecutionRequestSerializer;

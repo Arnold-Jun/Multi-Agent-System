@@ -6,7 +6,6 @@ import java.util.List;
 
 /**
  * Agent聊天请求类
- * 与agent-core保持完全一致
  */
 @Data
 public class AgentChatRequest {

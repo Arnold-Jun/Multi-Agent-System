@@ -1,7 +1,7 @@
 package com.zhouruojun.jobsearchagent.agent.core;
 
 import com.alibaba.fastjson.JSONObject;
-import com.zhouruojun.jobsearchagent.agent.AgentChatRequest;
+import com.zhouruojun.jobsearchagent.agent.dto.AgentChatRequest;
 import com.zhouruojun.jobsearchagent.agent.state.MainGraphState;
 import com.zhouruojun.jobsearchagent.config.ParallelExecutionConfig;
 import com.zhouruojun.jobsearchagent.config.CheckpointConfig;

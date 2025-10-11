@@ -2,7 +2,7 @@ package com.zhouruojun.jobsearchagent.agent.actions;
 
 import com.zhouruojun.jobsearchagent.agent.BaseAgent;
 import com.zhouruojun.jobsearchagent.agent.state.SubgraphState;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
 import com.zhouruojun.jobsearchagent.common.PromptTemplateManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -49,18 +49,14 @@ public class CallSubAgent extends CallAgent<SubgraphState> {
         
         // 获取子图类型
         String subgraphType = state.getSubgraphType().orElse("unknown");
-        log.info("构建子图消息，类型: {}, 任务: {}", subgraphType, currentTask.getDescription());
-        
+
         // 根据子图类型获取对应的提示词
         String systemPrompt = getSystemPromptForSubgraphType(subgraphType);
         String userPrompt = buildUserPromptForSubgraph(currentTask, state);
         
         messages.add(SystemMessage.from(systemPrompt));
         messages.add(UserMessage.from(userPrompt));
-        
-        log.debug("子图消息构建完成，系统提示词长度: {}, 用户提示词长度: {}", 
-                systemPrompt.length(), userPrompt.length());
-        
+
         return messages;
     }
 
@@ -94,6 +90,7 @@ public class CallSubAgent extends CallAgent<SubgraphState> {
      * 构建用户提示词
      */
     private String buildUserPromptForSubgraph(TodoTask currentTask, SubgraphState state) {
+        log.info("工具消息： {}", state.getToolExecutionResult());
         return PromptTemplateManager.getInstance().buildSubgraphUserPrompt(
             currentTask.getDescription(),  // 已经是最新的任务描述
             state.getSubgraphContext().orElse(null),  // Scheduler的上下文

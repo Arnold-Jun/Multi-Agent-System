@@ -12,6 +12,7 @@ import com.zhouruojun.jobsearchagent.agent.actions.CallSummaryAgent;
 import com.zhouruojun.jobsearchagent.agent.actions.TodoListParser;
 import com.zhouruojun.jobsearchagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.jobsearchagent.agent.state.SubgraphState;
+import com.zhouruojun.jobsearchagent.agent.state.subgraph.ToolExecutionHistory;
 import com.zhouruojun.jobsearchagent.config.ParallelExecutionConfig;
 import com.zhouruojun.jobsearchagent.config.CheckpointConfig;
 import com.zhouruojun.jobsearchagent.agent.builder.subgraph.JobInfoCollectionSubgraphBuilder;
@@ -19,7 +20,7 @@ import com.zhouruojun.jobsearchagent.agent.builder.subgraph.ResumeAnalysisOptimi
 import com.zhouruojun.jobsearchagent.agent.builder.subgraph.JobSearchExecutionSubgraphBuilder;
 import com.zhouruojun.jobsearchagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.jobsearchagent.agent.state.MainGraphState;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
 import com.zhouruojun.jobsearchagent.common.PromptTemplateManager;
 import com.zhouruojun.jobsearchagent.tools.JobSearchToolCollection;
 import dev.langchain4j.data.message.AiMessage;
@@ -205,9 +206,9 @@ public class JobSearchGraphBuilder {
 
         // 定义Scheduler路由的有效目标节点
         List<String> schedulerChildren = new ArrayList<>();
-        schedulerChildren.add("job_info_collection_subgraph");
-        schedulerChildren.add("resume_analysis_optimization_subgraph");
-        schedulerChildren.add("job_search_execution_subgraph");
+        schedulerChildren.add("jobInfoCollectorAgent");
+        schedulerChildren.add("resumeAnalysisOptimizationAgent");
+        schedulerChildren.add("jobSearchExecutionAgent");
         schedulerChildren.add("planner");
         schedulerChildren.add("summary");
         schedulerChildren.add("userInput");  // 添加userInput节点
@@ -233,9 +234,9 @@ public class JobSearchGraphBuilder {
                 .addNode("summary", node_async(callSummary))
                 
                 // 子图节点
-                .addNode("job_info_collection_subgraph", createSubgraphNode(subgraphs.get("job_info_collection_subgraph"), "jobInfoCollectorAgent"))
-                .addNode("resume_analysis_optimization_subgraph", createSubgraphNode(subgraphs.get("resume_analysis_optimization_subgraph"), "resumeAnalysisOptimizationAgent"))
-                .addNode("job_search_execution_subgraph", createSubgraphNode(subgraphs.get("job_search_execution_subgraph"), "jobSearchExecutionAgent"))
+                .addNode("jobInfoCollectorAgent", createSubgraphNode(subgraphs.get("jobInfoCollectorAgent"), "jobInfoCollectorAgent"))
+                .addNode("resumeAnalysisOptimizationAgent", createSubgraphNode(subgraphs.get("resumeAnalysisOptimizationAgent"), "resumeAnalysisOptimizationAgent"))
+                .addNode("jobSearchExecutionAgent", createSubgraphNode(subgraphs.get("jobSearchExecutionAgent"), "jobSearchExecutionAgent"))
                 
                 // 边连接
                 .addEdge(START, "planner")
@@ -249,28 +250,23 @@ public class JobSearchGraphBuilder {
                 .addConditionalEdges("scheduler",
                         edge_async(schedulerRouting),
                         Map.of(
-                                "job_info_collection_subgraph", "job_info_collection_subgraph",
-                                "resume_analysis_optimization_subgraph", "resume_analysis_optimization_subgraph",
-                                "job_search_execution_subgraph", "job_search_execution_subgraph",
+                                "jobInfoCollectorAgent", "jobInfoCollectorAgent",
+                                "resumeAnalysisOptimizationAgent", "resumeAnalysisOptimizationAgent",
+                                "jobSearchExecutionAgent", "jobSearchExecutionAgent",
                                 "planner", "planner",
                                 "summary", "summary"))  // 添加userInput路由
                 // 子图返回Scheduler的路由
-                .addConditionalEdges("job_info_collection_subgraph", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
-                .addConditionalEdges("resume_analysis_optimization_subgraph", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
-                .addConditionalEdges("job_search_execution_subgraph", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
+                .addConditionalEdges("jobInfoCollectorAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
+                .addConditionalEdges("resumeAnalysisOptimizationAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
+                .addConditionalEdges("jobSearchExecutionAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addEdge("summary", END);
     }
 
     /**
-     * 根据智能体名称确定assignedAgent
+     * 根据智能体名称确定assignedAgent（现在直接返回，因为名称已经统一）
      */
     private String determineAssignedAgent(String agentName) {
-        return switch (agentName) {
-            case "job_info_collection_subgraph" -> "jobInfoCollectorAgent";
-            case "resume_analysis_optimization_subgraph" -> "resumeAnalysisOptimizationAgent";
-            case "job_search_execution_subgraph" -> "jobSearchExecutionAgent";
-            default -> "unknownAgent";
-        };
+        return agentName; // 直接返回，因为子图名称和智能体名称已经统一
     }
 
     /**
@@ -344,15 +340,15 @@ public class JobSearchGraphBuilder {
         boolean checkpointEnabled = checkpointConfig != null ? checkpointConfig.isEnabled() : true;
         
         // 构建岗位信息收集子图
-        subgraphs.put("job_info_collection_subgraph", 
+        subgraphs.put("jobInfoCollectorAgent", 
             buildSubgraph(new JobInfoCollectionSubgraphBuilder(), "job_info_collection", checkpointEnabled));
                 
         // 构建简历分析优化子图
-        subgraphs.put("resume_analysis_optimization_subgraph", 
+        subgraphs.put("resumeAnalysisOptimizationAgent", 
             buildSubgraph(new ResumeAnalysisOptimizationSubgraphBuilder(), "resume_analysis_optimization", checkpointEnabled));
                 
         // 构建求职执行子图
-        subgraphs.put("job_search_execution_subgraph", 
+        subgraphs.put("jobSearchExecutionAgent", 
             buildSubgraph(new JobSearchExecutionSubgraphBuilder(), "job_search_execution", checkpointEnabled));
                 
         return subgraphs;
@@ -476,6 +472,11 @@ public class JobSearchGraphBuilder {
             if (state.getSubgraphResults().isPresent()) {
                 subgraphStateData.put("subgraphResults", state.getSubgraphResults().get());
             }
+            
+            // 初始化工具执行历史管理对象
+            // 每个子图实例都有独立的工具执行历史
+            subgraphStateData.put("toolExecutionHistory", 
+                new ToolExecutionHistory(20));
             
             SubgraphState subgraphState = new SubgraphState(subgraphStateData);
 

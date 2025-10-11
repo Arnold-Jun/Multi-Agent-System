@@ -1,7 +1,7 @@
 package com.zhouruojun.jobsearchagent.agent.state;
 
-import com.zhouruojun.jobsearchagent.agent.todo.TodoList;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoList;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 

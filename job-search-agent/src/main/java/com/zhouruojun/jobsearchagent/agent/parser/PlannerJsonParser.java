@@ -3,9 +3,9 @@ package com.zhouruojun.jobsearchagent.agent.parser;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoList;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
-import com.zhouruojun.jobsearchagent.agent.todo.TaskStatus;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoList;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TaskStatus;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;

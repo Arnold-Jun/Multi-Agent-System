@@ -1,12 +1,12 @@
 package com.zhouruojun.jobsearchagent.agent.actions;
 
 import com.zhouruojun.jobsearchagent.agent.BaseAgent;
-import com.zhouruojun.jobsearchagent.agent.SchedulerResponse;
+import com.zhouruojun.jobsearchagent.agent.dto.SchedulerResponse;
 import com.zhouruojun.jobsearchagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.jobsearchagent.agent.state.MainGraphState;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoList;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
-import com.zhouruojun.jobsearchagent.agent.todo.TaskStatus;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoList;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TaskStatus;
 import com.zhouruojun.jobsearchagent.common.PromptTemplateManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;

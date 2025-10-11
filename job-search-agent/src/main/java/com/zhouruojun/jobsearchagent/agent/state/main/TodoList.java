@@ -1,4 +1,4 @@
-package com.zhouruojun.jobsearchagent.agent.todo;
+package com.zhouruojun.jobsearchagent.agent.state.main;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;

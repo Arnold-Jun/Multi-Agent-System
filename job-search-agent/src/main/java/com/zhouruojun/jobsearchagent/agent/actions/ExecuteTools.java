@@ -1,8 +1,9 @@
 package com.zhouruojun.jobsearchagent.agent.actions;
 
-import cn.hutool.core.collection.CollectionUtil;
 import com.zhouruojun.jobsearchagent.agent.BaseAgent;
 import com.zhouruojun.jobsearchagent.agent.state.BaseAgentState;
+import com.zhouruojun.jobsearchagent.agent.state.SubgraphState;
+import com.zhouruojun.jobsearchagent.agent.state.subgraph.ToolExecutionHistory;
 import com.zhouruojun.jobsearchagent.config.ParallelExecutionConfig;
 import com.zhouruojun.jobsearchagent.tools.JobSearchToolCollection;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -96,7 +97,6 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
     }
 
     /**
-     * 构造函数
      *
      * @param agentName 智能体名称
      * @param agent 智能体实例
@@ -118,37 +118,8 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
      */
     @Override
     public Map<String, Object> apply(T state) {
-
-        List<ToolExecutionRequest> toolExecutionRequests = null;
-        Optional<ChatMessage> chatMessage = state.lastMessage();
-        
-        if (ChatMessageType.AI == chatMessage.get().type()) {
-            toolExecutionRequests = state.lastMessage()
-                    .filter(m -> ChatMessageType.AI == m.type())
-                    .map(m -> (AiMessage) m)
-                    .filter(AiMessage::hasToolExecutionRequests)
-                    .map(AiMessage::toolExecutionRequests)
-                    .orElseThrow(() -> new IllegalArgumentException("no tool execution request found!"));
-        } else {
-            List<ChatMessage> messages = state.messages();
-            int aiCount = 0;
-            for (int i = messages.size() - 1; i > 0; i--) {
-                if (aiCount > 0) {
-                    break;
-                }
-                if (ChatMessageType.AI == messages.get(i).type()) {
-                    aiCount++;
-                    AiMessage aiMessage = (AiMessage) messages.get(i);
-                    if (aiMessage.hasToolExecutionRequests()) {
-                        toolExecutionRequests = aiMessage.toolExecutionRequests();
-                    }
-                }
-            }
-        }
-
-        if (toolExecutionRequests == null || CollectionUtil.isEmpty(toolExecutionRequests)) {
-            throw new IllegalArgumentException("no tool execution request found!");
-        }
+        // 获取工具执行请求
+        List<ToolExecutionRequest> toolExecutionRequests = extractToolExecutionRequests(state);
 
         // 执行工具调用 - 支持并行执行
         List<ToolExecutionResultMessage> result;
@@ -173,18 +144,29 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
         // 记录工具执行完成
         log.info("工具执行完成，共执行了 {} 个工具", result.size());
 
-        // 将工具执行结果添加到状态中，这样智能体才能看到工具执行的结果
+        // 将工具执行结果添加到状态中
         Map<String, Object> resultMap = new HashMap<>();
         resultMap.put("next", "callback");
         resultMap.put("messages", result);
         
-        // 构建工具执行结果摘要，供智能体参考
-        String toolExecutionSummary = buildToolExecutionSummary(result);
-        resultMap.put("toolExecutionResult", toolExecutionSummary);
-
-        if (state.getOriginalUserQuery().isPresent()) {
-            resultMap.put("originalUserQuery", state.getOriginalUserQuery().get());
+        // 获取工具执行历史管理对象
+        ToolExecutionHistory executionHistory = getToolExecutionHistoryFromState(state);
+        
+        // 添加当前批次的工具执行记录
+        for (ToolExecutionResultMessage resultMsg : result) {
+            executionHistory.addRecord(resultMsg.toolName(), resultMsg.text());
         }
+        
+        // 格式化为LLM可读的字符串（只显示最近20条，避免上下文过长）
+        //TODO:工具执行记忆管理待实现！
+        String formattedHistory = executionHistory.toFormattedString(20);
+        
+        // 保存历史对象和格式化字符串
+        resultMap.put("toolExecutionHistory", executionHistory);
+        resultMap.put("toolExecutionResult", formattedHistory);
+        
+        // 记录统计信息
+        log.info("工具执行历史统计: {}", executionHistory.getStatistics());
         
         return resultMap;
     }
@@ -323,44 +305,55 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
     }
     
     /**
-     * 构建工具执行结果摘要
-     * 将工具执行结果整理成易读的格式，供智能体参考
+     * 从状态中提取工具执行请求
+     * 
+     * @param state 当前状态
+     * @return 工具执行请求列表
+     * @throws IllegalArgumentException 如果没有找到工具执行请求
      */
-    private String buildToolExecutionSummary(List<ToolExecutionResultMessage> results) {
-        if (results == null || results.isEmpty()) {
-            return "无工具执行结果";
+    private List<ToolExecutionRequest> extractToolExecutionRequests(T state) {
+        Optional<ChatMessage> chatMessage = state.lastMessage();
+        
+        if (chatMessage.isPresent() && ChatMessageType.AI == chatMessage.get().type()) {
+            // 从最后一条AI消息中获取工具执行请求
+            return state.lastMessage()
+                    .filter(m -> ChatMessageType.AI == m.type())
+                    .map(m -> (AiMessage) m)
+                    .filter(AiMessage::hasToolExecutionRequests)
+                    .map(AiMessage::toolExecutionRequests)
+                    .orElseThrow(() -> new IllegalArgumentException("最后一条AI消息中没有工具执行请求"));
+        } else {
+            // 从消息历史中查找最近的AI消息
+            List<ChatMessage> messages = state.messages();
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ChatMessage message = messages.get(i);
+                if (ChatMessageType.AI == message.type()) {
+                    AiMessage aiMessage = (AiMessage) message;
+                    if (aiMessage.hasToolExecutionRequests()) {
+                        return aiMessage.toolExecutionRequests();
+                    }
+                }
+            }
         }
         
-        StringBuilder summary = new StringBuilder();
-        summary.append("**工具执行结果**:\n");
-        
-        for (int i = 0; i < results.size(); i++) {
-            ToolExecutionResultMessage result = results.get(i);
-            summary.append(String.format("%d. 工具: %s\n", i + 1, result.toolName()));
-            summary.append(String.format("   结果: %s\n\n", result.text()));
-        }
-        
-        return summary.toString();
+        throw new IllegalArgumentException("没有找到工具执行请求");
     }
     
     /**
-     * 关闭线程池（应用关闭时调用）
+     * 从状态中获取工具执行历史对象
+     * 
+     * @param state 当前状态
+     * @return 工具执行历史对象
+     * @throws IllegalStateException 如果状态不是SubgraphState或历史对象不存在
      */
-    public static void shutdown() {
-        if (executorService != null && !executorService.isShutdown()) {
-            log.info("正在关闭工具执行线程池...");
-            executorService.shutdown();
-            try {
-                if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
-                    log.warn("线程池未能在10秒内正常关闭，强制关闭");
-                    executorService.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                log.error("等待线程池关闭时被中断", e);
-                executorService.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-            log.info("工具执行线程池已关闭");
+    private ToolExecutionHistory getToolExecutionHistoryFromState(T state) {
+        if (state instanceof SubgraphState) {
+            return ((SubgraphState) state)
+                .getToolExecutionHistoryOrThrow();
         }
+        throw new IllegalStateException(
+            String.format("期望SubgraphState，但实际类型为: %s", state.getClass().getName())
+        );
     }
+
 }

@@ -2,11 +2,9 @@ package com.zhouruojun.dataanalysisagent.agent;
 
 /**
  * 操作类型枚举
- * 与agent-core保持完全一致
  */
 public enum OperateTypeEnum {
     
-    CR("CR", "创建MR"),
     USER_CONFIRM("USER_CONFIRM", "用户确认"),
     USER_REPLAY("USER_REPLAY", "用户重放"),
     USER_INPUT("USER_INPUT", "用户输入"),

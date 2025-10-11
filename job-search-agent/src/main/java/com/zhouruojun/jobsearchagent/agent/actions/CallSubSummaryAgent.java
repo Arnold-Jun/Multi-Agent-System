@@ -2,7 +2,7 @@ package com.zhouruojun.jobsearchagent.agent.actions;
 
 import com.zhouruojun.jobsearchagent.agent.BaseAgent;
 import com.zhouruojun.jobsearchagent.agent.state.SubgraphState;
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
 import com.zhouruojun.jobsearchagent.common.PromptTemplateManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;

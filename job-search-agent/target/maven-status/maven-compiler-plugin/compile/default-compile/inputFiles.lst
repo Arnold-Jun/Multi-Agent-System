@@ -12,9 +12,6 @@ D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\s
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\actions\CallSummaryAgent.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\actions\ExecuteTools.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\actions\TodoListParser.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\actions\UserInput.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\AgentChatRequest.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\AgentOperateRequest.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\BaseAgent.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\builder\BaseSubgraphBuilder.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\builder\JobSearchGraphBuilder.java
@@ -23,8 +20,9 @@ D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\s
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\builder\subgraph\ResumeAnalysisOptimizationSubgraphBuilder.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\controller\JobSearchController.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\core\JobSearchControllerCore.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\dto\AgentChatRequest.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\dto\AgentOperateRequest.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\dto\SchedulerResponse.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\OperateTypeEnum.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\parser\PlannerJsonParser.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\parser\SchedulerResponseParser.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\serializers\AgentSerializers.java
@@ -35,12 +33,14 @@ D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\s
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\serializers\TodoListSerializer.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\serializers\TodoTaskSerializer.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\BaseAgentState.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\main\TaskDescription.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\main\TaskStatus.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\main\TodoList.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\main\TodoTask.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\MainGraphState.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\subgraph\ToolExecutionHistory.java
+D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\subgraph\ToolExecutionRecord.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\state\SubgraphState.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\task\TaskDescription.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\todo\TaskStatus.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\todo\TodoList.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\agent\todo\TodoTask.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\common\MessageFilter.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\common\PromptTemplateManager.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\config\A2ACoreConfig.java
@@ -50,7 +50,6 @@ D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\s
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\config\JobSearchConfig.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\config\OllamaConfig.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\config\ParallelExecutionConfig.java
-D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\config\SubgraphConfig.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\config\WebConfig.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\JobSearchApplication.java
 D:\Program Files (x86)\javaProjects\AgentProjects\Multi-Agent\job-search-agent\src\main\java\com\zhouruojun\jobsearchagent\model\Certification.java

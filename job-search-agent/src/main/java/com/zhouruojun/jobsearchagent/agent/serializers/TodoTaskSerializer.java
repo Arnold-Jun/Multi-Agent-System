@@ -1,6 +1,7 @@
 package com.zhouruojun.jobsearchagent.agent.serializers;
 
-import com.zhouruojun.jobsearchagent.agent.todo.TodoTask;
+import com.zhouruojun.jobsearchagent.agent.state.main.TaskStatus;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
 import org.bsc.langgraph4j.serializer.Serializer;
 
 import java.io.IOException;
@@ -22,7 +23,7 @@ public class TodoTaskSerializer implements Serializer<TodoTask> {
         // 确保所有字段都不为null，使用默认值替代
         out.writeObject(object.getTaskId() != null ? object.getTaskId() : "");
         out.writeObject(object.getDescription() != null ? object.getDescription() : "");
-        out.writeObject(object.getStatus() != null ? object.getStatus() : com.zhouruojun.jobsearchagent.agent.todo.TaskStatus.PENDING);
+        out.writeObject(object.getStatus() != null ? object.getStatus() : TaskStatus.PENDING);
         out.writeObject(object.getDependencies() != null ? object.getDependencies() : new java.util.ArrayList<>());
         out.writeObject(object.getAssignedAgent() != null ? object.getAssignedAgent() : "");
         out.writeInt(object.getFailureCount());
@@ -60,7 +61,7 @@ public class TodoTaskSerializer implements Serializer<TodoTask> {
         
         TodoTask task = new TodoTask(taskId, description, assignedAgent);
         if (statusObj != null) {
-            task.setStatus((com.zhouruojun.jobsearchagent.agent.todo.TaskStatus) statusObj);
+            task.setStatus((TaskStatus) statusObj);
         }
         if (dependenciesObj != null) {
             @SuppressWarnings("unchecked")

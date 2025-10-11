@@ -1,6 +1,7 @@
 package com.zhouruojun.jobsearchagent.agent.serializers;
 
-import com.zhouruojun.jobsearchagent.agent.todo.TodoList;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoList;
+import com.zhouruojun.jobsearchagent.agent.state.main.TodoTask;
 import org.bsc.langgraph4j.serializer.Serializer;
 
 import java.io.IOException;
@@ -38,8 +39,8 @@ public class TodoListSerializer implements Serializer<TodoList> {
         
         TodoList todoList = new TodoList(originalQuery);
         @SuppressWarnings("unchecked")
-        java.util.List<com.zhouruojun.jobsearchagent.agent.todo.TodoTask> tasks = 
-            (java.util.List<com.zhouruojun.jobsearchagent.agent.todo.TodoTask>) tasksObj;
+        java.util.List<TodoTask> tasks =
+            (java.util.List<TodoTask>) tasksObj;
         todoList.setTasks(tasks);
         todoList.setCreatedAt(createdAt);
         todoList.setUpdatedAt(updatedAt);

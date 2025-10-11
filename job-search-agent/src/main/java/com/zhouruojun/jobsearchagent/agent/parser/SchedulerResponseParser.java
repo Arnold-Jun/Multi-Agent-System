@@ -1,7 +1,7 @@
 package com.zhouruojun.jobsearchagent.agent.parser;
 
 import com.alibaba.fastjson.JSONObject;
-import com.zhouruojun.jobsearchagent.agent.SchedulerResponse;
+import com.zhouruojun.jobsearchagent.agent.dto.SchedulerResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -23,10 +23,9 @@ public class SchedulerResponseParser {
     
     // 支持的下一个节点
     private static final List<String> VALID_NEXT_NODES = Arrays.asList(
-        "job_info_collection_subgraph",
-        "resume_analysis_optimization_subgraph",
-        "job_search_execution_subgraph",
-        "userInput",
+        "jobInfoCollectorAgent",
+        "resumeAnalysisOptimizationAgent",
+        "jobSearchExecutionAgent",
         "planner",
         "summary"
     );

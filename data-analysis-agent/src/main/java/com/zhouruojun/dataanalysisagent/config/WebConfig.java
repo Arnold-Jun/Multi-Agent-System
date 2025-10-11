@@ -8,7 +8,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /**
  * Web配置类
  * 配置静态资源和路由
- * 与agent-core保持完全一致
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {

@@ -9,6 +9,7 @@ import com.zhouruojun.a2acore.spec.error.*;
 import com.zhouruojun.a2acore.spec.message.*;
 import com.zhouruojun.a2acore.spec.message.util.Util;
 import com.zhouruojun.jobsearchagent.agent.core.JobSearchControllerCore;
+import com.zhouruojun.jobsearchagent.agent.dto.AgentChatRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -108,8 +109,8 @@ public class JobSearchTaskManager extends InMemoryTaskManager {
                             // 处理用户输入
                             if (parts.getFirst() != null && parts.getFirst() instanceof TextPart textPart) {
                                 String userInput = textPart.getText();
-                                com.zhouruojun.jobsearchagent.agent.AgentChatRequest agentChatRequest = 
-                                    new com.zhouruojun.jobsearchagent.agent.AgentChatRequest();
+                                AgentChatRequest agentChatRequest =
+                                    new AgentChatRequest();
                                 agentChatRequest.setRequestId(ps.getId());
                                 agentChatRequest.setSessionId(ps.getSessionId());
                                 agentChatRequest.setChat(userInput);
