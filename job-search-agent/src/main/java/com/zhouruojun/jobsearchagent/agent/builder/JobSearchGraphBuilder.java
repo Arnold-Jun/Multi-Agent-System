@@ -12,6 +12,7 @@ import com.zhouruojun.jobsearchagent.agent.actions.CallSummaryAgent;
 import com.zhouruojun.jobsearchagent.agent.actions.TodoListParser;
 import com.zhouruojun.jobsearchagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.jobsearchagent.agent.state.SubgraphState;
+import com.zhouruojun.jobsearchagent.agent.state.subgraph.SubgraphStateManager;
 import com.zhouruojun.jobsearchagent.agent.state.subgraph.ToolExecutionHistory;
 import com.zhouruojun.jobsearchagent.config.ParallelExecutionConfig;
 import com.zhouruojun.jobsearchagent.config.CheckpointConfig;
@@ -70,6 +71,9 @@ public class JobSearchGraphBuilder {
     
     // Scheduler相关依赖
     private SchedulerResponseParser schedulerResponseParser;
+    
+    // 子图状态管理器
+    private SubgraphStateManager subgraphStateManager;
 
     /**
      * 设置聊天语言模型
@@ -150,6 +154,14 @@ public class JobSearchGraphBuilder {
         this.schedulerResponseParser = schedulerResponseParser;
         return this;
     }
+    
+    /**
+     * 设置子图状态管理器
+     */
+    public JobSearchGraphBuilder subgraphStateManager(SubgraphStateManager subgraphStateManager) {
+        this.subgraphStateManager = subgraphStateManager;
+        return this;
+    }
 
 
     /**
@@ -173,7 +185,7 @@ public class JobSearchGraphBuilder {
         // 创建队列用于流式输出
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<MainGraphState>>> queue = new LinkedBlockingQueue<>();
 
-        // 创建Planner节点 - 使用专门的CallPlannerAgent
+        // 创建Planner节点
         final var callPlanner = new CallPlannerAgent("planner", agents.get("planner"));
         callPlanner.setQueue(queue);
         
@@ -427,6 +439,10 @@ public class JobSearchGraphBuilder {
                     .map(Object::toString)
                     .orElse("unknown_task");
             
+            String sessionId = state.getValue("sessionId")
+                    .map(Object::toString)
+                    .orElse("default");
+            
             String assignedAgent = determineAssignedAgent(agentName);
             
             // 创建用于子图执行的任务对象
@@ -443,11 +459,34 @@ public class JobSearchGraphBuilder {
             
             log.info("构建子图任务: {} - {}", schedulerTaskId, effectiveTaskDescription);
             
-            // 创建子图状态，包含必要的上下文信息
+            // 尝试加载历史状态
             Map<String, Object> subgraphStateData = new HashMap<>();
-            subgraphStateData.put("messages", createTaskMessage(effectiveTask, state));
+            boolean stateRestored = false;
             
-            // 保存任务到状态中
+            if (subgraphStateManager != null) {
+                Optional<Map<String, Object>> restoredState = subgraphStateManager
+                        .loadSubgraphState(sessionId, agentName);
+                
+                if (restoredState.isPresent()) {
+                    // 恢复历史状态
+                    subgraphStateData.putAll(restoredState.get());
+                    stateRestored = true;
+                    log.info("✓ 恢复子图历史状态: sessionId={}, agentName={}, executionCount={}", 
+                            sessionId, agentName, subgraphStateData.get("executionCount"));
+                }
+            }
+            
+            // 如果没有恢复状态，则创建新状态
+            if (!stateRestored) {
+                log.info("创建全新子图状态: sessionId={}, agentName={}", sessionId, agentName);
+                
+                // 初始化工具执行历史管理对象
+                subgraphStateData.put("toolExecutionHistory", 
+                    new ToolExecutionHistory(20));
+            }
+            
+            // 更新当前任务信息（每次都是新的）
+            subgraphStateData.put("messages", createTaskMessage(effectiveTask, state));
             subgraphStateData.put("currentTask", effectiveTask);
             
             // 添加Scheduler提供的上下文信息
@@ -473,11 +512,6 @@ public class JobSearchGraphBuilder {
                 subgraphStateData.put("subgraphResults", state.getSubgraphResults().get());
             }
             
-            // 初始化工具执行历史管理对象
-            // 每个子图实例都有独立的工具执行历史
-            subgraphStateData.put("toolExecutionHistory", 
-                new ToolExecutionHistory(20));
-            
             SubgraphState subgraphState = new SubgraphState(subgraphStateData);
 
             var input = subgraphState.data();
@@ -486,6 +520,18 @@ public class JobSearchGraphBuilder {
                     .thenApply((res) -> {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> result = (Map<String, Object>) res;
+                        
+                        // 提取最终的子图状态并保存
+                        if (subgraphStateManager != null && result instanceof Map) {
+                            try {
+                                SubgraphState finalSubgraphState = new SubgraphState(result);
+                                subgraphStateManager.saveSubgraphState(sessionId, agentName, finalSubgraphState);
+                                log.info("✓ 保存子图状态: sessionId={}, agentName={}", sessionId, agentName);
+                            } catch (Exception e) {
+                                log.warn("保存子图状态失败: {}", e.getMessage());
+                            }
+                        }
+                        
                         return extractSummaryFromSubgraphResult(result, state, agentName);
                     })
                     .join();

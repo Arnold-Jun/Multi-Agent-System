@@ -344,7 +344,7 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
      * 
      * @param state 当前状态
      * @return 工具执行历史对象
-     * @throws IllegalStateException 如果状态不是SubgraphState或历史对象不存在
+     * @throws IllegalStateException 
      */
     private ToolExecutionHistory getToolExecutionHistoryFromState(T state) {
         if (state instanceof SubgraphState) {

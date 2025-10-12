@@ -445,12 +445,9 @@ public class PromptTemplateManager {
     }
     
     /**
-     * 检查是否有重新规划消息（检查整个消息历史）
-     * Scheduler要求重新规划时，会发送包含"【Scheduler建议重新规划】"的UserMessage
+     * 检查是否有重新规划消息
      */
     private boolean hasReplanMessage(MainGraphState state) {
-        // 检查整个消息历史，寻找重新规划消息
-        log.info("replan last message, {}", state.lastMessage().toString());
         return state.lastMessage()
                 .filter(msg -> msg instanceof UserMessage)
                 .map(msg -> ((UserMessage) msg).singleText())
@@ -459,8 +456,7 @@ public class PromptTemplateManager {
     }
     
     /**
-     * 检查是否有JSON解析错误消息（基于lastMessage）
-     * TodoListParser解析失败时，会发送包含"JSON解析失败"的AiMessage
+     * 检查是否有JSON解析错误消息
      */
     private boolean hasJsonParseError(MainGraphState state) {
         return state.lastMessage()
@@ -480,7 +476,6 @@ public class PromptTemplateManager {
     
     /**
      * 查找Scheduler创建的重新规划消息
-     * 从消息历史中查找包含"【Scheduler建议重新规划】"的UserMessage
      */
     private Optional<String> findReplanMessage(MainGraphState state) {
         return state.messages().stream()

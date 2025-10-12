@@ -18,6 +18,13 @@ job-search:
   checkpoint:
     enabled: true                    # 是否启用checkpoint功能
     namespace-prefix: "job-search"   # Checkpoint命名空间前缀
+    subgraph-persistence:
+      enabled: true                  # 是否启用子图状态持久化
+      max-history-records: 100       # 最大历史记录数
+      retention-days: 30             # 状态保留天数
+      enable-tool-learning: true     # 是否启用工具学习
+      enable-context-caching: true   # 是否启用上下文缓存
+      enable-cross-session-sharing: false  # 是否启用跨会话共享
   
   parallel-execution:
     enabled: true                    # 是否启用并行执行

@@ -44,10 +44,6 @@ public class MainGraphState extends BaseAgentState {
         return Optional.ofNullable(state.get(key));
     }
 
-    public Map<String, Object> getValues() {
-        return state;
-    }
-
     /**
      * 获取重规划次数
      */

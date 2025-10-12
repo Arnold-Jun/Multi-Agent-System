@@ -3,6 +3,7 @@ package com.zhouruojun.jobsearchagent.agent.core;
 import com.alibaba.fastjson.JSONObject;
 import com.zhouruojun.jobsearchagent.agent.dto.AgentChatRequest;
 import com.zhouruojun.jobsearchagent.agent.state.MainGraphState;
+import com.zhouruojun.jobsearchagent.agent.state.subgraph.SubgraphStateManager;
 import com.zhouruojun.jobsearchagent.config.ParallelExecutionConfig;
 import com.zhouruojun.jobsearchagent.config.CheckpointConfig;
 import com.zhouruojun.jobsearchagent.agent.parser.SchedulerResponseParser;
@@ -64,6 +65,10 @@ public class JobSearchControllerCore {
     // Scheduler相关依赖
     @Autowired
     private SchedulerResponseParser schedulerResponseParser;
+    
+    // 子图状态管理器
+    @Autowired
+    private SubgraphStateManager subgraphStateManager;
     
     
     // 会话管理 - 从数据分析智能体迁移
@@ -200,6 +205,7 @@ public class JobSearchControllerCore {
                 .checkpointSaver(checkpointSaver)
                 .checkpointConfig(checkpointConfig)  // 传递配置对象
                 .schedulerResponseParser(schedulerResponseParser)
+                .subgraphStateManager(subgraphStateManager)  // 传递子图状态管理器
                 .username(username)
                 .requestId(sessionId)
                 .build();
@@ -233,7 +239,12 @@ public class JobSearchControllerCore {
         stateGraphCache.remove(sessionId);
         compiledGraphCache.remove(sessionId);
         
-        log.info("Cleared session history and graph cache for: {}", sessionId);
+        // 清除子图状态
+        if (subgraphStateManager != null) {
+            subgraphStateManager.clearSessionStates(sessionId);
+        }
+        
+        log.info("Cleared session history, graph cache and subgraph states for: {}", sessionId);
     }
     
     /**

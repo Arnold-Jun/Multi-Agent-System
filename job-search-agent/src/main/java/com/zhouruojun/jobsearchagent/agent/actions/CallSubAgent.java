@@ -92,7 +92,7 @@ public class CallSubAgent extends CallAgent<SubgraphState> {
     private String buildUserPromptForSubgraph(TodoTask currentTask, SubgraphState state) {
         log.info("工具消息： {}", state.getToolExecutionResult());
         return PromptTemplateManager.getInstance().buildSubgraphUserPrompt(
-            currentTask.getDescription(),  // 已经是最新的任务描述
+            currentTask.getDescription(),
             state.getSubgraphContext().orElse(null),  // Scheduler的上下文
             state.getToolExecutionResult().orElse(null),
             state.getSubgraphType().orElse("unknown")
