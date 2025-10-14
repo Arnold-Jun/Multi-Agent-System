@@ -10,9 +10,6 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.agent.tool.ToolSpecification;
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
-import dev.langchain4j.model.chat.request.json.JsonSchemaElementHelper;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
@@ -23,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Agent调用节点
@@ -33,19 +29,8 @@ import java.util.stream.Collectors;
 public class AgentInvoke implements NodeAction<AgentMessageState> {
 
     private final A2aClientManager a2aClientManager;
-    private final List<JSONObject> jsonTools;
-
-    public AgentInvoke(A2aClientManager a2aClientManager, List<ToolSpecification> toolSpecifications) {
+    public AgentInvoke(A2aClientManager a2aClientManager) {
         this.a2aClientManager = a2aClientManager;
-        this.jsonTools = toolSpecifications.stream().map(tool -> {
-            JSONObject messageTool = new JSONObject();
-            messageTool.put("name", tool.name());
-            messageTool.put("description", tool.description());
-            JsonObjectSchema parameters = tool.parameters();
-            Map<String, Object> parametersMap = JsonSchemaElementHelper.toMap(parameters);
-            messageTool.put("parameters", parametersMap);
-            return messageTool;
-        }).collect(Collectors.toList());
     }
 
     @Override
@@ -90,7 +75,7 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
         String taskInstruction = getTaskInstruction(state);
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("message", taskInstruction);
-        parameters.put("userTools", JSONObject.toJSONString(jsonTools));
+        parameters.put("userTools", "[]"); // agent-core 不提供工具
         parameters.put("originalMessage", extractMessageContent(state.lastMessage().get()));
 
         log.info("Invoking agent {} with task instruction: {}", agentName, taskInstruction);
@@ -180,7 +165,7 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
                 .metadata(Map.of(
                     "method", "chat",
                     "userEmail", userEmail,
-                    "userTools", JSONObject.toJSONString(jsonTools)
+                    "userTools", "[]"
                 ))
                 .historyLength(1)
                 .build();
@@ -208,7 +193,7 @@ public class AgentInvoke implements NodeAction<AgentMessageState> {
         List<String> systemSupportModes = a2aClientManager.getSystemSupportModes();
         return agentCard.getDefaultOutputModes().stream()
                 .filter(systemSupportModes::contains)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private String getTaskInstruction(AgentMessageState state) {

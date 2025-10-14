@@ -43,6 +43,9 @@ public class CallSummaryAgent extends CallAgent<MainGraphState> {
         Map<String, Object> result = new HashMap<>();
         result.put("messages", List.of(filteredMessage));
         
+        // 设置最终响应
+        result.put("finalResponse", filteredMessage.text());
+        
         return result;
     }
 

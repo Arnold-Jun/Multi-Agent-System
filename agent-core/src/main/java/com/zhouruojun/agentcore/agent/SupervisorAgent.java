@@ -1,7 +1,6 @@
 package com.zhouruojun.agentcore.agent;
 
 import com.zhouruojun.agentcore.common.PromptTemplateManager;
-import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import com.zhouruojun.a2acore.spec.AgentCard;
@@ -28,10 +27,10 @@ public class SupervisorAgent extends BaseAgent {
      */
     private SupervisorAgent(ChatLanguageModel chatLanguageModel,
                            StreamingChatLanguageModel streamingChatLanguageModel,
-                           List<ToolSpecification> tools, 
                            String agentName, 
-                           List<AgentCard> agentCards) {
-        super(chatLanguageModel, streamingChatLanguageModel, tools, agentName);
+                           List<AgentCard> agentCards,
+                           boolean compactContextEnabled) {
+        super(chatLanguageModel, streamingChatLanguageModel, agentName, compactContextEnabled);
         this.agentCards = agentCards;
     }
 
@@ -52,9 +51,9 @@ public class SupervisorAgent extends BaseAgent {
             return new SupervisorAgent(
                 chatLanguageModel, 
                 streamingChatLanguageModel, 
-                tools, 
                 agentName, 
-                agentCards
+                agentCards,
+                compactContextEnabled
             );
         }
     }

@@ -219,7 +219,7 @@ public class AgentController {
     public SseEmitter connectSSE(@PathVariable String sessionId) {
         log.info("Establishing SSE connection for session: {}", sessionId);
         
-        SseEmitter emitter = new SseEmitter(600_000L); // 10分钟超时，给足够时间处理任务
+        SseEmitter emitter = new SseEmitter(1_800_000L); // 30分钟超时，给足够时间处理任务
         
         if (a2aSseEventHandler != null) {
             a2aSseEventHandler.registerFrontendConnection(sessionId, emitter);

@@ -132,7 +132,7 @@ public class JobSearchControllerCore {
             
             String result = resultBuilder.toString();
             if (result.isEmpty()) {
-                result = "求职分析完成，但未生成具体结果。";
+                result = "求职分析完成，但未获取到具体结果。";
             }
             
             // 更新会话历史

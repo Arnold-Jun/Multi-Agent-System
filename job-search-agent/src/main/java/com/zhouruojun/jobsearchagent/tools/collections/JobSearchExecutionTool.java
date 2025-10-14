@@ -25,7 +25,7 @@ public class JobSearchExecutionTool {
      * 投递职位
      * 向指定职位投递简历
      */
-    @Tool("向指定职位投递简历，支持附加求职信和用户ID")
+    @Tool("向指定职位投递简历，支持附加求职信和用户ID。返回详细的投递结果、处理进度、后续跟进计划等")
     public String applyForJob(String jobId, String resumeInfo, String coverLetter, String userId, BaseAgentState state) {
         log.info("投递职位: 职位ID={}, 简历信息长度={}, 求职信长度={}, 用户ID={}", 
                 jobId, 

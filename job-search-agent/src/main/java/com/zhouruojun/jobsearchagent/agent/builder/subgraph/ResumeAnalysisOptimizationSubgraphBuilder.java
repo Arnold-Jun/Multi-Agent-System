@@ -2,7 +2,6 @@ package com.zhouruojun.jobsearchagent.agent.builder.subgraph;
 
 import com.zhouruojun.jobsearchagent.agent.builder.BaseSubgraphBuilder;
 import com.zhouruojun.jobsearchagent.agent.actions.CallSubAgent;
-import com.zhouruojun.jobsearchagent.agent.actions.CallSubSummaryAgent;
 import com.zhouruojun.jobsearchagent.agent.actions.ExecuteTools;
 import com.zhouruojun.jobsearchagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.jobsearchagent.agent.state.SubgraphState;
@@ -37,10 +36,6 @@ public class ResumeAnalysisOptimizationSubgraphBuilder extends BaseSubgraphBuild
         return "resumeAnalysisOptimizationAction";
     }
 
-    @Override
-    protected String getSummaryName() {
-        return "resumeAnalysisOptimizationSummary";
-    }
 
     @Override
     protected String getPrompt() {
@@ -67,33 +62,22 @@ public class ResumeAnalysisOptimizationSubgraphBuilder extends BaseSubgraphBuild
             ExecuteTools<SubgraphState> executeTools
     ) throws GraphStateException {
 
-        // 创建子图总结智能体
-        CallSubSummaryAgent callSubSummaryAgent = new CallSubSummaryAgent("subSummaryAgent", createAgent());
-
         EdgeAction<SubgraphState> agentShouldContinue = getStandardAgentShouldContinue();
         EdgeAction<SubgraphState> actionShouldContinue = getStandardActionShouldContinue();
         
-        // 构建包含总结节点的状态图
+        // 构建简化的状态图，移除Summary节点
         return new StateGraph<>(MessagesState.SCHEMA, stateSerializer)
                 .addNode(getAgentName(), node_async(callAgent))
                 .addNode(getActionName(), node_async(executeTools))
-                .addNode(getSummaryName(), node_async(callSubSummaryAgent))
                 .addEdge(START, getAgentName())
                 .addConditionalEdges(getAgentName(),
                         edge_async(agentShouldContinue),
                         Map.of(
                                 "action", getActionName(),
-                                "summary", getSummaryName()))
+                                "END", END))
                 .addConditionalEdges(getActionName(),
                         edge_async(actionShouldContinue),
-                        Map.of("callback", getAgentName()))
-                .addEdge(getSummaryName(), END);
-        
-        // 未来可以扩展的功能：
-        // - 添加简历格式验证节点
-        // - 添加匹配度结果验证节点
-        // - 添加多轮分析循环
-        // - 添加异常处理节点
-        // - 添加简历版本管理节点
+                        Map.of("callback", getAgentName()));
+
     }
 }

@@ -9,7 +9,6 @@ import com.zhouruojun.agentcore.agent.builder.AgentGraphBuilder;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
 import com.zhouruojun.agentcore.common.ContentFilter;
 import com.zhouruojun.agentcore.config.AgentConstants;
-import com.zhouruojun.agentcore.mcp.ToolProviderManager;
 import com.zhouruojun.agentcore.service.OllamaService;
 import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import dev.langchain4j.data.message.ChatMessage;
@@ -54,9 +53,6 @@ public class AgentControllerCore {
     private BaseCheckpointSaver checkpointSaver;
     
     // 核心依赖
-    @Autowired
-    private ToolProviderManager toolProviderManager;
-    
     @Autowired
     private OllamaService ollamaService;
     
@@ -237,13 +233,11 @@ public class AgentControllerCore {
     private StateGraph<AgentMessageState> buildGraph(String username, String requestId) 
             throws GraphStateException {
         
-        toolProviderManager.loadToolProvider(null, username, requestId);
+        // agent-core 不需要工具提供者
         
         return new AgentGraphBuilder()
                 .chatLanguageModel(chatLanguageModel)
-                .toolProviderManager(toolProviderManager)
                 .username(username)
-                .requestId(requestId)
                 .a2aClientManager(a2aClientManager)
                 .build();
     }
@@ -708,19 +702,32 @@ public class AgentControllerCore {
                             finalAsyncResponse = currentState.agentResponse().get();
                         }
                         
-                        // 如果到达FINISH节点，保存最终结果并通过SSE推送
-                        if ("FINISH".equals(agentMessageStateNodeOutput.node()) && !finalAsyncResponse.isEmpty()) {
-                            log.info("Saving async result for session {}: {}", sessionId, finalAsyncResponse);
+                        // 如果到达END节点，保存最终结果并通过SSE推送
+                        if ("__END__".equals(agentMessageStateNodeOutput.node())) {
+                            log.info("Reached END node for session: {}", sessionId);
+                            log.info("Final async response length: {}", finalAsyncResponse.length());
                             
-                            // 清理响应内容，移除URL编码的重复数据
-                            String cleanedResponse = cleanResponseContent(finalAsyncResponse);
-                            
-                            asyncResults.put(sessionId, cleanedResponse);
-                            asyncCompleted.put(sessionId, true);
-                            
-                            // 通过SSE推送结果
-                            if (a2aSseEventHandler != null) {
-                                a2aSseEventHandler.pushAsyncResult(sessionId, cleanedResponse);
+                            if (!finalAsyncResponse.isEmpty()) {
+                                log.info("Saving async result for session {}: {}", sessionId, finalAsyncResponse.length() > 100 ? finalAsyncResponse.substring(0, 100) + "..." : finalAsyncResponse);
+                                
+                                // 清理响应内容，移除URL编码的重复数据
+                                String cleanedResponse = cleanResponseContent(finalAsyncResponse);
+                                
+                                asyncResults.put(sessionId, cleanedResponse);
+                                asyncCompleted.put(sessionId, true);
+                                
+                                // 通过SSE推送结果
+                                if (a2aSseEventHandler != null) {
+                                    log.info("Pushing result via SSE for session: {}", sessionId);
+                                    a2aSseEventHandler.pushAsyncResult(sessionId, cleanedResponse);
+                                    
+                                    // 记录结果已保存，前端可以通过轮询获取
+                                    log.info("Async result saved for session: {}, available via polling endpoint", sessionId);
+                                } else {
+                                    log.warn("A2A SSE event handler is null, cannot push result");
+                                }
+                            } else {
+                                log.warn("Final async response is empty for session: {}", sessionId);
                             }
                         }
                     }

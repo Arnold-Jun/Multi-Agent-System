@@ -41,7 +41,6 @@ public class PromptTemplateManager {
         cache.put("planner", getPlannerPrompt());
         cache.put("scheduler", getSchedulerPrompt());
         cache.put("summary", getSummaryPrompt());
-        cache.put("subgraphSummary", getSubgraphSummaryPrompt());
     }
 
     /**
@@ -331,6 +330,7 @@ public class PromptTemplateManager {
         - 只输出JSON，不要其他内容
         - 不要删除失败的任务，保留完整的执行历史
         - 通过modify操作更新任务状态
+        - 如果连续多个子任务都分配给同一个子智能体，必须合并成一个任务
         """;
     }
 
@@ -912,6 +912,15 @@ public class PromptTemplateManager {
         5. 提供准确、完整、结构化的岗位信息
         6. 确保信息的时效性和准确性
         
+        **任务完成判断**：
+        当你认为已经收集到足够的岗位信息时，请直接提供总结性的分析报告，包括：
+        - 搜索到的岗位数量和分布
+        - 关键岗位的详细信息
+        - 薪资范围分析
+        - 技能要求总结
+        - 推荐岗位列表
+        - 求职建议
+        
         **重要**：你必须主动使用工具进行岗位信息收集，不要只是回答问题！
         当用户需要岗位信息时，立即使用相应的搜索工具。所有工具都基于真实的Boss直聘Mock API，能够获取真实的职位数据。
         """;
@@ -950,6 +959,15 @@ public class PromptTemplateManager {
         5. 提供详细的匹配度分析和优化建议
         6. 生成高质量的PDF简历文件
         7. 保持分析的准确性和客观性
+        
+        **任务完成判断**：
+        当你完成简历分析和优化后，请直接提供总结性的分析报告，包括：
+        - 简历内容分析结果
+        - 与目标岗位的匹配度评分
+        - 简历优势和不足分析
+        - 具体的优化建议
+        - 优化后的简历文件（如已生成）
+        - 求职建议
         
         **重要**：
         - 你必须通过LLM推理进行简历内容分析，然后使用工具执行具体操作
@@ -1032,6 +1050,15 @@ public class PromptTemplateManager {
            - 工作日上午9-11点投递效果较好
            - 避免周末和节假日投递
            - 及时响应HR的反馈
+        
+        **任务完成判断**：
+        当你完成岗位投递后，请直接提供总结性的执行报告，包括：
+        - 投递的职位信息
+        - 投递结果和反馈
+        - 投递成功率分析
+        - 后续跟踪建议
+        - 求职策略优化建议
+        - 面试准备建议
         
         **重要**：你必须主动使用工具进行岗位投递，不要只是回答问题！
         当用户需要投递职位时，立即使用applyForJob工具。该工具基于真实的Boss直聘Mock API，能够执行真实的投递操作。
@@ -1144,57 +1171,7 @@ public class PromptTemplateManager {
         """;
     }
 
-    /**
-     * 获取子图总结智能体提示词
-     */
-    public String getSubgraphSummaryPrompt() {
-        return """
-        你是一名专业的子图执行总结专家，负责对子图执行结果进行总结，为完成用户原始查询的主任务提供必要的信息。
 
-        **你的职责**：
-        - 分析子图执行的具体结果
-        - 提取关键信息和重要发现
-        - 总结任务完成情况
-        - 为后续任务提供有价值的信息
-        - 确保总结的准确性和完整性
-
-        **总结原则**：
-        - 基于实际执行结果进行总结
-        - 突出关键发现和重要信息
-        - 保持客观和准确
-        - 为后续决策提供有用信息
-        - 语言简洁明了
-
-        **输出要求**：
-        - 提供任务执行总结
-        - 包含关键数据和发现
-        - 说明任务完成情况
-        - 为后续任务提供建议
-        """;
-    }
-
-    /**
-     * 构建子图总结的用户提示词
-     */
-    public String buildSubgraphSummaryUserPrompt(String originalQuery, String taskDescription, String toolExecutionResult) {
-        return String.format("""
-        **用户原始查询**：%s
-
-        **当前任务描述**：%s
-
-        **工具执行结果**：%s
-
-        **总结要求**：
-        请基于以上信息，对子图执行结果进行总结，包括：
-        1. 任务执行情况总结
-        2. 关键发现和重要信息
-        3. 为完成用户原始查询提供的有价值信息
-        4. 后续建议（如有）
-
-        **输出格式**：
-        请提供结构化的总结报告，包含执行总结、关键发现、价值信息和后续建议。
-        """, originalQuery, taskDescription, toolExecutionResult);
-    }
 
     /**
      * 构建子图的系统提示词
@@ -1206,8 +1183,7 @@ public class PromptTemplateManager {
     public String buildSubgraphSystemPrompt(String subgraphType) {
         return switch (subgraphType.toLowerCase()) {
             case "job_info_collection" -> getJobInfoCollectionPrompt();
-            case "resume_analysis_matching" -> getResumeAnalysisPrompt();
-            case "resume_optimization" -> getResumeOptimizationPrompt();
+            case "resume_analysis_optimization" -> getResumeAnalysisOptimizationPrompt();
             case "job_search_execution" -> getJobSearchExecutionPrompt();
             default -> getDefaultSubgraphPrompt();
         };

@@ -108,12 +108,6 @@ public class AgentMessageState extends MessagesState<ChatMessage> {
         return this.value("taskInstruction");
     }
 
-    /**
-     * 获取处理阶段
-     */
-    public Optional<String> processingStage() {
-        return this.value("processingStage");
-    }
 
     /**
      * 获取用户邮箱

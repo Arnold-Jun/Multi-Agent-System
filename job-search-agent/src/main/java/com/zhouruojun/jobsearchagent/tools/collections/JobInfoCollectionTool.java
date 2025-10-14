@@ -29,23 +29,22 @@ public class JobInfoCollectionTool {
      * 2. 灵活字符串调用：将 searchCriteria 设置为搜索条件字符串，其他参数将被忽略
      */
     @Tool("""
-        搜索职位信息，支持两种调用方式：
-        1. 标准参数：提供任意参数组合，null值表示不进行过滤，所有参数都是可选的
+        搜索职位信息，支持多种筛选条件，所有参数都是可选的，null值表示不进行过滤
         
         参数说明：
-        - 城市：精确匹配，如"上海"、"北京"
-        - 岗位名称：包含匹配，如"Java开发"、"AI工程师"
-        - 薪资范围：支持"15k-30k"、"面议"、"不限"等格式
-        - 岗位类别：精确匹配，如"社招"、"校招"、"实习"
-        - 经验要求：如"3-5年"、"应届"、"不限"
-        - 学历要求：如"本科"、"硕士"、"不限"
-        - 公司规模：如"100-500人"、"1000-9999人"
-        - 行业：如"互联网"、"金融"、"教育"
-        - 关键词：空格分隔的多个关键词
+        - 城市：支持精确匹配和区域匹配，如"上海"、"北京"、"长三角"、"珠三角"、"京津冀"等
+        - 岗位名称：支持多关键词匹配（空格分隔），如"AI算法工程师 机器学习研发工程师"、"Java开发 后端工程师"等
+        - 薪资范围：支持"15k-30k"、"20k-40k"、"面议"、"不限"等格式
+        - 岗位类别：支持多值和同义词匹配，如"社招 校招"、"校园招聘 应届生招聘"等
+        - 经验要求：支持多值和同义词匹配，如"应届毕业生 1-3年"、"应届生 中级"等
+        - 学历要求：支持多值匹配，如"本科 硕士"、"硕士 博士"等
+        - 公司规模：如"20-99人"、"100-499人"、"500-999人"、"1000-9999人"、"10000人以上"
+        - 行业：如"互联网"、"人工智能"、"金融科技"、"企业服务"、"电商"等
+        - 关键词：空格分隔的多个关键词，支持部分匹配
         - 排序方式：time(时间)、salary(薪资)、popularity(热度)
         - 排序顺序：asc(升序)、desc(降序)
         
-        返回详细信息包括职责描述和岗位要求
+        返回详细信息包括职责描述、岗位要求、公司信息等
         """)
     public String searchJobs(String city, String jobTitle, String salaryRange, String jobCategory, 
                            String experience, String education, String companyScale, String industry, 
@@ -93,7 +92,7 @@ public class JobInfoCollectionTool {
      * 投递职位
      * 向指定职位投递简历
      */
-    @Tool("向指定职位投递简历，支持附加求职信")
+    @Tool("向指定职位投递简历，支持附加求职信。需要提供有效的职位ID、简历信息和可选的求职信内容")
     public String applyForJob(String jobId, String resumeInfo, String coverLetter, BaseAgentState state) {
         log.info("投递岗位: 岗位ID={}, 简历信息长度={}, 求职信长度={}", 
                 jobId, 
@@ -126,7 +125,7 @@ public class JobInfoCollectionTool {
      * 获取职位详情
      * 根据职位ID获取详细的职位信息
      */
-    @Tool("根据职位ID获取详细的职位信息")
+    @Tool("根据职位ID获取详细的职位信息，包括职责描述、岗位要求、公司信息等完整内容")
     public String getJobDetails(String jobId, BaseAgentState state) {
         log.info("获取职位详情: 职位ID={}", jobId);
         
@@ -155,7 +154,7 @@ public class JobInfoCollectionTool {
      * 获取公司信息
      * 根据公司名称获取招聘公司的详细信息
      */
-    @Tool("根据公司名称获取招聘公司的详细信息，包括公司规模、行业、融资情况、福利待遇等")
+    @Tool("根据公司名称获取招聘公司的详细信息，包括公司规模、行业、融资情况、福利待遇、业务范围、核心产品等")
     public String getCompanyInfo(String companyName, BaseAgentState state) {
         log.info("获取公司信息: 公司名称={}", companyName);
         
@@ -210,8 +209,6 @@ public class JobInfoCollectionTool {
                 result.append("- 经验: ").append(job.get("experience")).append("\n");
                 result.append("- 学历: ").append(job.get("education")).append("\n");
                 result.append("- 发布时间: ").append(job.get("publishTime")).append("\n");
-                result.append("- 浏览次数: ").append(job.get("viewCount")).append("\n");
-                result.append("- 投递次数: ").append(job.get("applyCount")).append("\n");
                 
                 // 添加职责描述
                 @SuppressWarnings("unchecked")

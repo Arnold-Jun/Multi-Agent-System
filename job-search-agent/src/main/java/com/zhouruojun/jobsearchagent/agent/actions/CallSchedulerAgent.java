@@ -108,9 +108,7 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
             
             // 处理任务状态更新
             Map<String, Object> result = processTaskUpdate(response, state);
-            
-            // 只有当result中没有messages时才添加Scheduler的原始消息
-            // 如果processTaskUpdate返回了重规划请求，则使用重规划消息
+
             if (!result.containsKey("messages")) {
                 result.put("messages", List.of(filteredMessage));
             }

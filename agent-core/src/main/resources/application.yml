@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: agent-core
+  mvc:
+    async:
+      request-timeout: 1800000  # 30分钟异步请求超时
 
 # Ollama配置 - 统一配置
 ollama:

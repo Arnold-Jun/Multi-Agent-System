@@ -74,7 +74,8 @@ public class CallSubAgent extends CallAgent<SubgraphState> {
             log.info("Subgraph agent {} completed task: {}", agentName, filteredMessage.text());
             return Map.of(
                     "messages", List.of(filteredMessage),
-                    "next", "summary"
+                    "finalResponse", filteredMessage.text(),
+                    "next", "END"
             );
         }
     }

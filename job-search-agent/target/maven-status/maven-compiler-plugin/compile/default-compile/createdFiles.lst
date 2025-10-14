@@ -13,6 +13,7 @@ com\zhouruojun\jobsearchagent\agent\dto\AgentChatRequest.class
 com\zhouruojun\jobsearchagent\agent\BaseAgent$BaseAgentBuilder.class
 com\zhouruojun\jobsearchagent\agent\serializers\AiMessageSerializer.class
 com\zhouruojun\jobsearchagent\a2a\A2AProtocolController.class
+com\zhouruojun\jobsearchagent\agent\state\subgraph\SubgraphExecutionRecord$SubgraphExecutionRecordBuilder.class
 com\zhouruojun\jobsearchagent\agent\core\JobSearchControllerCore.class
 com\zhouruojun\jobsearchagent\config\BossApiConfig.class
 com\zhouruojun\jobsearchagent\service\BossApiService.class
@@ -38,8 +39,11 @@ com\zhouruojun\jobsearchagent\agent\actions\CallSummaryAgent.class
 com\zhouruojun\jobsearchagent\model\Certification.class
 com\zhouruojun\jobsearchagent\agent\serializers\ChatMessageSerializer$1.class
 com\zhouruojun\jobsearchagent\agent\state\BaseAgentState.class
+com\zhouruojun\jobsearchagent\config\CheckpointConfig$SubgraphPersistenceConfig.class
 com\zhouruojun\jobsearchagent\agent\parser\PlannerJsonParser$PlannerParseException.class
+com\zhouruojun\jobsearchagent\agent\state\subgraph\SubgraphExecutionRecord.class
 com\zhouruojun\jobsearchagent\tools\collections\ResumeAnalysisOptimizationTool.class
+com\zhouruojun\jobsearchagent\agent\state\subgraph\SubgraphStateManager.class
 com\zhouruojun\jobsearchagent\agent\actions\CallAgent.class
 com\zhouruojun\jobsearchagent\agent\dto\SchedulerResponse.class
 com\zhouruojun\jobsearchagent\agent\parser\SchedulerResponseParser$ValidationResult.class
@@ -54,7 +58,6 @@ com\zhouruojun\jobsearchagent\agent\builder\subgraph\JobInfoCollectionSubgraphBu
 com\zhouruojun\jobsearchagent\agent\builder\subgraph\JobSearchExecutionSubgraphBuilder.class
 com\zhouruojun\jobsearchagent\agent\controller\JobSearchController.class
 com\zhouruojun\jobsearchagent\config\WebConfig.class
-com\zhouruojun\jobsearchagent\agent\actions\CallSubSummaryAgent.class
 com\zhouruojun\jobsearchagent\tools\collections\JobSearchExecutionTool.class
 com\zhouruojun\jobsearchagent\agent\state\main\TodoList.class
 com\zhouruojun\jobsearchagent\agent\state\SubgraphState.class

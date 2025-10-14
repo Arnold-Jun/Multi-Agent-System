@@ -2,12 +2,10 @@ package com.zhouruojun.agentcore.agent.actions;
 
 import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhouruojun.a2acore.spec.*;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
 import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import com.zhouruojun.agentcore.a2a.A2aTaskUpdate;
-import com.zhouruojun.a2acore.spec.TaskStatusUpdateEvent;
-import com.zhouruojun.a2acore.spec.TaskArtifactUpdateEvent;
-import com.zhouruojun.a2acore.spec.TaskState;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -16,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
 import java.util.Map;
-// import java.util.Optional; // 未使用
 
 /**
  * Agent调用状态检查节点
@@ -79,7 +76,14 @@ public class AgentInvokeStateCheck implements NodeAction<AgentMessageState> {
                         || TaskState.COMPLETED.equals(taskState)
                 ) {
                     log.info("Task completed with state: {}, finishing", taskState);
-                    Map<String, Object> result = Map.of("next", "FINISH");
+                    
+                    // 提取专业智能体的结果
+                    String agentResult = extractAgentResult(taskStatusUpdateEvent);
+                    
+                    Map<String, Object> result = Map.of(
+                        "next", "FINISH",
+                        "agent_response", agentResult  // ✅ 保存专业智能体的结果，SupervisorAgent会根据系统提示词自动处理
+                    );
                     log.info("AgentInvokeStateCheck returning (task completed): {}", JSONObject.toJSONString(result));
                     return result;
                 }
@@ -110,4 +114,32 @@ public class AgentInvokeStateCheck implements NodeAction<AgentMessageState> {
         
         throw new IllegalArgumentException("unknown chat message type: " + chatMessage.getClass().getSimpleName());
     }
+    
+    /**
+     * 从任务状态更新事件中提取专业智能体的结果
+     */
+    private String extractAgentResult(TaskStatusUpdateEvent taskStatusUpdateEvent) {
+        try {
+            if (taskStatusUpdateEvent.getStatus() != null && 
+                taskStatusUpdateEvent.getStatus().getMessage() != null) {
+                
+                Message message = taskStatusUpdateEvent.getStatus().getMessage();
+                if (message.getParts() != null && !message.getParts().isEmpty()) {
+                    for (Part part : message.getParts()) {
+                        if (part instanceof TextPart) {
+                            return ((TextPart) part).getText();
+                        }
+                    }
+                }
+            }
+            
+            // 如果没有找到具体结果，返回通用完成消息
+            return "专业智能体任务已完成";
+            
+        } catch (Exception e) {
+            log.warn("Error extracting agent result: {}", e.getMessage());
+            return "专业智能体任务已完成";
+        }
+    }
+
 }

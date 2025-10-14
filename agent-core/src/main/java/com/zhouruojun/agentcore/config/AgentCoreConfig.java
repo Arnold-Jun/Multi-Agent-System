@@ -3,9 +3,7 @@ package com.zhouruojun.agentcore.config;
 import com.zhouruojun.agentcore.agent.SupervisorAgent;
 import com.zhouruojun.agentcore.a2a.A2aClientManager;
 import com.zhouruojun.agentcore.service.OllamaService;
-// import com.zhouruojun.agentcore.tools.A2AInvokeTool;
 import com.zhouruojun.a2acore.spec.AgentCard;
-import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -24,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-// import static dev.langchain4j.agent.tool.ToolSpecifications.toolSpecificationsFrom; // 未使用
 
 /**
  * Agent Core配置类
@@ -134,18 +131,10 @@ public class AgentCoreConfig {
         };
     }
 
-    @Bean
-    public List<ToolSpecification> supervisorToolSpecs() {
-        log.info("Creating supervisor tool specifications");
-        
-        // 暂时返回空列表，专注于路由逻辑修复
-        return List.of();
-    }
 
     @Bean
     public SupervisorAgent supervisorAgent(
             OllamaService ollamaService,
-            List<ToolSpecification> supervisorToolSpecs,
             A2aClientManager a2aClientManager) {
         
         log.info("Creating supervisor agent");
@@ -176,9 +165,9 @@ public class AgentCoreConfig {
         return SupervisorAgent.supervisorBuilder()
                 .chatLanguageModel(chatModel)
                 .streamingChatLanguageModel(null) // 暂时不使用streaming
-                .tools(supervisorToolSpecs)
                 .agentName("supervisor-agent")
                 .agentCards(agentCards) // 设置智能体卡片信息
+                .compactContextEnabled(true)
                 .build();
     }
 }

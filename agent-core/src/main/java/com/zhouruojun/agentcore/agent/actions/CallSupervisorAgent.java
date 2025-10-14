@@ -3,9 +3,7 @@ package com.zhouruojun.agentcore.agent.actions;
 import com.zhouruojun.agentcore.agent.SupervisorAgent;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
 import com.zhouruojun.agentcore.common.ContentFilter;
-import com.zhouruojun.agentcore.config.AgentConstants;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.async.AsyncGenerator;
@@ -16,7 +14,6 @@ import org.bsc.langgraph4j.streaming.StreamingOutput;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 
 /**
@@ -55,11 +52,6 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
             throw new IllegalArgumentException("no input provided!");
         }
 
-        Optional<String> processingStage = state.processingStage();
-        if (processingStage.isPresent() && "final_reasoning".equals(processingStage.get())) {
-            messages = prepareFinalReasoningMessages(state, messages);
-        }
-
         if (agent.isStreaming()) {
             if (generator == null) {
                 generator = StreamingChatGenerator.<AgentMessageState>builder()
@@ -78,20 +70,6 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
         return mapResult(response, state);
     }
 
-    private List<ChatMessage> prepareFinalReasoningMessages(AgentMessageState state, List<ChatMessage> messages) {
-        Optional<String> agentResponse = state.agentResponse();
-        if (agentResponse.isEmpty()) {
-            log.warn("No agent response found for final reasoning");
-            return messages;
-        }
-
-        String responseText = agentResponse.get();
-        List<ChatMessage> enhancedMessages = new ArrayList<>(messages);
-        enhancedMessages.add(UserMessage.from(
-                "专业智能体已经完成了分析，请将以下技术分析结果转化为用户友好的回复，总结关键发现并提供实用建议。不要再次调用专业智能体，直接给出最终回复：\n\n"
-                        + responseText.substring(0, Math.min(500, responseText.length())) + "..."));
-        return enhancedMessages;
-    }
 
     private Map<String, Object> mapResult(ChatResponse response, AgentMessageState state) {
         var content = response.aiMessage();
@@ -99,38 +77,71 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
         log.info("SupervisorAgent raw response: {}", responseText);
 
         String filteredResponse = ContentFilter.filterThinkingContent(responseText);
-
-        if (filteredResponse.contains("FINISH") || filteredResponse.contains("任务完成")) {
-            return Map.of("next", "FINISH", "agent_response", filteredResponse);
+        
+        // 解析JSON格式的响应
+        return parseJsonResponse(filteredResponse);
+    }
+    
+    /**
+     * 解析JSON格式的supervisor响应
+     */
+    private Map<String, Object> parseJsonResponse(String responseText) {
+        // 尝试提取JSON部分
+        String jsonText = extractJsonFromResponse(responseText);
+        
+        // 解析JSON
+        com.alibaba.fastjson.JSONObject jsonResponse = com.alibaba.fastjson.JSON.parseObject(jsonText);
+        
+        String next = jsonResponse.getString("next");
+        String message = jsonResponse.getString("message");
+        
+        if (next == null || message == null) {
+            throw new IllegalArgumentException("Invalid JSON response: missing 'next' or 'message' field");
         }
-
-        String lowerText = filteredResponse.toLowerCase();
-        if (lowerText.contains("需要调用专业智能体") || lowerText.contains("发送给") ||
-            lowerText.contains("路由到") || lowerText.contains("调用")) {
+        
+        log.info("Parsed JSON response - next: {}, message: {}", next, message);
+        
+        if ("agentInvoke".equals(next)) {
+            // 从JSON中获取目标智能体
+            String targetAgent = jsonResponse.getString("targetAgent");
             
-            // 智能判断应该调用哪个智能体
-            String targetAgent = determineTargetAgent(filteredResponse);
-            String taskInstruction = extractTaskInstructionFromResponse(filteredResponse);
+            if (targetAgent == null || targetAgent.trim().isEmpty()) {
+                throw new IllegalArgumentException("Invalid JSON response: missing 'targetAgent' field for agentInvoke");
+            }
             
-            log.info("CallSupervisorAgent determined targetAgent: {}, taskInstruction: {}", targetAgent, taskInstruction);
-
-            String userFriendlyMessage = generateAgentInvokeMessage(targetAgent, taskInstruction);
+            log.info("CallSupervisorAgent using targetAgent from JSON: {}, taskInstruction: {}", targetAgent, message);
+            
+            String userFriendlyMessage = generateAgentInvokeMessage(targetAgent, message);
             
             return Map.of(
                     "next", "agentInvoke",
                     "nextAgent", targetAgent,
-                    "taskInstruction", taskInstruction,
+                    "taskInstruction", message,  // 使用message作为任务指令
                     "agent_response", userFriendlyMessage,  // 使用用户友好的消息
                     "username", username
             );
+        } else if ("FINISH".equals(next)) {
+            return Map.of("next", "FINISH", "agent_response", message);
+        } else {
+            throw new IllegalArgumentException("Invalid 'next' value: " + next);
         }
-
-        if (lowerText.contains("任务完成") || lowerText.contains("完成")) {
-            return Map.of("next", "FINISH", "agent_response", filteredResponse);
-        }
-
-        return Map.of("next", "FINISH", "agent_response", filteredResponse);
     }
+    
+    /**
+     * 从响应中提取JSON部分
+     */
+    private String extractJsonFromResponse(String responseText) {
+        // 查找JSON对象的开始和结束
+        int startIndex = responseText.indexOf('{');
+        int endIndex = responseText.lastIndexOf('}');
+        
+        if (startIndex == -1 || endIndex == -1 || startIndex >= endIndex) {
+            throw new IllegalArgumentException("No valid JSON found in response");
+        }
+        
+        return responseText.substring(startIndex, endIndex + 1);
+    }
+    
 
     /**
      * 生成用户友好的提示消息
@@ -145,61 +156,6 @@ public class CallSupervisorAgent implements NodeAction<AgentMessageState> {
         return String.format("正在为您调用%s处理您的请求，请稍候...", agentDisplayName);
     }
     
-    /**
-     * 智能判断应该调用哪个智能体
-     */
-    private String determineTargetAgent(String responseText) {
-        String lowerText = responseText.toLowerCase();
-        
-        log.info("CallSupervisorAgent determining target agent from response: {}", responseText);
-        
-        // 根据关键词判断智能体类型
-        if (lowerText.contains("job-search-agent") || lowerText.contains("求职") || 
-            lowerText.contains("岗位") || lowerText.contains("简历") || 
-            lowerText.contains("面试") || lowerText.contains("投递") ||
-            lowerText.contains("工作") || lowerText.contains("招聘")) {
-            log.info("Detected job search keywords, returning job-search-agent");
-            return AgentConstants.JOB_SEARCH_AGENT_NAME;
-        }
-        
-        if (lowerText.contains("data-analysis-agent") || lowerText.contains("数据分析") || 
-            lowerText.contains("统计") || lowerText.contains("可视化") || 
-            lowerText.contains("图表") || lowerText.contains("数据")) {
-            return AgentConstants.DATA_ANALYSIS_AGENT_NAME;
-        }
-        
-        // 默认返回数据分析智能体（保持向后兼容）
-        log.warn("无法确定目标智能体，使用默认的数据分析智能体");
-        return AgentConstants.DATA_ANALYSIS_AGENT_NAME;
-    }
     
-    /**
-     * 从响应中提取任务指令
-     */
-    private String extractTaskInstructionFromResponse(String responseText) {
-        try {
-            String[] lines = responseText.split("\n");
-            for (String line : lines) {
-                if (line.contains("具体任务指令")) {
-                    int delimiterIndex = Math.max(line.indexOf('：'), line.indexOf(':'));
-                    if (delimiterIndex >= 0 && delimiterIndex + 1 < line.length()) {
-                        String instruction = line.substring(delimiterIndex + 1).trim();
-                        if (hasText(instruction)) {
-                            return instruction;
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Error extracting task instruction: {}", e.getMessage());
-        }
-
-        // 如果没有找到具体任务指令，返回通用任务
-        return "请根据用户需求进行处理";
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
-    }
 
 }

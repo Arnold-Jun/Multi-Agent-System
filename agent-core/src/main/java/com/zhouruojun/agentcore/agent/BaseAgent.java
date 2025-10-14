@@ -1,6 +1,6 @@
 package com.zhouruojun.agentcore.agent;
 
-import dev.langchain4j.agent.tool.ToolSpecification;
+import com.zhouruojun.agentcore.common.PromptTemplateManager;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -9,7 +9,6 @@ import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
-import lombok.Singular;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,20 +21,20 @@ public class BaseAgent {
 
     protected final ChatLanguageModel chatLanguageModel;
     protected final StreamingChatLanguageModel streamingChatLanguageModel;
-    @Singular protected final List<ToolSpecification> tools;
     protected String agentName;
+    protected boolean compactContextEnabled;
 
     /**
      * 构造函数
      */
     protected BaseAgent(ChatLanguageModel chatLanguageModel,
                        StreamingChatLanguageModel streamingChatLanguageModel,
-                       List<ToolSpecification> tools,
-                       String agentName) {
+                       String agentName,
+                       boolean compactContextEnabled) {
         this.chatLanguageModel = chatLanguageModel;
         this.streamingChatLanguageModel = streamingChatLanguageModel;
-        this.tools = tools != null ? tools : new ArrayList<>();
         this.agentName = agentName;
+        this.compactContextEnabled = compactContextEnabled;
     }
 
     /**
@@ -63,12 +62,16 @@ public class BaseAgent {
     private ChatRequest prepareRequest(List<ChatMessage> messages, String... args ) {
         var reqMessages = new ArrayList<ChatMessage>();
 
-        reqMessages.add(SystemMessage.from(getPrompt()));
-
-        reqMessages.addAll(messages);
+        if (compactContextEnabled) {
+            // 使用紧凑上下文：仅 1 条 SystemMessage + 1 条 UserMessage
+            reqMessages.addAll(PromptTemplateManager.instance.buildCompactMessages(messages, getPrompt()));
+        } else {
+            // 传统模式：系统提示 + 原始消息序列
+            reqMessages.add(SystemMessage.from(getPrompt()));
+            reqMessages.addAll(messages);
+        }
 
         var parameters = ChatRequestParameters.builder()
-                .toolSpecifications(tools)
                 .build();
         return ChatRequest.builder()
                 .messages( reqMessages )
@@ -132,8 +135,8 @@ public class BaseAgent {
     public static abstract class BaseAgentBuilder<T extends BaseAgent, B extends BaseAgentBuilder<T, B>> {
         protected ChatLanguageModel chatLanguageModel;
         protected StreamingChatLanguageModel streamingChatLanguageModel;
-        protected List<ToolSpecification> tools;
         protected String agentName;
+        protected boolean compactContextEnabled;
 
         public B chatLanguageModel(ChatLanguageModel chatLanguageModel) {
             this.chatLanguageModel = chatLanguageModel;
@@ -145,13 +148,17 @@ public class BaseAgent {
             return self();
         }
 
-        public B tools(List<ToolSpecification> tools) {
-            this.tools = tools;
-            return self();
-        }
 
         public B agentName(String agentName) {
             this.agentName = agentName;
+            return self();
+        }
+
+        /**
+         * 启用/关闭紧凑上下文模式（仅发送 System + User 两条消息）
+         */
+        public B compactContextEnabled(boolean compactContextEnabled) {
+            this.compactContextEnabled = compactContextEnabled;
             return self();
         }
 

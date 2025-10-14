@@ -1,10 +1,12 @@
 package com.zhouruojun.bossmock.controller;
 
 import com.zhouruojun.bossmock.dto.response.ApiResponse;
+import com.zhouruojun.bossmock.service.EmbeddingMatchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +23,9 @@ import java.util.*;
 @RequestMapping("/api/simple")
 @Tag(name = "简化职位API", description = "为job-search-agent提供的简化职位接口")
 public class SimpleJobController {
+
+    @Autowired
+    private EmbeddingMatchService embeddingMatchService;
 
     /**
      * 搜索职位 - 完善版本
@@ -141,7 +146,7 @@ public class SimpleJobController {
     }
 
     /**
-     * 获取职位详情 - 简化版本
+     * 获取职位详情 - 从真实数据中获取
      */
     @GetMapping("/jobs/{jobId}")
     @Operation(summary = "获取职位详情", description = "获取指定职位的详细信息")
@@ -149,7 +154,20 @@ public class SimpleJobController {
         log.info("获取职位详情: jobId={}", jobId);
         
         try {
-            Map<String, Object> jobDetail = generateMockJobDetail(jobId);
+            // 从真实数据集中查找职位详情
+            List<Map<String, Object>> allJobs = generateJobDataset();
+            Map<String, Object> jobDetail = allJobs.stream()
+                    .filter(job -> jobId.equals(job.get("jobId")))
+                    .findFirst()
+                    .orElse(null);
+            
+            if (jobDetail == null) {
+                log.warn("职位不存在: jobId={}", jobId);
+                return ResponseEntity.badRequest().body(ApiResponse.error("职位不存在: " + jobId));
+            }
+            
+            log.info("成功获取职位详情: jobId={}, title={}, company={}", 
+                    jobId, jobDetail.get("title"), jobDetail.get("company"));
             return ResponseEntity.ok(ApiResponse.success(jobDetail));
         } catch (Exception e) {
             log.error("获取职位详情失败: jobId={}", jobId, e);
@@ -175,68 +193,8 @@ public class SimpleJobController {
         }
     }
 
-    /**
-     * 测试同义词匹配功能
-     */
-    @GetMapping("/test/synonym-matching")
-    @Operation(summary = "测试同义词匹配", description = "测试职位类别和经验要求的同义词匹配功能")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> testSynonymMatching() {
-        log.info("测试同义词匹配功能");
-        
-        try {
-            Map<String, Object> testResults = new HashMap<>();
-            
-            // 测试职位类别同义词匹配
-            Map<String, Object> categoryTests = new HashMap<>();
-            categoryTests.put("校招 vs 校园招聘", matchesCategory("校园招聘", "校招"));
-            categoryTests.put("校园招聘 vs 校招", matchesCategory("校招", "校园招聘"));
-            categoryTests.put("社招 vs 社会招聘", matchesCategory("社会招聘", "社招"));
-            categoryTests.put("社会招聘 vs 社招", matchesCategory("社招", "社会招聘"));
-            categoryTests.put("实习 vs 实习生", matchesCategory("实习生", "实习"));
-            categoryTests.put("实习生 vs 实习", matchesCategory("实习", "实习生"));
-            testResults.put("categoryMatching", categoryTests);
-            
-            // 测试经验要求同义词匹配
-            Map<String, Object> experienceTests = new HashMap<>();
-            experienceTests.put("应届毕业生 vs 应届生", matchesExperienceRobust("应届生", "应届毕业生"));
-            experienceTests.put("应届生 vs 应届毕业生", matchesExperienceRobust("应届毕业生", "应届生"));
-            experienceTests.put("1-3年 vs 1到3年", matchesExperienceRobust("1到3年", "1-3年"));
-            experienceTests.put("1到3年 vs 1-3年", matchesExperienceRobust("1-3年", "1到3年"));
-            experienceTests.put("3-5年 vs 中级", matchesExperienceRobust("中级", "3-5年"));
-            experienceTests.put("中级 vs 3-5年", matchesExperienceRobust("3-5年", "中级"));
-            testResults.put("experienceMatching", experienceTests);
-            
-            // 测试实际职位数据
-            List<Map<String, Object>> allJobs = generateJobDataset();
-            Map<String, Object> realJobTests = new HashMap<>();
-            
-            // 测试前3个AI Agent开发工程师职位
-            for (int i = 0; i < Math.min(3, allJobs.size()); i++) {
-                Map<String, Object> job = allJobs.get(i);
-                String jobTitle = (String) job.get("title");
-                String jobCategory = (String) job.get("category");
-                String jobCity = (String) job.get("city");
-                
-                if ("AI Agent开发工程师".equals(jobTitle)) {
-                    Map<String, Object> jobTest = new HashMap<>();
-                    jobTest.put("title", jobTitle);
-                    jobTest.put("category", jobCategory);
-                    jobTest.put("city", jobCity);
-                    jobTest.put("matches校招", matchesCategory(jobCategory, "校招"));
-                    jobTest.put("matches校园招聘", matchesCategory(jobCategory, "校园招聘"));
-                    jobTest.put("matches应届生招聘", matchesCategory(jobCategory, "应届生招聘"));
-                    realJobTests.put("job_" + (i + 1), jobTest);
-                }
-            }
-            testResults.put("realJobTests", realJobTests);
-            
-            return ResponseEntity.ok(ApiResponse.success(testResults));
-            
-        } catch (Exception e) {
-            log.error("测试同义词匹配失败", e);
-            return ResponseEntity.badRequest().body(ApiResponse.error("测试同义词匹配失败: " + e.getMessage()));
-        }
-    }
+
+
 
 
     // 缓存生成的职位数据，避免重复生成
@@ -326,6 +284,173 @@ public class SimpleJobController {
     }
     
     /**
+     * 智能匹配城市（支持区域匹配和包含匹配）
+     */
+    private boolean matchesCity(String jobCity, String searchCity) {
+        if (searchCity == null || searchCity.trim().isEmpty()) {
+            return true;
+        }
+        
+        if (jobCity == null) {
+            return false;
+        }
+        
+        // 先尝试精确匹配
+        if (jobCity.equals(searchCity)) {
+            log.debug("城市精确匹配成功: 搜索={}, 职位={}", searchCity, jobCity);
+            return true;
+        }
+        
+        // 支持包含匹配（如"上海浦东"匹配"上海"）
+        if (searchCity.contains(jobCity)) {
+            log.debug("城市包含匹配成功: 搜索={}, 职位={}", searchCity, jobCity);
+            return true;
+        }
+        
+        // 反向包含匹配（如"上海"匹配"上海浦东"）
+        if (jobCity.contains(searchCity)) {
+            log.debug("城市反向包含匹配成功: 搜索={}, 职位={}", searchCity, jobCity);
+            return true;
+        }
+        
+        // 区域匹配
+        if ("长三角".equals(searchCity)) {
+            String[] yangtzeCities = {"上海", "杭州", "南京", "苏州", "无锡", "宁波", "常州", "镇江", "扬州", "泰州", "南通", "嘉兴", "湖州", "绍兴", "台州", "舟山"};
+            for (String city : yangtzeCities) {
+                if (jobCity.equals(city)) {
+                    log.debug("长三角区域匹配成功: 搜索={}, 职位={}", searchCity, jobCity);
+                    return true;
+                }
+            }
+        }
+        
+        if ("珠三角".equals(searchCity)) {
+            String[] pearlCities = {"深圳", "广州", "东莞", "佛山", "中山", "珠海", "江门", "肇庆", "惠州"};
+            for (String city : pearlCities) {
+                if (jobCity.equals(city)) {
+                    log.debug("珠三角区域匹配成功: 搜索={}, 职位={}", searchCity, jobCity);
+                    return true;
+                }
+            }
+        }
+        
+        if ("京津冀".equals(searchCity)) {
+            String[] jingjinjiCities = {"北京", "天津", "石家庄", "唐山", "秦皇岛", "邯郸", "邢台", "保定", "张家口", "承德", "沧州", "廊坊", "衡水"};
+            for (String city : jingjinjiCities) {
+                if (jobCity.equals(city)) {
+                    log.debug("京津冀区域匹配成功: 搜索={}, 职位={}", searchCity, jobCity);
+                    return true;
+                }
+            }
+        }
+        
+        log.debug("城市匹配失败: 搜索={}, 职位={}", searchCity, jobCity);
+        return false;
+    }
+    
+    /**
+     * 智能匹配职位名称（基于相似度匹配）
+     */
+    private boolean matchesJobTitle(String jobTitle, String searchTitle) {
+        if (searchTitle == null || searchTitle.trim().isEmpty()) {
+            return true;
+        }
+        
+        if (jobTitle == null) {
+            return false;
+        }
+        
+        // 先尝试精确包含匹配
+        if (jobTitle.contains(searchTitle)) {
+            log.debug("职位名称精确匹配成功: 搜索={}, 职位={}", searchTitle, jobTitle);
+            return true;
+        }
+        
+        // 使用相似度匹配
+        boolean similarityMatch = embeddingMatchService.matchesJobTitle(jobTitle, searchTitle);
+        if (similarityMatch) {
+            log.debug("职位名称相似度匹配成功: 搜索={}, 职位={}", searchTitle, jobTitle);
+            return true;
+        }
+        
+        // 尝试同义词匹配作为备选
+        String normalizedSearchTitle = normalizeJobTitle(searchTitle);
+        String normalizedJobTitle = normalizeJobTitle(jobTitle);
+        
+        if (normalizedJobTitle.contains(normalizedSearchTitle) || normalizedSearchTitle.contains(normalizedJobTitle)) {
+            log.debug("职位名称同义词匹配成功: 搜索={}, 职位={}", searchTitle, jobTitle);
+            return true;
+        }
+        
+        // 多关键词匹配（空格分隔）
+        String[] searchKeywords = searchTitle.split("\\s+");
+        int matchedKeywords = 0;
+        
+        for (String keyword : searchKeywords) {
+            String normalizedKeyword = normalizeJobTitle(keyword);
+            if (jobTitle.contains(keyword) || normalizedJobTitle.contains(normalizedKeyword)) {
+                matchedKeywords++;
+                log.debug("职位名称关键词匹配: {}", keyword);
+            }
+        }
+        
+        // 如果匹配的关键词数量超过一半，则认为匹配
+        boolean match = matchedKeywords >= (searchKeywords.length + 1) / 2;
+        log.debug("职位名称匹配结果: {}/{} = {}", matchedKeywords, searchKeywords.length, match);
+        return match;
+    }
+    
+    /**
+     * 标准化职位名称（处理同义词）
+     */
+    private String normalizeJobTitle(String title) {
+        if (title == null) {
+            return "";
+        }
+        
+        String normalized = title.toLowerCase();
+        
+        // 职位相关同义词映射
+        normalized = normalized.replace("研发", "开发");
+        normalized = normalized.replace("研究", "开发");
+        normalized = normalized.replace("programmer", "开发工程师");
+        normalized = normalized.replace("developer", "开发工程师");
+        normalized = normalized.replace("engineer", "工程师");
+        normalized = normalized.replace("architect", "架构师");
+        normalized = normalized.replace("specialist", "专员");
+        normalized = normalized.replace("analyst", "分析师");
+        normalized = normalized.replace("scientist", "科学家");
+        
+        return normalized;
+    }
+    
+    /**
+     * 智能匹配职位类别（支持多值和同义词）
+     */
+    private boolean matchesJobCategory(String jobCategory, String searchCategory) {
+        if (searchCategory == null || searchCategory.trim().isEmpty()) {
+            return true;
+        }
+        
+        if (jobCategory == null) {
+            return false;
+        }
+        
+        // 多值匹配（空格分隔）
+        String[] searchCategories = searchCategory.split("\\s+");
+        
+        for (String category : searchCategories) {
+            if (matchesCategory(jobCategory, category)) {
+                log.debug("职位类别多值匹配成功: 搜索={}, 职位={}", category, jobCategory);
+                return true;
+            }
+        }
+        
+        log.debug("职位类别多值匹配失败: 搜索={}, 职位={}", searchCategory, jobCategory);
+        return false;
+    }
+    
+    /**
      * 智能匹配职位类别（支持同义词）
      */
     private boolean matchesCategory(String jobCategory, String searchCategory) {
@@ -339,6 +464,7 @@ public class SimpleJobController {
         
         // 先尝试精确匹配
         if (jobCategory.equals(searchCategory)) {
+            log.debug("类别精确匹配成功: 搜索={}, 职位={}", searchCategory, jobCategory);
             return true;
         }
         
@@ -377,6 +503,32 @@ public class SimpleJobController {
     }
     
     /**
+     * 智能匹配经验要求（支持多值和同义词）
+     */
+    private boolean matchesJobExperience(String jobExperience, String searchExperience) {
+        if (searchExperience == null || searchExperience.trim().isEmpty()) {
+            return true;
+        }
+        
+        if (jobExperience == null) {
+            return false;
+        }
+        
+        // 多值匹配（空格分隔）
+        String[] searchExperiences = searchExperience.split("\\s+");
+        
+        for (String exp : searchExperiences) {
+            if (matchesExperienceRobust(jobExperience, exp)) {
+                log.debug("经验要求多值匹配成功: 搜索={}, 职位={}", exp, jobExperience);
+                return true;
+            }
+        }
+        
+        log.debug("经验要求多值匹配失败: 搜索={}, 职位={}", searchExperience, jobExperience);
+        return false;
+    }
+    
+    /**
      * 智能匹配经验要求（支持同义词）
      */
     private boolean matchesExperienceRobust(String jobExperience, String searchExperience) {
@@ -390,6 +542,7 @@ public class SimpleJobController {
         
         // 先尝试精确匹配
         if (jobExperience.equals(searchExperience)) {
+            log.debug("经验精确匹配成功: 搜索={}, 职位={}", searchExperience, jobExperience);
             return true;
         }
         
@@ -493,52 +646,67 @@ public class SimpleJobController {
         };
         
         String[] positions = {
-            // AI/算法相关
-            "AI Agent开发工程师", "机器学习工程师", "深度学习工程师", "算法工程师", "AI工程师", "计算机视觉工程师",
+            // AI/Agent相关
+            "AI Agent开发工程师", "Agent开发工程师", "智能Agent工程师", "对话Agent工程师", "多模态Agent工程师",
+            "机器学习工程师", "深度学习工程师", "算法工程师", "AI工程师", "计算机视觉工程师",
             "自然语言处理工程师", "推荐算法工程师", "数据挖掘工程师", "AI产品经理", "AI架构师", "智能驾驶算法工程师",
+            "大模型工程师", "LLM工程师", "Prompt工程师", "AI训练工程师", "AI推理工程师",
             
             // 后端开发
             "Java开发工程师", "Python开发工程师", "Go开发工程师", "C++开发工程师", "C#开发工程师", "PHP开发工程师",
             "Node.js开发工程师", "Ruby开发工程师", "Scala开发工程师", "Rust开发工程师", "Kotlin开发工程师",
             "微服务架构师", "分布式系统工程师", "高并发开发工程师", "中间件开发工程师", "API开发工程师",
+            "Spring Boot开发工程师", "Spring Cloud开发工程师", "Dubbo开发工程师", "Redis开发工程师",
+            "消息队列工程师", "搜索引擎工程师", "缓存工程师", "数据库开发工程师",
             
             // 前端开发
             "前端开发工程师", "Vue.js开发工程师", "React开发工程师", "Angular开发工程师", "小程序开发工程师",
             "H5开发工程师", "移动端开发工程师", "前端架构师", "全栈开发工程师", "WebGL开发工程师",
+            "TypeScript开发工程师", "Webpack工程师", "Vite工程师", "前端性能优化工程师",
+            "低代码开发工程师", "可视化开发工程师", "前端工程化工程师",
             
             // 移动开发
             "Android开发工程师", "iOS开发工程师", "Flutter开发工程师", "React Native开发工程师", "Xamarin开发工程师",
             "移动端架构师", "跨平台开发工程师", "移动端测试工程师", "移动端产品经理",
+            "小程序开发工程师", "H5开发工程师", "混合开发工程师", "移动端性能优化工程师",
             
             // 数据相关
             "数据分析师", "数据科学家", "数据工程师", "数据架构师", "大数据开发工程师", "ETL工程师",
             "数据仓库工程师", "实时计算工程师", "数据产品经理", "数据运营", "商业智能分析师",
+            "数据治理工程师", "数据安全工程师", "数据可视化工程师", "数据建模工程师",
+            "Spark工程师", "Hadoop工程师", "Flink工程师", "Kafka工程师", "ClickHouse工程师",
             
             // 测试相关
             "测试工程师", "自动化测试工程师", "性能测试工程师", "安全测试工程师", "测试开发工程师",
             "移动端测试工程师", "接口测试工程师", "UI自动化测试工程师", "测试架构师", "质量保证工程师",
+            "渗透测试工程师", "安全测试工程师", "兼容性测试工程师", "压力测试工程师",
             
             // 运维/DevOps
             "运维工程师", "DevOps工程师", "云计算工程师", "网络工程师", "系统管理员", "DBA",
             "容器化工程师", "Kubernetes工程师", "监控工程师", "安全工程师", "基础设施工程师",
             "SRE工程师", "云架构师", "运维开发工程师", "自动化运维工程师",
+            "Docker工程师", "Jenkins工程师", "CI/CD工程师", "云原生工程师", "微服务运维工程师",
             
             // 产品/设计
             "产品经理", "产品总监", "产品运营", "用户研究员", "交互设计师", "UI设计师", "UE设计师",
             "视觉设计师", "平面设计师", "品牌设计师", "动效设计师", "游戏美术设计师", "产品设计师",
             "用户体验设计师", "用户界面设计师", "工业设计师", "空间设计师",
+            "AI产品经理", "数据产品经理", "B端产品经理", "C端产品经理", "增长产品经理",
             
             // 管理岗位
             "项目经理", "技术经理", "研发经理", "部门总监", "CTO", "VP", "CEO", "COO", "CFO",
             "技术总监", "产品总监", "运营总监", "市场总监", "销售总监", "人事总监", "财务总监",
+            "研发总监", "架构师", "技术专家", "高级工程师", "资深工程师", "首席工程师",
             
             // 销售/市场
             "市场营销", "销售经理", "客户经理", "商务拓展", "渠道经理", "品牌经理", "市场推广",
             "数字营销", "内容运营", "社群运营", "活动策划", "公关经理", "媒体运营", "SEO/SEM",
+            "增长运营", "用户运营", "活动运营", "新媒体运营", "直播运营", "短视频运营",
             
             // 人力资源
             "人力资源", "招聘专员", "培训师", "薪酬福利", "员工关系", "HRBP", "组织发展",
             "人才发展", "绩效管理", "企业文化", "HRIS", "人力资源总监", "招聘经理",
+            "技术招聘", "校园招聘", "猎头顾问", "人才测评师", "员工培训师",
             
             // 财务/法务
             "财务分析", "会计", "出纳", "税务专员", "审计", "风控专员", "投资经理", "财务经理",
@@ -548,18 +716,17 @@ public class SimpleJobController {
             // 游戏开发
             "游戏开发工程师", "游戏策划", "游戏美术", "游戏程序", "游戏测试", "游戏运营",
             "Unity开发工程师", "Unreal开发工程师", "游戏服务器开发", "游戏客户端开发",
+            "游戏引擎工程师", "游戏AI工程师", "游戏网络工程师", "游戏性能优化工程师",
             
             // 区块链/Web3
             "区块链开发工程师", "智能合约工程师", "DeFi开发工程师", "NFT开发工程师", "Web3产品经理",
             "区块链架构师", "加密货币分析师", "区块链安全工程师",
+            "Solidity开发工程师", "Web3前端工程师", "区块链运维工程师",
             
             // 硬件/嵌入式
             "嵌入式开发工程师", "硬件工程师", "FPGA工程师", "芯片设计工程师", "物联网工程师",
             "智能硬件工程师", "机器人工程师", "自动驾驶工程师", "无人机工程师",
-            
-            // 咨询/服务
-            "技术咨询", "业务咨询", "管理咨询", "IT咨询", "数字化转型顾问", "解决方案架构师",
-            "售前工程师", "售后工程师", "技术支持", "客户成功经理", "实施顾问"
+            "IoT开发工程师", "边缘计算工程师", "传感器工程师", "智能设备工程师"
         };
         
         String[] cities = {
@@ -579,23 +746,13 @@ public class SimpleJobController {
             "宝鸡", "咸阳", "渭南", "汉中", "安康", "商洛", "延安", "榆林", "铜川",
             "徐州", "常州", "南通", "连云港", "淮安", "盐城", "扬州", "镇江", "泰州", "宿迁",
             "昆山", "江阴", "张家港", "常熟", "太仓", "宜兴", "溧阳", "金坛", "丹阳", "扬中",
-            
-            // 三线城市
             "保定", "唐山", "秦皇岛", "邯郸", "邢台", "沧州", "廊坊", "衡水", "承德", "张家口",
             "芜湖", "蚌埠", "淮南", "马鞍山", "淮北", "铜陵", "安庆", "黄山", "滁州", "阜阳",
-            "宿州", "六安", "亳州", "池州", "宣城", "界首", "明光", "天长", "桐城", "宁国",
-            "株洲", "湘潭", "衡阳", "邵阳", "岳阳", "常德", "张家界", "益阳", "郴州", "永州",
-            "怀化", "娄底", "吉首", "醴陵", "湘乡", "耒阳", "常宁", "浏阳", "津市", "沅江",
-            
-            // 海外城市
-            "香港", "澳门", "台北", "高雄", "新加坡", "东京", "首尔", "曼谷", "吉隆坡", "雅加达",
-            "马尼拉", "胡志明市", "河内", "金边", "万象", "仰光", "达卡", "科伦坡", "加德满都",
-            "纽约", "洛杉矶", "旧金山", "西雅图", "波士顿", "芝加哥", "华盛顿", "迈阿密", "亚特兰大", "达拉斯",
-            "伦敦", "巴黎", "柏林", "慕尼黑", "阿姆斯特丹", "苏黎世", "维也纳", "布鲁塞尔", "哥本哈根", "斯德哥尔摩",
-            "悉尼", "墨尔本", "布里斯班", "珀斯", "阿德莱德", "奥克兰", "惠灵顿", "多伦多", "温哥华", "蒙特利尔"
+            "宿州", "六安", "亳州", "池州", "宣城", "株洲", "湘潭", "衡阳", "邵阳", "岳阳",
+            "常德", "张家界", "益阳", "郴州", "永州", "怀化", "娄底", "吉首"
         };
         
-        String[] categories = {"社招", "校招", "实习"};
+        String[] categories = {"社招", "校招", "实习", "校园招聘", "应届生招聘", "社会招聘"};
         
         String[] industries = {
             // 互联网/科技
@@ -657,7 +814,7 @@ public class SimpleJobController {
         
         String[] companyScales = {"20-99人", "100-499人", "500-999人", "1000-9999人", "10000人以上"};
         
-        for (int i = 1; i <= 2000; i++) {
+        for (int i = 1; i <= 20000; i++) {
 
             
             
@@ -693,8 +850,6 @@ public class SimpleJobController {
             // 职位状态
             job.put("status", i % 100 == 0 ? "已下线" : "招聘中");
             job.put("urgent", i % 50 == 0);
-            job.put("viewCount", (i * 7) % 1000);
-            job.put("applyCount", (i * 3) % 200);
             
             // 职责描述
             job.put("responsibilities", generateResponsibilities((String) job.get("title")));
@@ -728,75 +883,84 @@ public class SimpleJobController {
         log.info("开始过滤职位，搜索条件: city={}, jobTitle={}, salaryRange={}, jobCategory={}, experience={}, education={}, companyScale={}, industry={}, keywords={}", 
                 city, jobTitle, salaryRange, jobCategory, experience, education, companyScale, industry, keywords);
         
+        // 显示前3个职位的信息用于调试
+        log.info("前3个职位信息:");
+        for (int i = 0; i < Math.min(3, allJobs.size()); i++) {
+            Map<String, Object> job = allJobs.get(i);
+            log.info("职位{}: ID={}, 标题={}, 城市={}, 类别={}, 经验={}, 学历={}, 状态={}", 
+                    i+1, job.get("jobId"), job.get("title"), job.get("city"), 
+                    job.get("category"), job.get("experience"), job.get("education"), job.get("status"));
+        }
+        
         List<Map<String, Object>> filtered = allJobs.stream()
                 .filter(job -> {
-                    boolean cityMatch = city == null || city.equals(job.get("city"));
-                    if (!cityMatch) {
-                        log.debug("城市不匹配: 期望={}, 实际={}", city, job.get("city"));
-                    }
+                    boolean cityMatch = city == null || matchesCity((String) job.get("city"), city);
+//                    if (!cityMatch) {
+//                        log.info("城市不匹配: 期望={}, 实际={}, 职位ID={}", city, job.get("city"), job.get("jobId"));
+//                    }
                     return cityMatch;
                 })
                 .filter(job -> {
-                    boolean titleMatch = jobTitle == null || ((String) job.get("title")).contains(jobTitle);
-                    if (!titleMatch) {
-                        log.debug("职位名称不匹配: 期望包含={}, 实际={}", jobTitle, job.get("title"));
-                    }
+                    boolean titleMatch = jobTitle == null || matchesJobTitle((String) job.get("title"), jobTitle);
+//                    if (!titleMatch) {
+//                        log.info("职位名称不匹配: 期望包含={}, 实际={}, 职位ID={}", jobTitle, job.get("title"), job.get("jobId"));
+//                    }
                     return titleMatch;
                 })
                 .filter(job -> {
-                    boolean categoryMatch = matchesCategory((String) job.get("category"), jobCategory);
-                    if (!categoryMatch) {
-                        log.debug("职位类别不匹配: 期望={}, 实际={}", jobCategory, job.get("category"));
-                    }
+                    boolean categoryMatch = matchesJobCategory((String) job.get("category"), jobCategory);
+//                    if (!categoryMatch) {
+//                        log.info("职位类别不匹配: 期望={}, 实际={}, 职位ID={}", jobCategory, job.get("category"), job.get("jobId"));
+//                    }
                     return categoryMatch;
                 })
                 .filter(job -> {
                     boolean salaryMatch = salaryRange == null || matchesSalaryRange((String) job.get("salary"), salaryRange);
-                    if (!salaryMatch) {
-                        log.debug("薪资不匹配: 期望={}, 实际={}", salaryRange, job.get("salary"));
-                    }
+//                    if (!salaryMatch) {
+//                        log.info("薪资不匹配: 期望={}, 实际={}, 职位ID={}", salaryRange, job.get("salary"), job.get("jobId"));
+//                    }
                     return salaryMatch;
                 })
                 .filter(job -> {
-                    boolean experienceMatch = matchesExperienceRobust((String) job.get("experience"), experience);
-                    if (!experienceMatch) {
-                        log.debug("经验要求不匹配: 期望={}, 实际={}", experience, job.get("experience"));
-                    }
+                    boolean experienceMatch = matchesJobExperience((String) job.get("experience"), experience);
+//                    if (!experienceMatch) {
+//                        log.info("经验要求不匹配: 期望={}, 实际={}, 职位ID={}", experience, job.get("experience"), job.get("jobId"));
+//                    }
                     return experienceMatch;
                 })
                 .filter(job -> {
-                    boolean educationMatch = education == null || matchesEducation((String) job.get("education"), education);
-                    if (!educationMatch) {
-                        log.debug("学历要求不匹配: 期望={}, 实际={}", education, job.get("education"));
-                    }
+                    boolean educationMatch = education == null || matchesJobEducation((String) job.get("education"), education);
+//                    if (!educationMatch) {
+//                        log.info("学历要求不匹配: 期望={}, 实际={}, 职位ID={}", education, job.get("education"), job.get("jobId"));
+//                    }
                     return educationMatch;
                 })
                 .filter(job -> {
                     boolean scaleMatch = companyScale == null || companyScale.equals(job.get("companyScale"));
-                    if (!scaleMatch) {
-                        log.debug("公司规模不匹配: 期望={}, 实际={}", companyScale, job.get("companyScale"));
-                    }
+//                    if (!scaleMatch) {
+//                        log.info("公司规模不匹配: 期望={}, 实际={}, 职位ID={}", companyScale, job.get("companyScale"), job.get("jobId"));
+//                    }
                     return scaleMatch;
                 })
                 .filter(job -> {
                     boolean industryMatch = industry == null || industry.equals(job.get("industry"));
-                    if (!industryMatch) {
-                        log.debug("行业不匹配: 期望={}, 实际={}", industry, job.get("industry"));
-                    }
+//                    if (!industryMatch) {
+//                        log.info("行业不匹配: 期望={}, 实际={}, 职位ID={}", industry, job.get("industry"), job.get("jobId"));
+//                    }
                     return industryMatch;
                 })
                 .filter(job -> {
                     boolean keywordsMatch = keywords == null || matchesKeywords(job, keywords);
-                    if (!keywordsMatch) {
-                        log.debug("关键词不匹配: 期望包含={}", keywords);
-                    }
+//                    if (!keywordsMatch) {
+//                        log.info("关键词不匹配: 期望包含={}, 职位ID={}", keywords, job.get("jobId"));
+//                    }
                     return keywordsMatch;
                 })
                 .filter(job -> {
                     boolean statusMatch = "招聘中".equals(job.get("status"));
-                    if (!statusMatch) {
-                        log.debug("职位状态不匹配: 期望=招聘中, 实际={}", job.get("status"));
-                    }
+//                    if (!statusMatch) {
+//                        log.info("职位状态不匹配: 期望=招聘中, 实际={}, 职位ID={}", job.get("status"), job.get("jobId"));
+//                    }
                     return statusMatch;
                 })
                 .collect(ArrayList::new, (list, job) -> list.add(job), ArrayList::addAll);
@@ -912,50 +1076,6 @@ public class SimpleJobController {
         return result;
     }
 
-    /**
-     * 生成模拟职位详情
-     */
-    private Map<String, Object> generateMockJobDetail(String jobId) {
-        Map<String, Object> job = new HashMap<>();
-        
-        job.put("jobId", jobId);
-        job.put("title", "高级Java开发工程师");
-        job.put("company", "北京科技有限公司");
-        job.put("city", "北京");
-        job.put("category", "社招");
-        job.put("salary", "20-30K·13薪");
-        job.put("experience", "3-5年");
-        job.put("education", "本科及以上");
-        job.put("publishTime", LocalDateTime.now().minusDays(2));
-        
-        job.put("responsibilities", Arrays.asList(
-            "负责后端系统架构设计和开发，确保系统稳定性和可扩展性",
-            "参与需求分析和技术方案设计，制定开发计划",
-            "编写高质量、可维护的代码，遵循编码规范",
-            "参与代码审查和技术分享，提升团队技术水平",
-            "协助团队解决技术难题，优化系统性能"
-        ));
-        
-        job.put("requirements", Arrays.asList(
-            "本科及以上学历，计算机相关专业",
-            "3-5年Java开发经验，熟练掌握Java核心技术",
-            "精通Spring Boot、Spring MVC等主流框架",
-            "熟悉MySQL、Redis等数据库技术",
-            "具备良好的系统设计和架构能力",
-            "有大型项目开发经验，了解微服务架构",
-            "具备良好的团队协作和沟通能力"
-        ));
-        
-        job.put("companyInfo", Map.of(
-            "name", "北京科技有限公司",
-            "scale", "500-1000人",
-            "industry", "互联网/软件",
-            "financing", "B轮",
-            "location", "北京市朝阳区"
-        ));
-        
-        return job;
-    }
 
     /**
      * 生成模拟公司信息 - 更真实详细
@@ -1185,11 +1305,11 @@ public class SimpleJobController {
      * 生成公司福利
      */
     private List<String> generateCompanyBenefits(String companyName) {
-        List<String> baseBenefits = Arrays.asList(
+        List<String> baseBenefits = new ArrayList<>(Arrays.asList(
             "五险一金", "年终奖", "股权激励", "弹性工作", "带薪年假", "免费三餐", "健身房", "团建活动",
             "技术培训", "职业发展通道", "商业保险", "交通补贴", "通讯补贴", "住房补贴", "节日福利",
             "生日福利", "体检", "旅游", "团建", "下午茶", "零食", "咖啡", "茶饮"
-        );
+        ));
         
         // 大公司额外福利
         if (companyName.contains("百度") || companyName.contains("腾讯") || companyName.contains("阿里巴巴") || 
@@ -1271,12 +1391,12 @@ public class SimpleJobController {
      * 生成随机经验要求
      */
     private String generateRandomExperience(String category) {
-        if ("实习".equals(category)) {
+        if ("实习".equals(category) || "实习生".equals(category)) {
             return "在校学生";
-        } else if ("校招".equals(category)) {
+        } else if ("校招".equals(category) || "校园招聘".equals(category) || "应届生招聘".equals(category)) {
             return "应届毕业生";
         } else {
-            String[] experiences = {"1-3年", "3-5年", "5-10年", "10年以上", "不限"};
+            String[] experiences = {"1-3年", "3-5年", "5-10年", "10年以上", "不限", "应届生", "应届毕业生", "在校学生"};
             return experiences[(int)(Math.random() * experiences.length)];
         }
     }
@@ -1424,7 +1544,7 @@ public class SimpleJobController {
                 int max = Integer.parseInt(maxSalary);
                 int jobSalaryInt = Integer.parseInt(jobSalaryNum);
                 
-                // 如果职位薪资在搜索范围内，或者职位薪资包含搜索范围的最小值
+                // 如果职位薪资在搜索范围内，或者职位薪资包含搜索范围的最小值或最大值
                 boolean match = (jobSalaryInt >= min && jobSalaryInt <= max) || 
                                jobSalary.contains(minSalary) || 
                                jobSalary.contains(maxSalary);
@@ -1439,10 +1559,41 @@ public class SimpleJobController {
         }
         
         // 如果格式不正确，使用简单的包含匹配
-        return jobSalary.contains(searchRange.split("-")[0]);
+        if (searchRange.contains("-")) {
+            return jobSalary.contains(searchRange.split("-")[0]);
+        } else {
+            // 单个数值的匹配
+            return jobSalary.contains(searchRange.replaceAll("[^0-9]", ""));
+        }
     }
 
 
+    /**
+     * 智能匹配学历要求（支持多值）
+     */
+    private boolean matchesJobEducation(String jobEducation, String searchEducation) {
+        if (searchEducation == null || searchEducation.trim().isEmpty()) {
+            return true;
+        }
+        
+        if (jobEducation == null) {
+            return false;
+        }
+        
+        // 多值匹配（空格分隔）
+        String[] searchEducations = searchEducation.split("\\s+");
+        
+        for (String edu : searchEducations) {
+            if (matchesEducation(jobEducation, edu)) {
+                log.debug("学历要求多值匹配成功: 搜索={}, 职位={}", edu, jobEducation);
+                return true;
+            }
+        }
+        
+        log.debug("学历要求多值匹配失败: 搜索={}, 职位={}", searchEducation, jobEducation);
+        return false;
+    }
+    
     /**
      * 检查学历要求是否匹配
      */
@@ -1455,32 +1606,48 @@ public class SimpleJobController {
             return true;
         }
         
+        log.debug("学历匹配检查: 职位学历={}, 搜索学历={}", jobEducation, searchEducation);
+        
         // 学历等级匹配
         if (searchEducation.contains("大专") && jobEducation.contains("大专")) {
+            log.debug("学历匹配成功: 大专");
             return true;
         }
         if (searchEducation.contains("本科") && jobEducation.contains("本科")) {
+            log.debug("学历匹配成功: 本科");
             return true;
         }
         if (searchEducation.contains("硕士") && jobEducation.contains("硕士")) {
+            log.debug("学历匹配成功: 硕士");
             return true;
         }
         if (searchEducation.contains("博士") && jobEducation.contains("博士")) {
+            log.debug("学历匹配成功: 博士");
             return true;
         }
         
         // 默认包含匹配
-        return jobEducation.contains(searchEducation);
+        boolean match = jobEducation.contains(searchEducation);
+        log.debug("学历匹配结果: {} (职位:{}, 搜索:{})", match, jobEducation, searchEducation);
+        return match;
     }
 
     /**
-     * 检查关键词是否匹配
+     * 检查关键词是否匹配（基于相似度匹配）
      */
     private boolean matchesKeywords(Map<String, Object> job, String keywords) {
         if (keywords == null || keywords.isEmpty()) {
             return true;
         }
         
+        // 使用相似度匹配服务
+        boolean similarityMatch = embeddingMatchService.matchesKeywords(job, keywords);
+        if (similarityMatch) {
+            log.debug("关键词相似度匹配成功: 关键词={}", keywords);
+            return true;
+        }
+        
+        // 备选：传统字符串匹配
         String[] keywordArray = keywords.split("\\s+");
         String jobText = "";
         
@@ -1505,14 +1672,23 @@ public class SimpleJobController {
         
         jobText = jobText.toLowerCase();
         
+        log.debug("关键词匹配检查: 职位文本长度={}, 关键词={}", jobText.length(), keywords);
+        
         // 检查是否包含所有关键词
+        int matchedKeywords = 0;
         for (String keyword : keywordArray) {
-            if (!jobText.contains(keyword.toLowerCase())) {
-                return false;
+            if (jobText.contains(keyword.toLowerCase())) {
+                matchedKeywords++;
+                log.debug("关键词匹配: {}", keyword);
+            } else {
+                log.debug("关键词不匹配: {}", keyword);
             }
         }
         
-        return true;
+        // 如果匹配的关键词数量超过一半，则认为匹配
+        boolean match = matchedKeywords >= (keywordArray.length + 1) / 2;
+        log.debug("关键词匹配结果: {}/{} = {}", matchedKeywords, keywordArray.length, match);
+        return match;
     }
 
     /**
@@ -1543,10 +1719,11 @@ public class SimpleJobController {
                 });
                 break;
             case "popularity":
+                // 基于发布时间排序（模拟热度）
                 sortedJobs.sort((job1, job2) -> {
-                    Integer view1 = (Integer) job1.get("viewCount");
-                    Integer view2 = (Integer) job2.get("viewCount");
-                    int result = view1.compareTo(view2);
+                    LocalDateTime time1 = (LocalDateTime) job1.get("publishTime");
+                    LocalDateTime time2 = (LocalDateTime) job2.get("publishTime");
+                    int result = time1.compareTo(time2);
                     return "desc".equals(sortOrder) ? -result : result;
                 });
                 break;

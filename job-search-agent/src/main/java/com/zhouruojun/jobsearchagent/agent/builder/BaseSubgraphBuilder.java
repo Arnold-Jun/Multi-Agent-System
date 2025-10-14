@@ -245,10 +245,6 @@ public abstract class BaseSubgraphBuilder<T extends BaseAgentState> {
      */
     protected abstract String getActionName();
 
-    /**
-     * 获取总结节点名称 - 子类实现
-     */
-    protected abstract String getSummaryName();
 
     /**
      * 获取提示词 - 子类实现
@@ -261,11 +257,11 @@ public abstract class BaseSubgraphBuilder<T extends BaseAgentState> {
      */
     protected EdgeAction<T> getStandardAgentShouldContinue() {
         return (state) ->
-                state.next().orElse("summary");
+                state.next().orElse("END");
     }
 
     /**
-     * 获取标准的工具执行回调边条件 - 辅助方法
+     * 获取标准的工具执行回调边条件
      * 工具执行完成后返回智能体
      */
     protected EdgeAction<T> getStandardActionShouldContinue() {
@@ -273,45 +269,5 @@ public abstract class BaseSubgraphBuilder<T extends BaseAgentState> {
                 state.next().orElse("callback");
     }
 
-    /**
-     * 获取标准的总结边条件 - 辅助方法
-     * 总结完成后结束子图执行
-     */
-    protected EdgeAction<T> getStandardSummaryShouldContinue() {
-        return (state) -> "FINISH";
-    }
-    
-    /**
-     * 获取checkpoint保存器
-     */
-    protected BaseCheckpointSaver getCheckpointSaver() {
-        return checkpointSaver;
-    }
-    
-    /**
-     * 是否启用了checkpoint
-     */
-    protected boolean isCheckpointEnabled() {
-        return enableCheckpoint && checkpointSaver != null;
-    }
-    
-    /**
-     * 获取checkpoint命名空间
-     */
-    protected String getCheckpointNamespace() {
-        return checkpointNamespace;
-    }
-    
-    /**
-     * 构建编译配置
-     */
-    protected CompileConfig buildCompileConfig() {
-        if (!isCheckpointEnabled()) {
-            return CompileConfig.builder().build();
-        }
-        
-        return CompileConfig.builder()
-                .checkpointSaver(checkpointSaver)
-                .build();
-    }
+
 }

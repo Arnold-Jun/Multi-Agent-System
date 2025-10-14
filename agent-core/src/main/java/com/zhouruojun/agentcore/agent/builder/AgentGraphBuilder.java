@@ -11,10 +11,8 @@ import com.zhouruojun.a2acore.spec.AgentCard;
 import com.zhouruojun.agentcore.agent.actions.AgentInvoke;
 import com.zhouruojun.agentcore.agent.actions.AgentInvokeStateCheck;
 import com.zhouruojun.agentcore.agent.actions.CallSupervisorAgent;
-import com.zhouruojun.agentcore.agent.actions.UserInput;
 import com.zhouruojun.agentcore.agent.serializers.AgentSerializers;
 import com.zhouruojun.agentcore.agent.state.AgentMessageState;
-import com.zhouruojun.agentcore.mcp.ToolProviderManager;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import org.bsc.async.AsyncGenerator;
@@ -43,9 +41,7 @@ public class AgentGraphBuilder {
     private StreamingChatLanguageModel streamingChatLanguageModel;
     private ChatLanguageModel chatLanguageModel;
     private StateSerializer<AgentMessageState> stateSerializer;
-    private ToolProviderManager toolProviderManager;
     private String username;
-    private String requestId;
     private A2aClientManager a2aClientManager;
 
     /**
@@ -72,13 +68,6 @@ public class AgentGraphBuilder {
         return this;
     }
 
-    /**
-     * 设置工具提供者管理器
-     */
-    public AgentGraphBuilder toolProviderManager(ToolProviderManager toolProviderManager) {
-        this.toolProviderManager = toolProviderManager;
-        return this;
-    }
 
     /**
      * 设置用户名
@@ -88,13 +77,6 @@ public class AgentGraphBuilder {
         return this;
     }
 
-    /**
-     * 设置请求ID
-     */
-    public AgentGraphBuilder requestId(String requestId) {
-        this.requestId = requestId;
-        return this;
-    }
 
     /**
      * 设置A2A客户端管理器
@@ -151,6 +133,7 @@ public class AgentGraphBuilder {
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .agentName("supervisor")
                 .agentCards(agentCards)
+                .compactContextEnabled(true)
                 .build();
 
         // 创建子节点列表
@@ -160,7 +143,7 @@ public class AgentGraphBuilder {
 
         // 定义主管路由逻辑
         final EdgeAction<AgentMessageState> supervisorRouter = (state) ->
-                state.next().filter(supervisorChildren::contains).orElse("userInput");
+                state.next().filter(supervisorChildren::contains).orElse("FINISH");
 
         // 创建流式输出队列
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<AgentMessageState>>> queue = new LinkedBlockingQueue<>();
@@ -173,9 +156,9 @@ public class AgentGraphBuilder {
         return new StateGraph<AgentMessageState>(AgentMessageState.SCHEMA, stateSerializer)
                 // 添加节点
                 .addNode("supervisor", node_async(callSupervisorAgent))
-                .addNode("agentInvoke", node_async(new AgentInvoke(a2aClientManager, toolProviderManager.toolSpecifications(username, requestId))))
+                .addNode("agentInvoke", node_async(new AgentInvoke(a2aClientManager)))
                 .addNode("agentInvokeStateCheck", node_async(new AgentInvokeStateCheck(a2aClientManager)))
-                .addNode("userInput", node_async(new UserInput()))
+//                .addNode("userInput", node_async(new UserInput()))
                 
                 // 添加边
                 .addEdge(START, "supervisor")
@@ -185,7 +168,7 @@ public class AgentGraphBuilder {
                         edge_async(supervisorRouter),
                         Map.of(
                                 "agentInvoke", "agentInvoke",
-                                "userInput", "userInput",
+//                                "userInput", "userInput",
                                 "FINISH", END
                         ))
                 
@@ -193,9 +176,9 @@ public class AgentGraphBuilder {
                 .addConditionalEdges("agentInvoke",
                         edge_async(state -> state.next().orElse("supervisor")),
                         Map.of(
-                                "agentInvokeStateCheck", "agentInvokeStateCheck",  // ✅ 添加缺失的映射
-                                "supervisor", "supervisor",
-                                "userInput", "userInput"
+                                "agentInvokeStateCheck", "agentInvokeStateCheck",
+                                "supervisor", "supervisor"
+//                                "userInput", "userInput"
                         ))
                 
                 // 添加条件边 - 智能体调用状态检查
@@ -204,9 +187,9 @@ public class AgentGraphBuilder {
                         Map.of(
                                 "continue", "agentInvokeStateCheck",
                                 "FINISH", "supervisor"
-                        ))
+                        ));
                 
                 // 用户输入后回到主管
-                .addEdge("userInput", "supervisor");
+//                .addEdge("userInput", "supervisor");
     }
 }

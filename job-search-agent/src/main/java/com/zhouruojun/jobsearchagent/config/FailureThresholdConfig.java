@@ -16,7 +16,7 @@ public class FailureThresholdConfig {
     /**
      * 默认最大失败次数
      */
-    private int defaultMaxFailures = 3;
+    private int defaultMaxFailures = 1;
     
     /**
      * 检查配置是否有效
