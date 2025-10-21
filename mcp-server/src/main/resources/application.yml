@@ -1,0 +1,59 @@
+spring:
+  ai:
+    mcp:
+      server:
+        name: traveling-mcp-server
+        version: 1.0.0
+        type: ASYNC
+        sse-message-endpoint: /mcp/messages
+  task:
+    scheduling:
+      enabled: true
+
+server:
+  port: 18083
+
+# MCP工具配置（已废弃，请使用 mcp.json 配置文件）
+# 新的配置方式：在 src/main/resources/mcp.json 中配置
+# 示例格式：
+# {
+#   "mcpServers": {
+#     "server-name": {
+#       "url": "服务器地址",
+#       "description": "服务器描述",
+#       "enabled": true
+#     }
+#   }
+# }
+mcp:
+  tools:
+    # 保留旧配置格式用于兼容（已废弃）
+    amap:
+      key: 16d2c1ab42a4fa07d82faf602af4bcef
+      base-url: https://mcp.amap.com/mcp
+      mcp-url: https://mcp.amap.com/mcp?key=16d2c1ab42a4fa07d82faf602af4bcef
+    xiaohongshu:
+      base-url: http://localhost:18060
+      mcp-url: http://localhost:18060/mcp
+      description: "小红书内容发布服务"
+    weather:
+      api-key: ${WEATHER_API_KEY:YOUR_WEATHER_KEY}
+      base-url: https://api.openweathermap.org/data/2.5
+
+# 日志配置
+logging:
+  level:
+    com.zhouruojun.mcpserver: DEBUG
+    org.springframework.ai: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 管理端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✈️ 旅游智能体 - Traveling Agent</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-plane"></i>
+                    <span>旅游智能体</span>
+                </div>
+                <button class="new-chat-btn" id="newChatBtn">
+                    <i class="fas fa-plus"></i>
+                    新对话
+                </button>
+            </div>
+            
+            <div class="chat-history">
+                <h3>对话历史</h3>
+                <div class="history-list" id="chatHistory">
+                    <!-- 动态生成聊天历史 -->
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="agent-status">
+                    <div class="status-indicator" id="agentStatus">
+                        <span class="status-dot"></span>
+                        <span class="status-text">连接中...</span>
+                    </div>
+                </div>
+                <div class="agent-capabilities">
+                    <h4>智能体能力</h4>
+                    <div class="capability-list">
+                        <div class="capability-item">
+                            <i class="fas fa-search"></i>
+                            <span>信息搜索</span>
+                        </div>
+                        <div class="capability-item">
+                            <i class="fas fa-route"></i>
+                            <span>行程规划</span>
+                        </div>
+                        <div class="capability-item">
+                            <i class="fas fa-calendar-check"></i>
+                            <span>预订服务</span>
+                        </div>
+                        <div class="capability-item">
+                            <i class="fas fa-map-marked-alt"></i>
+                            <span>出行监控</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主聊天区域 -->
+        <main class="main-content">
+            <!-- 聊天头部 -->
+            <header class="chat-header">
+                <div class="chat-title">
+                    <h1>旅游规划助手</h1>
+                    <p>您的专属旅游智能体，为您提供全方位的旅游服务</p>
+                </div>
+                <div class="chat-actions">
+                    <button class="action-btn" id="exportBtn" title="导出对话">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button class="action-btn" id="settingsBtn" title="设置">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 聊天消息区域 -->
+            <div class="chat-container">
+                <div class="messages-container" id="messagesContainer">
+                    <!-- 欢迎消息 -->
+                    <div class="message agent-message">
+                        <div class="message-avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="message-content">
+                            <div class="message-header">
+                                <span class="sender-name">旅游智能体</span>
+                                <span class="message-time">刚刚</span>
+                            </div>
+                            <div class="message-text">
+                                <p>👋 您好！我是您的专属旅游智能体，我可以帮助您：</p>
+                                <ul>
+                                    <li>🔍 搜索目的地信息和景点详情</li>
+                                    <li>📅 制定个性化旅游行程</li>
+                                    <li>🏨 预订酒店、机票等服务</li>
+                                    <li>🗺️ 提供出行建议和实时监控</li>
+                                </ul>
+                                <p>请告诉我您的旅游需求，让我为您规划一次完美的旅程！</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 输入区域 -->
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <div class="input-actions">
+                            <button class="input-action-btn" id="attachBtn" title="上传文件">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                            <button class="input-action-btn" id="voiceBtn" title="语音输入">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                        </div>
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="请描述您的旅游需求，例如：我想去日本旅游7天，预算1万元..."
+                            rows="1"
+                        ></textarea>
+                        <button class="send-btn" id="sendBtn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="input-footer">
+                        <div class="quick-actions">
+                            <button class="quick-action-btn" data-prompt="我想去日本旅游7天">日本7日游</button>
+                            <button class="quick-action-btn" data-prompt="帮我规划一个欧洲10日游">欧洲10日游</button>
+                            <button class="quick-action-btn" data-prompt="我想去马尔代夫度蜜月">马尔代夫蜜月</button>
+                            <button class="quick-action-btn" data-prompt="帮我找一些适合亲子游的目的地">亲子游推荐</button>
+                        </div>
+                        <div class="input-tips">
+                            <span>💡 提示：您可以描述目的地、时间、预算、人数等详细信息</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 加载遮罩 -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <p>智能体正在思考中...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>设置</h2>
+                <button class="modal-close" id="closeSettingsModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label>模型设置</label>
+                    <select id="modelSelect">
+                        <option value="qwen3:8b">Qwen3 8B</option>
+                        <option value="llama3:8b">Llama3 8B</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>温度参数</label>
+                    <input type="range" id="temperatureSlider" min="0" max="2" step="0.1" value="0.7">
+                    <span id="temperatureValue">0.7</span>
+                </div>
+                <div class="setting-group">
+                    <label>最大Token数</label>
+                    <input type="number" id="maxTokensInput" min="100" max="8000" value="4096">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="saveSettings">保存设置</button>
+                <button class="btn btn-secondary" id="cancelSettings">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件上传模态框 -->
+    <div class="modal" id="uploadModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>上传旅游计划文件</h2>
+                <button class="modal-close" id="closeUploadModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>拖拽文件到此处或点击选择文件</p>
+                    <p class="upload-tips">支持 PDF, DOC, DOCX, TXT 格式，最大 10MB</p>
+                    <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt" multiple>
+                </div>
+                <div class="uploaded-files" id="uploadedFiles"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="uploadFiles">上传文件</button>
+                <button class="btn btn-secondary" id="cancelUpload">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="travel-visualization.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

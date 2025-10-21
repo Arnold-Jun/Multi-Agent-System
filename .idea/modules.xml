@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/Multi-Agent-System.iml" filepath="$PROJECT_DIR$/.idea/Multi-Agent-System.iml" />
+      <module fileurl="file://$PROJECT_DIR$/boss-mock-api/boss-mock-api.iml" filepath="$PROJECT_DIR$/boss-mock-api/boss-mock-api.iml" />
     </modules>
   </component>
 </project>

@@ -10,6 +10,8 @@
         <option value="$PROJECT_DIR$/data-analysis-agent/pom.xml" />
         <option value="$PROJECT_DIR$/job-search-agent/pom.xml" />
         <option value="$PROJECT_DIR$/boss-mock-api/pom.xml" />
+        <option value="$PROJECT_DIR$/traveling-agent/pom.xml" />
+        <option value="$PROJECT_DIR$/mcp-server/pom.xml" />
       </list>
     </option>
   </component>
