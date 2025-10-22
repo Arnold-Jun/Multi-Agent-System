@@ -38,8 +38,11 @@ public class ToolRegistryConfig implements CommandLineRunner {
         toolRegistry.registerTool("maps_around_search", "metaSearchAgent");
         toolRegistry.registerTool("maps_search_detail", "metaSearchAgent");
         toolRegistry.registerTool("maps_text_search", "metaSearchAgent");
+        toolRegistry.registerTool("maps_weather", "metaSearchAgent");
         toolRegistry.registerTool("search_feeds", "metaSearchAgent");
         toolRegistry.registerTool("get_feed_detail", "metaSearchAgent");
+        toolRegistry.registerTool("airbnb_search", "metaSearchAgent");
+        toolRegistry.registerTool("airbnb_listing_details", "metaSearchAgent");
 
         // ItineraryPlannerAgent - 行程规划智能体工具
         toolRegistry.registerTool("maps_direction_driving", "itineraryPlannerAgent");
@@ -48,7 +51,15 @@ public class ToolRegistryConfig implements CommandLineRunner {
         toolRegistry.registerTool("maps_direction_walking", "itineraryPlannerAgent");
 
         // BookingAgent - 预订智能体工具
-        //toolRegistry.registerTool("bookFlight", "bookingAgent");
+        toolRegistry.registerTool("get-current-date", "bookingAgent");
+        toolRegistry.registerTool("get-stations-code-in-city", "bookingAgent");
+        toolRegistry.registerTool("get-station-code-of-citys", "bookingAgent");
+        toolRegistry.registerTool("get-station-code-by-names", "bookingAgent");
+        toolRegistry.registerTool("get-station-by-telecode", "bookingAgent");
+        toolRegistry.registerTool("get-tickets", "bookingAgent");
+        toolRegistry.registerTool("get-interline-tickets", "bookingAgent");
+        toolRegistry.registerTool("get-train-route-stations", "bookingAgent");
+
 
 
         // OnTripAgent - 出行智能体工具

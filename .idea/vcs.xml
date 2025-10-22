@@ -2,7 +2,5 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/codewiz-agent" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/ee-mcp-server" vcs="Git" />
   </component>
 </project>

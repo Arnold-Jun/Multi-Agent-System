@@ -1,14 +1,26 @@
 {
   "mcpServers": {
     "amap-maps-streamableHTTP": {
-      "url": "https://mcp.amap.com/mcp?key=16d2c1ab42a4fa07d82faf602af4bcef",
-      "description": "高德地图MCP服务 - 提供地图、导航、地理编码等功能",
-      "enabled": true
+      "url": "https://mcp.amap.com/mcp?key=16d2c1ab42a4fa07d82faf602af4bcef"
     },
     "xiaohongshu-mcp": {
       "url": "http://localhost:18060/mcp",
-      "description": "小红书内容发布服务",
-      "enabled": true
+      "description": "小红书内容发布服务"
+    },
+    "airbnb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@openbnb/mcp-server-airbnb",
+        "--ignore-robots-txt"
+      ]
+    },
+    "12306-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "12306-mcp"
+      ]
     }
   }
 }

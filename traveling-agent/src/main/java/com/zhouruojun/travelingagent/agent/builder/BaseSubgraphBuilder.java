@@ -186,8 +186,6 @@ public abstract class BaseSubgraphBuilder<T extends BaseAgentState> {
      */
     protected CallSubAgent createCallAgent(BaseAgent agent) {
         CallSubAgent callAgent = new CallSubAgent(getAgentName(), agent);
-        // 注意：这里需要类型转换，因为CallSubAgent期望SubgraphState，但基类使用泛型T
-        // 由于子图构建器都使用SubgraphState，这个转换是安全的
         @SuppressWarnings("unchecked")
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>> subgraphQueue =
             (BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>>) (BlockingQueue<?>) queue;
