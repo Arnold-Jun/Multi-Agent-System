@@ -78,6 +78,12 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
                     buildResultProcessingUserPrompt(state)
                 );
             }
+            case USER_INPUT_PROCESSING -> {
+                addSchedulerMessages(messages,
+                    PromptTemplateManager.instance.buildSchedulerUpdateSystemPrompt(),
+                    buildUserInputProcessingUserPrompt(state)
+                );
+            }
         }
         
         return messages;
@@ -126,6 +132,12 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
      * 判断调度场景
      */
     private SchedulerScenario determineSchedulerScenario(MainGraphState state) {
+        // 检查是否有用户输入（从userInput节点恢复）
+        if (state.getValue("userInput").isPresent()) {
+            // 有用户输入，说明是从userInput节点恢复，需要处理用户输入
+            return SchedulerScenario.USER_INPUT_PROCESSING;
+        }
+        
         // 检查是否有子图执行结果
         Optional<Map<String, String>> subgraphResults = state.getSubgraphResults();
         if (subgraphResults.isPresent() && !subgraphResults.get().isEmpty()) {
@@ -135,6 +147,38 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         
         // 没有子图结果，说明是初始调度场景
         return SchedulerScenario.INITIAL_SCHEDULING;
+    }
+    
+    /**
+     * 构建用户输入处理的用户提示词
+     */
+    private String buildUserInputProcessingUserPrompt(MainGraphState state) {
+        String originalUserQuery = state.getOriginalUserQuery().orElse("用户查询");
+        String userInput = (String) state.getValue("userInput").orElse("用户输入");
+        String todoListInfo = state.getTodoListForScheduler();
+        
+        // 构建用户输入历史
+        List<String> userInputHistory = state.getUserQueryHistory();
+        String userInputHistoryStr = buildUserInputHistoryString(userInputHistory);
+        
+        return PromptTemplateManager.instance.buildSchedulerUserInputUserPrompt(
+            originalUserQuery, userInput, userInputHistoryStr, todoListInfo
+        );
+    }
+    
+    /**
+     * 构建用户输入历史字符串
+     */
+    private String buildUserInputHistoryString(List<String> userInputHistory) {
+        if (userInputHistory == null || userInputHistory.isEmpty()) {
+            return "无历史输入";
+        }
+        
+        StringBuilder historyBuilder = new StringBuilder();
+        for (int i = 0; i < userInputHistory.size(); i++) {
+            historyBuilder.append(String.format("第%d轮输入：%s\n", i + 1, userInputHistory.get(i)));
+        }
+        return historyBuilder.toString().trim();
     }
     
     /**
@@ -174,6 +218,22 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         
         // 更新TodoList中的任务状态
         updateTaskStatusInTodoList(state, taskUpdate);
+        
+        // 问号启发式：如果finalResponse以问号结尾，直接路由到userInput
+        String finalResponse = state.getFinalResponse().orElse(null);
+        if (finalResponse != null && endsWithQuestionMark(finalResponse)) {
+            log.info("问号启发式触发：finalResponse以问号结尾，直接路由到userInput");
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("finalResponse", finalResponse);
+            result.put("userInputRequired", true);
+            
+            // 添加通用状态信息
+            addCommonStateInfo(result, state);
+            result.put("next", "userInput");
+            
+            return result;
+        }
         
         // 检查Scheduler是否建议重规划
         if ("planner".equals(nextAction.getNext())) {
@@ -223,6 +283,14 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
             }
         }
         
+        // 验证next字段
+        String nextNode = nextAction.getNext();
+        if (nextNode == null || nextNode.trim().isEmpty()) {
+            log.error("Scheduler返回的next字段为空，taskId: {}, status: {}", 
+                    taskUpdate.getTaskId(), taskUpdate.getStatus());
+            throw new IllegalStateException("CallSchedulerAgent必须设置有效的next字段");
+        }
+        
         // 设置子图执行上下文
         Map<String, Object> result = new java.util.HashMap<>();
         result.put("subgraphContext", nextAction.getContext());
@@ -231,8 +299,8 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         
         // 添加通用状态信息
         addCommonStateInfo(result, state);
-        // 直接使用Scheduler输出的next值
-        result.put("next", nextAction.getNext());
+        // 使用验证后的next值
+        result.put("next", nextNode);
         
         return result;
     }
@@ -487,10 +555,26 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
     }
 
     /**
+     * 检查字符串是否以问号结尾（支持中英文、全角半角）
+     */
+    private boolean endsWithQuestionMark(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return false;
+        }
+        
+        String trimmed = text.trim();
+        char lastChar = trimmed.charAt(trimmed.length() - 1);
+        
+        // 支持英文问号、中文问号、全角问号
+        return lastChar == '?' || lastChar == '？';
+    }
+
+    /**
      * 调度场景枚举
      */
     private enum SchedulerScenario {
-        INITIAL_SCHEDULING,  // 初始调度：从TodoListParser接收任务
-        RESULT_PROCESSING    // 结果处理：处理子图返回结果
+        INITIAL_SCHEDULING,    // 初始调度：从TodoListParser接收任务
+        RESULT_PROCESSING,     // 结果处理：处理子图返回结果
+        USER_INPUT_PROCESSING  // 用户输入处理：处理从userInput节点恢复的用户输入
     }
 }

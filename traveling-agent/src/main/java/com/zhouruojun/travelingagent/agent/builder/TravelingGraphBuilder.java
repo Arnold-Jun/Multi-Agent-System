@@ -10,6 +10,7 @@ import com.zhouruojun.travelingagent.agent.actions.CallPlannerAgent;
 import com.zhouruojun.travelingagent.agent.actions.CallSchedulerAgent;
 import com.zhouruojun.travelingagent.agent.actions.CallSummaryAgent;
 import com.zhouruojun.travelingagent.agent.actions.TodoListParser;
+import com.zhouruojun.travelingagent.agent.actions.UserInput;
 import com.zhouruojun.travelingagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.travelingagent.agent.state.SubgraphState;
 import com.zhouruojun.travelingagent.agent.state.subgraph.SubgraphStateManager;
@@ -176,6 +177,8 @@ public class TravelingGraphBuilder {
         CallSummaryAgent callSummary = new CallSummaryAgent("summary", agents.get("summary"));
         callSummary.setQueue(queue);
         
+        UserInput userInput = new UserInput();
+        
         // 创建子图
         Map<String, CompiledGraph<SubgraphState>> subgraphs = createSubgraphs();
 
@@ -189,6 +192,7 @@ public class TravelingGraphBuilder {
                 .addNode("todoListParser", node_async(todoListParser))
                 .addNode("scheduler", node_async(callScheduler))
                 .addNode("summary", node_async(callSummary))
+                .addNode("userInput", node_async(userInput))
                 .addNode("metaSearchAgent", createSubgraphNode(subgraphs.get("metaSearchAgent"), "metaSearchAgent"))
                 .addNode("itineraryPlannerAgent", createSubgraphNode(subgraphs.get("itineraryPlannerAgent"), "itineraryPlannerAgent"))
                 .addNode("bookingAgent", createSubgraphNode(subgraphs.get("bookingAgent"), "bookingAgent"))
@@ -210,12 +214,14 @@ public class TravelingGraphBuilder {
                                 "itineraryPlannerAgent", "itineraryPlannerAgent",
                                 "bookingAgent", "bookingAgent",
                                 "onTripAgent", "onTripAgent",
+                                "userInput", "userInput",
                                 "planner", "planner",
                                 "summary", "summary"))
                 .addConditionalEdges("metaSearchAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("itineraryPlannerAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("bookingAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("onTripAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
+                .addEdge("userInput", "scheduler")
                 .addEdge("summary", END);
     }
 
@@ -471,7 +477,29 @@ public class TravelingGraphBuilder {
         result.put("todoList", updatedState.getTodoList().orElse(null));
         result.put("replanCount", updatedState.getReplanCount());
         
+        // 问号启发式：检测子图响应是否以问号结尾
+        // 如果以问号结尾，设置finalResponse让Scheduler可以检测到
+        if (endsWithQuestionMark(subgraphResponse)) {
+            log.info("检测到子图响应以问号结尾，设置finalResponse用于问号启发式路由");
+            result.put("finalResponse", subgraphResponse);
+        }
+        
         return result;
+    }
+    
+    /**
+     * 检查字符串是否以问号结尾（支持中英文、全角半角）
+     */
+    private boolean endsWithQuestionMark(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return false;
+        }
+        
+        String trimmed = text.trim();
+        char lastChar = trimmed.charAt(trimmed.length() - 1);
+        
+        // 支持英文问号、中文问号、全角问号
+        return lastChar == '?' || lastChar == '？';
     }
 
     /**
@@ -518,6 +546,7 @@ public class TravelingGraphBuilder {
         schedulerChildren.add("onTripAgent");
         schedulerChildren.add("planner");
         schedulerChildren.add("summary");
+        schedulerChildren.add("userInput");
         
         return state.next()
                 .filter(schedulerChildren::contains)

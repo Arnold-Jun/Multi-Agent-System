@@ -435,6 +435,7 @@ public class PromptTemplateManager {
         - metaSearchAgent: 旅行信息收集
         - itineraryPlannerAgent: 旅行计划优化
         - bookingAgent: 旅行预订执行
+        - userInput: 需要用户确认或输入时（用于用户交互）
 
         **输出格式要求**：
         必须输出严格的JSON格式：
@@ -446,7 +447,7 @@ public class PromptTemplateManager {
             "reason": "开始执行任务"
           },
           "nextAction": {
-            "next": "子图节点名称或summary",
+            "next": "子图节点名称、userInput或summary",
             "taskDescription": "任务的详细描述",
             "context": "子图执行所需的完整上下文信息"
           }
@@ -455,8 +456,29 @@ public class PromptTemplateManager {
         
         **路由决策规则**：
         - 如果当前任务需要执行 → next设置为对应的子图路由节点
+        - 如果需要用户确认或输入 → next设置为"userInput"，并在context中说明需要用户确认的内容
+        - **如果缺少关键信息** → next设置为"userInput"，在taskDescription中说明缺少什么信息
         - taskId必须与输入的任务ID完全一致
         - context必须包含子图执行所需的所有信息
+        
+        **用户输入(userInput)使用场景**：
+        - 子图执行后需要用户确认结果（例如：确认旅行计划、确认预订信息）
+        - 需要用户提供额外信息才能继续
+        - 重要决策需要用户参与
+        - **缺少关键信息时**：当发现缺少执行任务所需的关键信息（如：具体日期、预算范围、偏好设置等）时，必须路由到userInput
+        - **信息不完整时**：当用户查询信息不完整，无法直接执行任务时，路由到userInput获取更多信息
+        - 注意：只有在真正需要用户交互时才路由到userInput，不要滥用
+        
+        **任务状态处理原则**：
+        - 如果任务需要用户输入才能继续，保持in_progress状态
+        - 只有当任务真正完成其核心功能时，才标记为completed
+        - 例如：预订任务询问用户信息时应该保持in_progress，只有完成实际预订后才算completed
+        
+        **用户友好的消息生成**：
+        - 当路由到userInput时，taskDescription应该生成用户友好的询问消息
+        - 使用自然、友好的语言，避免技术术语
+        - 明确说明需要什么信息，提供具体的选项或格式要求
+        - 例如："为了为您预订火车票，请告诉我：1. 出发日期 2. 出发城市 3. 座位类型"
         """;
     }
 
@@ -524,6 +546,7 @@ public class PromptTemplateManager {
         - metaSearchAgent: 旅行信息收集
         - itineraryPlannerAgent: 旅行计划优化
         - bookingAgent: 旅行预订执行
+        - userInput: 需要用户确认或输入时（用于用户交互）
         - planner: 重新规划任务列表（当需要调整策略时）
         - summary: 所有任务完成，生成最终报告
 
@@ -531,6 +554,13 @@ public class PromptTemplateManager {
         - completed: 当前任务执行成功，可以继续执行下一个任务或结束
         - failed: 当前任务执行失败，不适合重试（系统会检查失败次数）
         - retry: 当前任务执行失败，但可以重试
+        - in_progress: 任务正在执行中，包括需要用户输入的情况
+        
+        **重要：任务状态判断原则**：
+        - 只有当任务真正完成其核心功能时，才能标记为completed
+        - **如果任务需要用户输入才能继续，必须保持in_progress状态，绝不能标记为completed或retry**
+        - 例如：预订任务只有在实际完成预订后才算completed，询问用户信息阶段必须保持in_progress
+        - 用户输入是任务执行流程的正常组成部分，不是失败，因此不能标记为failed或retry
 
         **输出格式要求**：
         必须输出严格的JSON格式：
@@ -538,7 +568,7 @@ public class PromptTemplateManager {
         {
           "taskUpdate": {
             "taskId": "任务ID（必须与输入一致）",
-            "status": "completed|failed|retry",
+            "status": "completed|failed|retry|in_progress",
             "reason": "状态判断的详细原因"
           },
           "nextAction": {
@@ -551,12 +581,24 @@ public class PromptTemplateManager {
         
         **路由决策规则**：
         - 如果当前任务completed且TodoList显示所有任务都已完成 → next设置为"summary"
-        - 如果当前任务completed且还有其他待执行任务 → next设置为下一个任务对应的子图
+        - 如果当前任务completed且还有其他待执行任务：
+          * 如果需要用户确认当前结果 → next设置为"userInput"
+          * 如果缺少执行下一个任务的关键信息 → next设置为"userInput"
+          * 否则 → next设置为下一个任务对应的子图
+        - **如果当前任务需要用户输入才能继续 → status设置为"in_progress"，next设置为"userInput"**
         - 如果当前任务retry → next设置为当前任务对应的子图（重新执行）
         - 如果当前任务failed → 根据情况决定：
           * 如果失败次数较少（<3次）且问题可以通过调整参数解决 → next设置为当前任务对应的子图（重试）
           * 如果失败次数较多（≥3次）或遇到根本性问题 → next设置为"planner"（重新规划）
           * 如果所有任务都已完成 → next设置为"summary"
+        
+        **需要用户输入时的处理**：
+        - 如果子图需要用户输入才能继续执行，必须：
+          * **任务状态设置为"in_progress"（绝不能设置为completed、failed或retry）**
+          * next设置为"userInput"
+          * 在taskDescription中生成用户友好的询问消息（直接发送给用户）
+          * 在context中提供技术性信息和执行上下文
+          * 在reason中说明"任务需要用户输入才能继续执行"
 
         **重规划判断标准**：
         - 任务失败次数达到3次或以上
@@ -576,7 +618,52 @@ public class PromptTemplateManager {
         - 当前执行情况的完整分析
         - 失败任务的详细上下文
         - 对重新规划的具体建议
+        
+        **用户输入(userInput)使用场景**：
+        当路由到userInput时，请注意：
+        - **taskDescription**：生成用户友好的询问消息，直接发送给用户
+          * 使用自然、友好的语言
+          * 明确说明需要什么信息
+          * 提供具体的选项或格式要求
+          * 例如："为了为您预订去无锡的火车票，请提供以下信息：1. 出发日期（如：2024-01-15）2. 出发城市（如：上海、南京等）3. 座位类型（硬座/软座/商务座等）"
+        - **context**：提供技术性信息和执行上下文（不发送给用户）
+        - **任务状态判断**：
+          * **如果任务已完成，需要用户确认结果 → status标记为completed**
+          * **如果任务进行中，需要用户提供信息 → status必须设置为in_progress**
+          * **绝不能将需要用户输入的任务标记为failed或retry**
+        - userInput是正常流程的一部分，不是失败
+        
+        **缺少信息处理**：
+        - 当发现缺少执行任务所需的关键信息时，必须路由到userInput
+        - 常见缺少信息场景：缺少具体日期、预算范围、人数、偏好设置、联系方式等
+        - 在taskDescription中明确说明缺少什么信息
+        - 在context中提供当前已有的信息，并说明还需要什么信息
+        - 使用友好的语言询问用户，例如："为了为您制定最佳的旅行计划，我需要了解您的具体出行日期和预算范围"
         """;
+    }
+
+    /**
+     * 构建Scheduler的用户输入处理UserPrompt
+     */
+    public String buildSchedulerUserInputUserPrompt(String originalUserQuery, String userInput, String userInputHistory, String todoListInfo) {
+        return String.format("""
+        **原始用户查询**：%s
+
+        **当前用户输入**：%s
+
+        **用户输入历史**：
+        %s
+
+        %s
+
+        **处理要求**：
+        1. 用户已提供了您之前请求的信息
+        2. 请根据用户输入历史（包括当前输入）继续执行相应的任务
+        3. 如果信息完整，继续执行下一个任务
+        4. 如果信息不完整，继续请求缺失的信息
+        5. 根据任务状态和完整的用户输入历史，决定下一步操作
+        6. 注意：用户输入历史包含了多轮对话的完整信息，请综合考虑所有输入
+        """, originalUserQuery, userInput, userInputHistory, todoListInfo);
     }
 
     /**

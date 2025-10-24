@@ -6,6 +6,7 @@ import com.zhouruojun.a2acore.core.InMemoryTaskManager;
 import com.zhouruojun.a2acore.core.PushNotificationSenderAuth;
 import com.zhouruojun.a2acore.spec.*;
 import com.zhouruojun.a2acore.spec.error.*;
+import com.zhouruojun.a2acore.spec.error.InternalError;
 import com.zhouruojun.a2acore.spec.message.*;
 import com.zhouruojun.a2acore.spec.message.util.Util;
 import com.zhouruojun.travelingagent.agent.core.TravelingControllerCore;
@@ -18,6 +19,7 @@ import reactor.core.publisher.Mono;
 
 import jakarta.annotation.PostConstruct;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 旅游任务管理器
@@ -30,11 +32,14 @@ public class TravelingTaskManager extends InMemoryTaskManager {
     private static TravelingTaskManager INSTANCE;
 
     @Autowired
+    @org.springframework.context.annotation.Lazy
     private TravelingControllerCore travelingControllerCore;
-
 
     @Autowired
     private PushNotificationSenderAuth pushNotificationSenderAuth;
+    
+    // 存储用户输入的缓存，key为sessionId
+    private final Map<String, String> userInputCache = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void init() {
@@ -47,7 +52,7 @@ public class TravelingTaskManager extends InMemoryTaskManager {
     @Override
     public Mono<SendTaskResponse> onSendTask(SendTaskRequest request) {
         SendTaskResponse errorResponse = new SendTaskResponse(request.getId(), 
-            new com.zhouruojun.a2acore.spec.error.InternalError("onSendTask method not supported, use onSendTaskSubscribe instead"));
+            new InternalError("onSendTask method not supported, use onSendTaskSubscribe instead"));
         return Mono.just(errorResponse);
     }
 
@@ -109,6 +114,10 @@ public class TravelingTaskManager extends InMemoryTaskManager {
                             // 处理用户输入
                             if (parts.getFirst() != null && parts.getFirst() instanceof TextPart textPart) {
                                 String userInput = textPart.getText();
+                                
+                                // 将用户输入存储到 TravelingTaskManager 中
+                                this.setUserInput(ps.getSessionId(), userInput);
+                                
                                 AgentChatRequest agentChatRequest =
                                     new AgentChatRequest();
                                 agentChatRequest.setRequestId(ps.getId());
@@ -266,6 +275,47 @@ public class TravelingTaskManager extends InMemoryTaskManager {
         }
         // 服务端必须支持客户端请求的所有输出模式
         return CollectionUtil.containsAll(serverOutputModes, clientOutputModes);
+    }
+    
+    /**
+     * 获取用户输入
+     * 参考 agent-core 中 A2aTaskManager 的实现
+     * @param sessionId 会话ID
+     * @return 用户输入内容
+     */
+    public String getUserInput(String sessionId) {
+        String userInput = userInputCache.get(sessionId);
+        log.info("Retrieved user input for sessionId {}: {}", sessionId, userInput);
+        return userInput;
+    }
+    
+    /**
+     * 设置用户输入
+     * @param sessionId 会话ID
+     * @param userInput 用户输入内容
+     */
+    public void setUserInput(String sessionId, String userInput) {
+        userInputCache.put(sessionId, userInput);
+    }
+    
+    /**
+     * 清除用户输入
+     * @param sessionId 会话ID
+     */
+    public void clearUserInput(String sessionId) {
+        userInputCache.remove(sessionId);
+        log.info("Cleared user input for sessionId: {}", sessionId);
+    }
+    
+    /**
+     * 检查是否有用户输入
+     * @param sessionId 会话ID
+     * @return 是否有用户输入
+     */
+    public boolean hasUserInput(String sessionId) {
+        return userInputCache.containsKey(sessionId) && 
+               userInputCache.get(sessionId) != null && 
+               !userInputCache.get(sessionId).trim().isEmpty();
     }
 }
 

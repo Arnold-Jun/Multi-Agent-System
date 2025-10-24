@@ -10,12 +10,15 @@ import com.zhouruojun.travelingagent.config.CheckpointConfig;
 import com.zhouruojun.travelingagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.travelingagent.service.OllamaService;
 import com.zhouruojun.travelingagent.mcp.TravelingToolProviderManager;
+import com.zhouruojun.travelingagent.a2a.TravelingTaskManager;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.NodeOutput;
+import org.bsc.langgraph4j.state.StateSnapshot;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
 import org.bsc.async.AsyncGenerator;
@@ -29,6 +32,7 @@ import org.bsc.langgraph4j.checkpoint.MemorySaver;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -49,6 +53,9 @@ public class TravelingControllerCore {
     private OllamaService ollamaService;
     
     @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+    
+    @Autowired
     @org.springframework.beans.factory.annotation.Qualifier("travelingChatLanguageModel")
     private ChatLanguageModel chatLanguageModel;
     
@@ -67,6 +74,10 @@ public class TravelingControllerCore {
     // 子图状态管理器
     @Autowired
     private SubgraphStateManager subgraphStateManager;
+    
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private TravelingTaskManager travelingTaskManager;
     
     // 工具提供者管理器
     @Autowired
@@ -123,12 +134,6 @@ public class TravelingControllerCore {
                 if (state.getFinalResponse().isPresent()) {
                     finalResponse = state.getFinalResponse().get();
                     resultBuilder.append(finalResponse);
-                }
-                
-                // 获取分析结果
-                if (state.getAnalysisResult().isPresent()) {
-                    String analysisResult = state.getAnalysisResult().get();
-                    resultBuilder.append("\n\n").append(analysisResult);
                 }
             }
             
@@ -218,18 +223,12 @@ public class TravelingControllerCore {
     private CompileConfig buildCompileConfig() {
         return CompileConfig.builder()
                 .checkpointSaver(checkpointSaver)
+                .interruptAfter("userInput")  // 在userInput节点后打断执行
                 .build();
     }
     
 
 
-    /**
-     * 获取会话历史
-     */
-    public List<ChatMessage> getSessionHistory(String sessionId) {
-        return sessionHistory.getOrDefault(sessionId, new ArrayList<>());
-    }
-    
     /**
      * 清除会话历史
      */
@@ -271,27 +270,6 @@ public class TravelingControllerCore {
             "checkpointSaverType", "MemorySaver",
             "activeSessionsCount", sessionHistory.size()
         );
-    }
-
-    /**
-     * 获取图状态信息（兼容性方法）
-     */
-    public Map<String, Object> getGraphStatus(String sessionId) {
-        Map<String, Object> status = new ConcurrentHashMap<>();
-        status.put("sessionId", sessionId);
-        status.put("hasCompiledGraph", compiledGraphCache.containsKey(sessionId));
-        status.put("hasStateGraph", stateGraphCache.containsKey(sessionId));
-        status.put("checkpointSaverType", "MemorySaver");
-        
-        return status;
-    }
-
-    /**
-     * 重置旅游流程
-     */
-    public void resetTravelPlanningFlow(String sessionId) {
-        clearSessionHistory(sessionId);
-        log.info("Reset travel planning flow for session: {}", sessionId);
     }
 
     /**
@@ -481,42 +459,360 @@ public class TravelingControllerCore {
     }
 
     /**
-     * 处理用户输入（用于A2A交互中的用户确认环节）
+     * 处理用户输入（从userInput节点恢复执行）
+     * 
+     * 工作流程：
+     * 1. 获取当前会话的图状态（从userInput节点打断的位置）
+     * 2. 更新状态，添加用户输入消息
+     * 3. 从打断点恢复执行图
+     * 4. 处理后续节点的输出
      */
     public void humanInput(AgentChatRequest request) {
         java.util.concurrent.CompletableFuture.runAsync(() -> {
-            String requestId = request.getRequestId();
+            String sessionId = request.getSessionId();
+            updateSessionAccess(sessionId);
+            
             try {
-                log.info("Processing humanInput for requestId: {}, chat: {}", requestId, request.getChat());
+                log.info("Processing humanInput for sessionId: {}, chat: {}", sessionId, request.getChat());
                 
-                RunnableConfig runnableConfig = RunnableConfig.builder()
-                        .threadId(requestId)
-                        .build();
-                
-                CompiledGraph<MainGraphState> graph = compiledGraphCache.get(requestId);
+                CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
                 if (graph == null) {
-                    log.error("No compiled graph found for requestId: {}", requestId);
+                    log.error("No compiled graph found for sessionId: {}", sessionId);
                     return;
                 }
                 
-                // 简化版本：直接处理用户输入
-                Map<String, Object> initialState = new java.util.HashMap<>();
-                initialState.put("messages", java.util.List.of(UserMessage.from(request.getChat())));
+                RunnableConfig runnableConfig = RunnableConfig.builder()
+                        .threadId(sessionId)
+                        .build();
                 
-                // 恢复执行
-                AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(initialState, runnableConfig);
+                // 获取当前状态快照（从userInput打断的位置）
+                org.bsc.langgraph4j.state.StateSnapshot<MainGraphState> stateSnapshot = 
+                        graph.getState(runnableConfig);
+
+                // 更新状态：添加用户输入消息
+                Map<String, Object> updateData = Map.of(
+                        "messages", UserMessage.from(request.getChat()),
+                        "method", "human_input",
+                        "userInputRequired", false  // 清除userInputRequired标志
+                );
                 
-                // 处理流式响应并发送事件
-                for (NodeOutput<MainGraphState> message : messages) {
-                    log.info("humanInput processing node: {}", message.node());
-                    // 可以在这里发送中间状态给调用方
+                // 更新状态并获取新的配置
+                RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
+                
+                // 从打断点恢复执行（传null表示从当前状态继续）
+                AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
+                
+                // 处理流式响应
+                String finalResponse = "";
+                for (NodeOutput<MainGraphState> output : messages) {
+                    log.info("humanInput processing node: {}", output.node());
+                    
+                    MainGraphState state = output.state();
+                    
+                    // 获取最终响应
+                    if (state.getFinalResponse().isPresent()) {
+                        finalResponse = state.getFinalResponse().get();
+                    }
                 }
+                
+                // 更新会话历史
+                if (!finalResponse.isEmpty()) {
+                    updateSessionHistory(sessionId, request.getChat(), finalResponse);
+                }
+                
+                log.info("humanInput completed for sessionId: {}", sessionId);
                 
             } catch (Exception e) {
                 log.error("Error processing humanInput", e);
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    /**
+     * 同步处理用户输入
+     * @param request 用户请求
+     * @return 处理结果
+     */
+    public String humanInputSync(AgentChatRequest request) {
+        String sessionId = request.getSessionId();
+        updateSessionAccess(sessionId);
+        
+        try {
+            log.info("Processing humanInputSync for sessionId: {}, chat: {}", sessionId, request.getChat());
+            
+            // 将用户输入存储到 TravelingTaskManager 中
+            String userInput = request.getChat();
+            if (userInput == null || userInput.trim().isEmpty()) {
+                log.warn("No user input in request for sessionId: {}", sessionId);
+                return "错误：用户输入为空，请提供有效输入";
+            }
+            
+            // 存储用户输入到 TravelingTaskManager
+            travelingTaskManager.setUserInput(sessionId, userInput);
+            log.info("Stored user input in TravelingTaskManager: {}", userInput);
+            
+            CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
+            if (graph == null) {
+                log.error("No compiled graph found for sessionId: {}", sessionId);
+                return "错误：未找到会话状态，请重新开始对话";
+            }
+            
+            RunnableConfig runnableConfig = RunnableConfig.builder()
+                    .threadId(sessionId)
+                    .build();
+            
+            // 获取当前状态快照（从userInput打断的位置）
+            org.bsc.langgraph4j.state.StateSnapshot<MainGraphState> stateSnapshot = 
+                    graph.getState(runnableConfig);
+
+            // 使用从 TravelingTaskManager 获取的用户输入
+            // 添加用户输入到历史，但不覆盖原始查询
+            Map<String, Object> updateData = new HashMap<>();
+            updateData.put("messages", UserMessage.from(userInput));
+            updateData.put("method", "human_input");
+            updateData.put("userInputRequired", false);  // 清除userInputRequired标志
+            updateData.put("userInput", userInput);  // 添加用户输入，供Scheduler使用
+            
+            // 更新状态并获取新的配置
+            RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
+            
+            // 从打断点恢复执行（传null表示从当前状态继续）
+            AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
+            
+            // 处理流式响应
+            StringBuilder resultBuilder = new StringBuilder();
+            String finalResponse = "";
+            
+            for (NodeOutput<MainGraphState> output : messages) {
+                log.info("humanInputSync processing node: {}", output.node());
+                
+                MainGraphState state = output.state();
+                
+                // 获取最终响应
+                if (state.getFinalResponse().isPresent()) {
+                    finalResponse = state.getFinalResponse().get();
+                    resultBuilder.append(finalResponse);
+                }
+            }
+            
+            String result = resultBuilder.toString();
+            if (result.isEmpty()) {
+                result = "处理完成";
+            }
+            
+            // 更新会话历史
+            updateSessionHistory(sessionId, userInput, result);
+            
+            log.info("humanInputSync completed for sessionId: {}", sessionId);
+            
+            return result;
+            
+        } catch (Exception e) {
+            log.error("Error processing humanInputSync", e);
+            return "错误：处理用户输入失败 - " + e.getMessage();
+        }
+    }
+
+    /**
+     * 处理WebSocket聊天请求
+     * @param request 聊天请求
+     * @param userEmail 用户邮箱
+     */
+    public void processStreamWithWs(AgentChatRequest request, String userEmail) {
+        CompletableFuture.runAsync(() -> {
+            String sessionId = request.getSessionId();
+            updateSessionAccess(sessionId);
+            
+            try {
+                // 处理流式响应
+                AsyncGenerator<NodeOutput<MainGraphState>> stream = processStream(request);
+                
+                // 处理每个节点的输出
+                for (NodeOutput<MainGraphState> output : stream) {
+                    MainGraphState state = output.state();
+                    String nodeName = output.node();
+
+                    // 检查是否需要用户输入
+                    if (state.getValue("userInputRequired").isPresent() && 
+                        (Boolean) state.getValue("userInputRequired").get()) {
+                        // 图已在userInput节点暂停，等待用户输入
+                        // 发送用户输入请求到前端
+                        String prompt = state.getValue("subgraphTaskDescription").isPresent() ? 
+                            (String) state.getValue("subgraphTaskDescription").get() : 
+                            "需要您提供更多信息以继续...";
+                        
+                        sendUserInputRequest(sessionId, prompt);
+                        break;
+                    }
+                    
+                    // 发送最终响应
+                    if (state.getFinalResponse().isPresent()) {
+                        String finalResponse = state.getFinalResponse().get();
+                        log.info("Final response for WebSocket: {}", finalResponse);
+                        updateSessionHistory(sessionId, request.getChat(), finalResponse);
+                        
+                        // 发送响应到前端
+                        sendResponse(sessionId, finalResponse);
+                    }
+                }
+                
+                log.info("WebSocket chat processing completed for sessionId: {}", sessionId);
+                
+            } catch (Exception e) {
+                log.error("Error processing WebSocket chat request", e);
+                sendError(sessionId, "处理请求时发生错误: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * 处理WebSocket用户输入
+     * @param request 用户输入请求
+     * @param userEmail 用户邮箱
+     */
+    public void humanInputWithWs(AgentChatRequest request, String userEmail) {
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            String sessionId = request.getSessionId();
+            updateSessionAccess(sessionId);
+            
+            try {
+                log.info("Processing humanInput - sessionId: {}, userEmail: {}", sessionId, userEmail);
+                
+                // 存储用户输入到 TravelingTaskManager
+                String userInput = request.getChat();
+                travelingTaskManager.setUserInput(sessionId, userInput);
+                
+                CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
+                if (graph == null) {
+                    log.error("No compiled graph found for sessionId: {}", sessionId);
+                    return;
+                }
+                
+                RunnableConfig runnableConfig = RunnableConfig.builder()
+                        .threadId(sessionId)
+                        .build();
+                
+                // 获取当前状态快照（从userInput打断的位置）
+                StateSnapshot<MainGraphState> stateSnapshot =
+                        graph.getState(runnableConfig);
+
+                // 更新状态：添加用户输入消息
+                Map<String, Object> updateData = new HashMap<>();
+                updateData.put("messages", UserMessage.from(userInput));
+                updateData.put("method", "human_input");
+                updateData.put("userInputRequired", false);
+                updateData.put("userInput", userInput);
+                
+                // 更新用户输入历史
+                MainGraphState currentState = stateSnapshot.state();
+                List<String> userQueryHistory = currentState.getUserQueryHistory();
+                userQueryHistory.add(userInput);
+                updateData.put("userQueryHistory", userQueryHistory);
+                
+                // 更新状态并获取新的配置
+                RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
+                
+                // 从打断点恢复执行
+                AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
+                
+                // 处理流式响应
+                String finalResponse = "";
+                boolean needsUserInput = false;
+                String userInputPrompt = "";
+                
+                for (NodeOutput<MainGraphState> output : messages) {
+                    MainGraphState state = output.state();
+                    String nodeName = output.node();
+
+                    // 检查是否又需要用户输入
+                    if (state.getValue("userInputRequired").isPresent() && 
+                        (Boolean) state.getValue("userInputRequired").get()) {
+                        log.info("Graph paused again at userInput node for sessionId: {}", sessionId);
+                        needsUserInput = true;
+                        
+                        // 获取用户输入提示
+                        userInputPrompt = state.getValue("subgraphTaskDescription").isPresent() ? 
+                            (String) state.getValue("subgraphTaskDescription").get() : 
+                            "需要您提供更多信息以继续...";
+                        break;
+                    }
+                    
+                    // 只有在不需要用户输入时才收集最终响应
+                    if (state.getFinalResponse().isPresent()) {
+                        finalResponse = state.getFinalResponse().get();
+                        updateSessionHistory(sessionId, userInput, finalResponse);
+                    }
+                }
+                
+                // 根据情况发送消息
+                if (needsUserInput) {
+                    // 需要用户输入，发送用户输入请求
+                    sendUserInputRequest(sessionId, userInputPrompt);
+                } else if (!finalResponse.isEmpty()) {
+                    // 有最终响应，发送响应
+                    sendResponse(sessionId, finalResponse);
+                }
+
+            } catch (Exception e) {
+                log.error("Error processing WebSocket humanInput", e);
+                sendError(sessionId, "处理用户输入时发生错误: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * 发送响应消息到前端
+     */
+    private void sendResponse(String sessionId, String content) {
+        try {
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "response");
+            message.put("content", content);
+            message.put("sessionId", sessionId);
+            
+            // 使用广播方式发送，前端通过sessionId过滤
+            messagingTemplate.convertAndSend("/topic/reply", message);
+            log.info("Sent response to sessionId {}: {}", sessionId, content);
+        } catch (Exception e) {
+            log.error("Failed to send response to sessionId: {}", sessionId, e);
+        }
+    }
+
+    /**
+     * 发送用户输入请求到前端
+     */
+    private void sendUserInputRequest(String sessionId, String prompt) {
+        try {
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "userInputRequired");
+            message.put("prompt", prompt);
+            message.put("sessionId", sessionId);
+            
+            // 使用广播方式发送，前端通过sessionId过滤
+            messagingTemplate.convertAndSend("/topic/reply", message);
+            log.info("Sent user input request to sessionId {}: {}", sessionId, prompt);
+        } catch (Exception e) {
+            log.error("Failed to send user input request to sessionId: {}", sessionId, e);
+        }
+    }
+
+    /**
+     * 发送错误消息到前端
+     */
+    private void sendError(String sessionId, String error) {
+        try {
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "error");
+            message.put("error", error);
+            message.put("sessionId", sessionId);
+            
+            // 使用广播方式发送，前端通过sessionId过滤
+            messagingTemplate.convertAndSend("/topic/error", message);
+            log.info("Sent error to sessionId {}: {}", sessionId, error);
+        } catch (Exception e) {
+            log.error("Failed to send error to sessionId: {}", sessionId, e);
+        }
     }
 
     /**

@@ -37,6 +37,17 @@ public class TravelingController {
             return "错误: " + e.getMessage();
         }
     }
+    
+    @PostMapping("/user-input")
+    public String userInput(@RequestBody AgentChatRequest request) {
+        log.info("User input request: {}", JSONObject.toJSON(request));
+        try {
+            return controllerCore.humanInputSync(request);
+        } catch (Exception e) {
+            log.error("Error processing user input", e);
+            return "错误: " + e.getMessage();
+        }
+    }
 
     @GetMapping("/capabilities")
     public String getCapabilities() {

@@ -14,6 +14,12 @@ class TravelingAgentApp {
             maxTokens: 4096
         };
         this.travelVisualization = null;
+        this.waitingForUserInput = false; // 新增：用户输入状态
+        this.userInputPrompt = ''; // 新增：用户输入提示
+        
+        // WebSocket 相关
+        this.stompClient = null;
+        this.connected = false;
         
         this.init();
     }
@@ -21,7 +27,7 @@ class TravelingAgentApp {
     init() {
         this.bindEvents();
         this.loadSettings();
-        this.checkAgentStatus();
+        this.initWebSocket();
         this.loadChatHistory();
         this.setupAutoResize();
         this.initTravelVisualization();
@@ -171,14 +177,120 @@ class TravelingAgentApp {
         return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
+    initWebSocket() {
+        try {
+            // 使用 SockJS 和 STOMP
+            const socket = new SockJS('/ws');
+            this.stompClient = Stomp.over(socket);
+            
+            // 禁用调试日志
+            this.stompClient.debug = null;
+            
+            // 连接 WebSocket
+            this.stompClient.connect({}, (frame) => {
+                console.log('WebSocket 连接成功:', frame);
+                this.connected = true;
+                this.updateConnectionStatus(true);
+                
+                // 订阅回复消息
+                this.stompClient.subscribe('/topic/reply', (message) => {
+                    const data = JSON.parse(message.body);
+                    // 只处理当前会话的消息
+                    if (data.sessionId === this.currentSessionId) {
+                        this.handleWebSocketMessage(data);
+                    }
+                });
+                
+                // 订阅错误消息
+                this.stompClient.subscribe('/topic/error', (message) => {
+                    const data = JSON.parse(message.body);
+                    // 只处理当前会话的消息
+                    if (data.sessionId === this.currentSessionId) {
+                        this.handleWebSocketError(data);
+                    }
+                });
+                
+            }, (error) => {
+                console.error('WebSocket 连接失败:', error);
+                this.connected = false;
+                this.updateConnectionStatus(false);
+                
+                // 重连机制
+                setTimeout(() => {
+                    if (!this.connected) {
+                        this.initWebSocket();
+                    }
+                }, 5000);
+            });
+            
+        } catch (error) {
+            console.error('WebSocket 初始化失败:', error);
+            this.connected = false;
+            this.updateConnectionStatus(false);
+        }
+    }
+
+    updateConnectionStatus(connected) {
+        const statusIndicator = document.getElementById('agentStatus');
+        const statusDot = statusIndicator.querySelector('.status-dot');
+        const statusText = statusIndicator.querySelector('.status-text');
+        
+        if (connected) {
+            statusDot.className = 'status-dot';
+            statusText.textContent = 'WebSocket 已连接';
+        } else {
+            statusDot.className = 'status-dot offline';
+            statusText.textContent = 'WebSocket 连接失败';
+        }
+    }
+
+    handleWebSocketMessage(message) {
+        console.log('收到 WebSocket 消息:', message);
+        
+        if (message.type === 'response') {
+            // 处理智能体回复
+            this.addMessage(message.content, 'agent');
+            this.parseSpecialContent(message.content);
+            this.saveToHistory(this.lastUserMessage, message.content);
+            
+            // 检查是否需要用户输入
+            if (this.checkForUserInputRequest(message.content)) {
+                this.handleUserInputRequest(message.content);
+                return; // 不停止加载状态，等待用户输入
+            }
+        } else if (message.type === 'userInputRequired') {
+            // 处理用户输入请求
+            this.handleUserInputRequest(message.prompt);
+            return; // 不停止加载状态，等待用户输入
+        } else if (message.type === 'error') {
+            // 处理错误
+            this.addMessage('抱歉，处理您的请求时出现了错误：' + message.error, 'agent');
+        }
+        
+        // 只有在正常响应或错误时才停止加载状态
+        this.setLoading(false);
+    }
+
+    handleWebSocketError(error) {
+        console.error('WebSocket 错误:', error);
+        this.addMessage('连接出现问题，请稍后重试', 'agent');
+        this.setLoading(false);
+    }
+
     async sendMessage() {
         const messageInput = document.getElementById('messageInput');
         const message = messageInput.value.trim();
         
-        if (!message || this.isLoading) return;
+        if (!message || this.isLoading || !this.connected) {
+            if (!this.connected) {
+                this.addMessage('WebSocket 连接未建立，请稍后重试', 'agent');
+            }
+            return;
+        }
 
         // 添加用户消息到界面
         this.addMessage(message, 'user');
+        this.lastUserMessage = message; // 保存用户消息用于历史记录
         messageInput.value = '';
         messageInput.style.height = 'auto';
 
@@ -186,43 +298,87 @@ class TravelingAgentApp {
         this.setLoading(true);
 
         try {
-            // 调用后端API
-            const response = await this.callTravelingAgent(message);
-            
-            // 添加智能体回复
-            this.addMessage(response, 'agent');
-            
-            // 解析特殊内容（地图、天气、预算等）
-            this.parseSpecialContent(response);
-            
-            // 保存到历史记录
-            this.saveToHistory(message, response);
+            // 判断是用户输入还是新消息
+            if (this.waitingForUserInput) {
+                // 用户输入模式：发送到 /traveling/human/input
+                this.sendWebSocketMessage('/app/traveling/human/input', {
+                    request: {
+                        sessionId: this.currentSessionId,
+                        chat: message
+                    }
+                });
+                this.waitingForUserInput = false;
+                this.userInputPrompt = '';
+                
+                // 重置输入框样式
+                const inputContainer = document.querySelector('.input-container');
+                inputContainer.classList.remove('waiting-for-input');
+                messageInput.placeholder = '请描述您的旅游需求，例如：我想去日本旅游7天，预算1万元...';
+            } else {
+                // 新消息模式：发送到 /traveling/chat
+                this.sendWebSocketMessage('/app/traveling/chat', {
+                    request: {
+                        sessionId: this.currentSessionId,
+                        chat: message
+                    }
+                });
+            }
             
         } catch (error) {
             console.error('发送消息失败:', error);
             this.addMessage('抱歉，处理您的请求时出现了错误。请稍后重试。', 'agent');
-        } finally {
             this.setLoading(false);
         }
     }
 
-    async callTravelingAgent(message) {
-        const response = await fetch('/api/traveling/chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                sessionId: this.currentSessionId,
-                chat: message
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+    sendWebSocketMessage(destination, payload) {
+        if (!this.stompClient || !this.connected) {
+            throw new Error('WebSocket 未连接');
         }
+        
+        this.stompClient.send(destination, {}, JSON.stringify(payload));
+    }
 
-        return await response.text();
+
+    checkForUserInputRequest(response) {
+        // 检查响应是否包含用户输入请求的标识
+        // 这里可以根据后端返回的特殊标识来判断
+        // 例如：包含 "userInputRequired" 或特定的提示文本
+        return response.includes('需要您提供') || 
+               response.includes('请提供') || 
+               response.includes('请输入') ||
+               response.includes('请选择') ||
+               response.includes('请确认');
+    }
+
+    handleUserInputRequest(response) {
+        console.log('处理用户输入请求:', response);
+        
+        // 设置用户输入状态
+        this.waitingForUserInput = true;
+        this.userInputPrompt = response;
+        
+        // 停止加载状态
+        this.setLoading(false);
+        
+        // 更新输入框提示和样式
+        const messageInput = document.getElementById('messageInput');
+        const inputContainer = document.querySelector('.input-container');
+        
+        messageInput.placeholder = '请根据上述要求提供信息...';
+        inputContainer.classList.add('waiting-for-input');
+        messageInput.focus();
+        
+        // 显示用户输入提示
+        this.showUserInputPrompt(response);
+        
+        // 显示通知
+        this.showNotification('智能体需要您的输入才能继续', 'info');
+    }
+
+    showUserInputPrompt(prompt) {
+        // 直接作为普通智能体消息显示
+        this.addMessage(prompt, 'agent');
     }
 
     addMessage(content, sender) {
@@ -394,6 +550,8 @@ class TravelingAgentApp {
     startNewChat() {
         this.currentSessionId = this.generateSessionId();
         this.messageHistory = [];
+        this.waitingForUserInput = false; // 重置用户输入状态
+        this.userInputPrompt = '';
         
         // 清空消息容器，保留欢迎消息
         const messagesContainer = document.getElementById('messagesContainer');
@@ -402,6 +560,10 @@ class TravelingAgentApp {
         if (welcomeMessage) {
             messagesContainer.appendChild(welcomeMessage);
         }
+        
+        // 重置输入框
+        const messageInput = document.getElementById('messageInput');
+        messageInput.placeholder = '请描述您的旅游需求，例如：我想去日本旅游7天，预算1万元...';
         
         // 更新聊天历史
         this.loadChatHistory();
@@ -886,6 +1048,13 @@ style.textContent = `
     .history-time {
         font-size: var(--font-size-xs);
         color: var(--text-muted);
+    }
+    
+    
+    /* 等待用户输入时的输入框样式 - 简洁版本 */
+    .input-container.waiting-for-input {
+        border: 1px solid var(--primary-color);
+        background: rgba(59, 130, 246, 0.02);
     }
 `;
 document.head.appendChild(style);

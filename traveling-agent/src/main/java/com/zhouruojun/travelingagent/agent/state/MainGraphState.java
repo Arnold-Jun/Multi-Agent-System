@@ -1,8 +1,8 @@
 package com.zhouruojun.travelingagent.agent.state;
 
+import com.zhouruojun.travelingagent.agent.dto.SchedulerResponse;
 import com.zhouruojun.travelingagent.agent.state.main.TodoList;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
-import com.zhouruojun.travelingagent.agent.state.main.TaskStatus;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 
@@ -72,7 +72,7 @@ public class MainGraphState extends BaseAgentState {
      * 检查是否超过重规划限制
      */
     public boolean isReplanLimitExceeded() {
-        return getReplanCount() >= 1; // 限制为1次重规划
+        return getReplanCount() >= 2; // 限制为1次重规划
     }
 
     public void addMessage(ChatMessage message) {
@@ -96,13 +96,6 @@ public class MainGraphState extends BaseAgentState {
         return Optional.ofNullable((String) state.get("finalResponse"));
     }
 
-    public void setAnalysisResult(String analysisResult) {
-        state.put("analysisResult", analysisResult);
-    }
-
-    public Optional<String> getAnalysisResult() {
-        return Optional.ofNullable((String) state.get("analysisResult"));
-    }
 
     /**
      * 获取子图结果映射
@@ -110,30 +103,6 @@ public class MainGraphState extends BaseAgentState {
     @SuppressWarnings("unchecked")
     public Optional<Map<String, String>> getSubgraphResults() {
         return Optional.ofNullable((Map<String, String>) state.get("subgraphResults"));
-    }
-
-    /**
-     * 获取当前任务的上下文信息（用于初始调度场景）
-     */
-    public String getCurrentTaskContext() {
-        return getTodoList()
-                .map(todoList -> {
-                    TodoTask currentTask = todoList.getNextExecutableTask();
-                    if (currentTask == null) {
-                        return "没有可执行的任务";
-                    }
-                    
-                    StringBuilder info = new StringBuilder();
-                    info.append("=== 当前执行任务 ===\n");
-                    info.append(String.format("任务ID: %s\n", currentTask.getTaskId()));
-                    info.append(String.format("任务描述: %s\n", currentTask.getDescription()));
-                    info.append(String.format("分配智能体: %s\n", currentTask.getAssignedAgent()));
-                    info.append(String.format("任务状态: %s\n", currentTask.getStatus().getDescription()));
-                    info.append(String.format("失败次数: %d\n", currentTask.getFailureCount()));
-                    
-                    return info.toString();
-                })
-                .orElse("无任务列表");
     }
 
     /**
@@ -224,6 +193,24 @@ public class MainGraphState extends BaseAgentState {
         return Optional.ofNullable((String) state.get("originalUserQuery"));
     }
     
+    
+    /**
+     * 获取用户查询历史列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> getUserQueryHistory() {
+        return (List<String>) state.getOrDefault("userQueryHistory", new ArrayList<>());
+    }
+    
+    
+    /**
+     * 获取最新的用户查询（用于Scheduler）
+     */
+    public String getLatestUserQuery() {
+        List<String> history = getUserQueryHistory();
+        return history.isEmpty() ? getOriginalUserQuery().orElse("") : history.get(history.size() - 1);
+    }
+    
     /**
      * 获取会话ID
      */
@@ -241,14 +228,14 @@ public class MainGraphState extends BaseAgentState {
     /**
      * 获取调度响应
      */
-    public Optional<com.zhouruojun.travelingagent.agent.dto.SchedulerResponse> getSchedulerResponse() {
-        return Optional.ofNullable((com.zhouruojun.travelingagent.agent.dto.SchedulerResponse) state.get("schedulerResponse"));
+    public Optional<SchedulerResponse> getSchedulerResponse() {
+        return Optional.ofNullable((SchedulerResponse) state.get("schedulerResponse"));
     }
 
     /**
      * 设置调度响应
      */
-    public void setSchedulerResponse(com.zhouruojun.travelingagent.agent.dto.SchedulerResponse schedulerResponse) {
+    public void setSchedulerResponse(SchedulerResponse schedulerResponse) {
         state.put("schedulerResponse", schedulerResponse);
     }
 
@@ -259,12 +246,6 @@ public class MainGraphState extends BaseAgentState {
         return getFinalResponse().isPresent();
     }
 
-    /**
-     * 检查是否需要重新规划
-     */
-    public boolean needsReplanning() {
-        return getTodoList().map(todoList -> !todoList.getFailedTasks().isEmpty() && !isReplanLimitExceeded()).orElse(false);
-    }
 
     private List<ChatMessage> extractMessages(Map<String, Object> state) {
         Object messagesObj = state.get("messages");
@@ -275,17 +256,5 @@ public class MainGraphState extends BaseAgentState {
                     .collect(Collectors.toList());
         }
         return new ArrayList<>();
-    }
-
-    /**
-     * 转换为Map格式
-     */
-    public Map<String, Object> toMap() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("messages", messages);
-        getTodoList().ifPresent(list -> map.put("todoList", list));
-        getSubgraphResults().ifPresent(results -> map.put("subgraphResults", results));
-        state.forEach(map::put);
-        return map;
     }
 }
