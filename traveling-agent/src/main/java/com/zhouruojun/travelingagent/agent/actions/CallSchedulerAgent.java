@@ -7,10 +7,9 @@ import com.zhouruojun.travelingagent.agent.state.MainGraphState;
 import com.zhouruojun.travelingagent.agent.state.main.TodoList;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
 import com.zhouruojun.travelingagent.agent.state.main.TaskStatus;
-import com.zhouruojun.travelingagent.common.PromptTemplateManager;
+import com.zhouruojun.travelingagent.prompts.PromptManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +31,7 @@ import java.util.Optional;
 public class CallSchedulerAgent extends CallAgent<MainGraphState> {
 
     private final SchedulerResponseParser schedulerResponseParser;
+    private final PromptManager promptManager;
 
     /**
      * 构造函数
@@ -39,63 +39,29 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
      * @param agentName 智能体名称
      * @param agent 智能体实例
      * @param schedulerResponseParser 调度响应解析器
+     * @param promptManager 提示词管理器
      */
     public CallSchedulerAgent(@NonNull String agentName, 
                              @NonNull BaseAgent agent,
-                             @NonNull SchedulerResponseParser schedulerResponseParser) {
+                             @NonNull SchedulerResponseParser schedulerResponseParser,
+                             @NonNull PromptManager promptManager) {
         super(agentName, agent);
         this.schedulerResponseParser = schedulerResponseParser;
+        this.promptManager = promptManager;
     }
 
     @Override
     protected List<ChatMessage> buildMessages(MainGraphState state) {
-        SchedulerScenario scenario = determineSchedulerScenario(state);
+        // 使用新的提示词管理器构建消息
+        List<ChatMessage> messages = promptManager.buildMainGraphMessages(agentName, state);
         
-        List<ChatMessage> messages = buildMessagesForScenario(scenario, state);
-        
-        return messages;
-    }
-    
-    /**
-     * 根据场景构建消息
-     */
-    private List<ChatMessage> buildMessagesForScenario(SchedulerScenario scenario, MainGraphState state) {
-        List<ChatMessage> messages = new ArrayList<>();
-        
-        switch (scenario) {
-            case INITIAL_SCHEDULING -> {
-                addSchedulerMessages(messages, 
-                    PromptTemplateManager.instance.buildSchedulerInitialSystemPrompt(),
-                    PromptTemplateManager.instance.buildSchedulerInitialUserPrompt(
-                        state.getOriginalUserQuery().orElse("请帮我调度旅游任务"),
-                        state.getTodoListForScheduler()
-                    )
-                );
-            }
-            case RESULT_PROCESSING -> {
-                addSchedulerMessages(messages,
-                    PromptTemplateManager.instance.buildSchedulerUpdateSystemPrompt(),
-                    buildResultProcessingUserPrompt(state)
-                );
-            }
-            case USER_INPUT_PROCESSING -> {
-                addSchedulerMessages(messages,
-                    PromptTemplateManager.instance.buildSchedulerUpdateSystemPrompt(),
-                    buildUserInputProcessingUserPrompt(state)
-                );
-            }
-        }
+        log.debug("调度智能体消息构建完成，消息数量: {}", messages.size());
         
         return messages;
     }
     
-    /**
-     * 添加调度器消息的通用方法
-     */
-    private void addSchedulerMessages(List<ChatMessage> messages, String systemPrompt, String userPrompt) {
-        messages.add(SystemMessage.from(systemPrompt));
-        messages.add(UserMessage.from(userPrompt));
-    }
+
+
 
     @Override
     protected Map<String, Object> processResponse(AiMessage originalMessage, AiMessage filteredMessage, MainGraphState state) {
@@ -128,86 +94,7 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         }
     }
     
-    /**
-     * 判断调度场景
-     */
-    private SchedulerScenario determineSchedulerScenario(MainGraphState state) {
-        // 检查是否有用户输入（从userInput节点恢复）
-        if (state.getValue("userInput").isPresent()) {
-            // 有用户输入，说明是从userInput节点恢复，需要处理用户输入
-            return SchedulerScenario.USER_INPUT_PROCESSING;
-        }
-        
-        // 检查是否有子图执行结果
-        Optional<Map<String, String>> subgraphResults = state.getSubgraphResults();
-        if (subgraphResults.isPresent() && !subgraphResults.get().isEmpty()) {
-            // 有子图结果，说明是结果处理场景
-            return SchedulerScenario.RESULT_PROCESSING;
-        }
-        
-        // 没有子图结果，说明是初始调度场景
-        return SchedulerScenario.INITIAL_SCHEDULING;
-    }
     
-    /**
-     * 构建用户输入处理的用户提示词
-     */
-    private String buildUserInputProcessingUserPrompt(MainGraphState state) {
-        String originalUserQuery = state.getOriginalUserQuery().orElse("用户查询");
-        String userInput = (String) state.getValue("userInput").orElse("用户输入");
-        String todoListInfo = state.getTodoListForScheduler();
-        
-        // 构建用户输入历史
-        List<String> userInputHistory = state.getUserQueryHistory();
-        String userInputHistoryStr = buildUserInputHistoryString(userInputHistory);
-        
-        return PromptTemplateManager.instance.buildSchedulerUserInputUserPrompt(
-            originalUserQuery, userInput, userInputHistoryStr, todoListInfo
-        );
-    }
-    
-    /**
-     * 构建用户输入历史字符串
-     */
-    private String buildUserInputHistoryString(List<String> userInputHistory) {
-        if (userInputHistory == null || userInputHistory.isEmpty()) {
-            return "无历史输入";
-        }
-        
-        StringBuilder historyBuilder = new StringBuilder();
-        for (int i = 0; i < userInputHistory.size(); i++) {
-            historyBuilder.append(String.format("第%d轮输入：%s\n", i + 1, userInputHistory.get(i)));
-        }
-        return historyBuilder.toString().trim();
-    }
-    
-    /**
-     * 构建结果处理的用户提示词
-     */
-    private String buildResultProcessingUserPrompt(MainGraphState state) {
-        String originalUserQuery = state.getOriginalUserQuery().orElse("用户查询");
-        String todoListInfo = state.getTodoListForScheduler();
-        String subgraphResultsInfo = buildSubgraphResultsInfo(state);
-        
-        return PromptTemplateManager.instance.buildSchedulerUpdateUserPrompt(
-            originalUserQuery, todoListInfo, subgraphResultsInfo
-        );
-    }
-    
-    /**
-     * 构建子图结果信息
-     */
-    private String buildSubgraphResultsInfo(MainGraphState state) {
-        return state.getSubgraphResults()
-                .map(results -> {
-                    StringBuilder info = new StringBuilder();
-                    results.forEach((agent, result) -> 
-                        info.append(String.format("**%s执行结果**：\n%s\n\n", agent, result))
-                    );
-                    return info.toString();
-                })
-                .orElse("暂无子图执行结果");
-    }
 
     /**
      * 处理任务状态更新
@@ -572,9 +459,4 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
     /**
      * 调度场景枚举
      */
-    private enum SchedulerScenario {
-        INITIAL_SCHEDULING,    // 初始调度：从TodoListParser接收任务
-        RESULT_PROCESSING,     // 结果处理：处理子图返回结果
-        USER_INPUT_PROCESSING  // 用户输入处理：处理从userInput节点恢复的用户输入
-    }
 }

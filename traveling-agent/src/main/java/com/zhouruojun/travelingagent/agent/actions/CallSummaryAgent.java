@@ -2,19 +2,15 @@ package com.zhouruojun.travelingagent.agent.actions;
 
 import com.zhouruojun.travelingagent.agent.BaseAgent;
 import com.zhouruojun.travelingagent.agent.state.MainGraphState;
-import com.zhouruojun.travelingagent.common.PromptTemplateManager;
+import com.zhouruojun.travelingagent.prompts.PromptManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * 总结智能体调用节点
@@ -23,29 +19,26 @@ import java.util.Optional;
 @Slf4j
 public class CallSummaryAgent extends CallAgent<MainGraphState> {
 
+    private final PromptManager promptManager;
+
     /**
      * 构造函数
      *
      * @param agentName 智能体名称
      * @param agent 智能体实例
+     * @param promptManager 提示词管理器
      */
-    public CallSummaryAgent(@NonNull String agentName, @NonNull BaseAgent agent) {
+    public CallSummaryAgent(@NonNull String agentName, @NonNull BaseAgent agent, @NonNull PromptManager promptManager) {
         super(agentName, agent);
+        this.promptManager = promptManager;
     }
 
     @Override
     protected List<ChatMessage> buildMessages(MainGraphState state) {
-        List<ChatMessage> messages = new ArrayList<>();
+        // 使用新的提示词管理器构建消息
+        List<ChatMessage> messages = promptManager.buildMainGraphMessages(agentName, state);
         
-        // 构建系统提示词
-        String systemPrompt = PromptTemplateManager.instance.buildSummarySystemPrompt();
-        messages.add(SystemMessage.from(systemPrompt));
-        
-        // 构建用户提示词
-        String userPrompt = buildUserPrompt(state);
-        messages.add(UserMessage.from(userPrompt));
-        
-        log.debug("Summary智能体消息构建完成，消息数量: {}", messages.size());
+        log.debug("总结智能体消息构建完成，消息数量: {}", messages.size());
         
         return messages;
     }
@@ -82,32 +75,4 @@ public class CallSummaryAgent extends CallAgent<MainGraphState> {
         }
     }
     
-    /**
-     * 构建用户提示词
-     */
-    private String buildUserPrompt(MainGraphState state) {
-        String originalUserQuery = state.getOriginalUserQuery().orElse("请生成旅游规划报告");
-        String subgraphResultsInfo = formatSubgraphResults(state);
-        
-        return PromptTemplateManager.instance.buildSummaryUserPrompt(
-            originalUserQuery, subgraphResultsInfo
-        );
-    }
-    
-    /**
-     * 格式化子图结果
-     */
-    private String formatSubgraphResults(MainGraphState state) {
-        Optional<Map<String, String>> subgraphResultsOpt = state.getSubgraphResults();
-        if (subgraphResultsOpt.isEmpty() || subgraphResultsOpt.get().isEmpty()) {
-            return "暂无子图执行结果";
-        }
-        
-        Map<String, String> subgraphResults = subgraphResultsOpt.get();
-        StringBuilder info = new StringBuilder();
-        subgraphResults.forEach((agent, result) -> 
-            info.append(String.format("**%s执行结果**：\n%s\n\n", agent, result))
-        );
-        return info.toString();
-    }
 }

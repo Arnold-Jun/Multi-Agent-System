@@ -133,6 +133,16 @@ class TravelingAgentApp {
             this.exportChat();
         });
 
+        // 历史记录管理功能
+        document.getElementById('clearAllHistoryBtn').addEventListener('click', () => {
+            this.clearAllHistory();
+        });
+
+        document.getElementById('refreshHistoryBtn').addEventListener('click', () => {
+            this.loadChatHistory();
+            this.showNotification('历史记录已刷新', 'success');
+        });
+
         // 测试换行符处理（开发调试用）
         if (window.location.search.includes('debug=true')) {
             const testBtn = document.createElement('button');
@@ -548,22 +558,27 @@ class TravelingAgentApp {
     }
 
     startNewChat() {
+        // 保存当前对话到历史记录（如果有的话）
+        this.saveCurrentChatToHistory();
+        
         this.currentSessionId = this.generateSessionId();
         this.messageHistory = [];
         this.waitingForUserInput = false; // 重置用户输入状态
         this.userInputPrompt = '';
         
-        // 清空消息容器，保留欢迎消息
+        // 清空消息容器并重新创建欢迎消息
         const messagesContainer = document.getElementById('messagesContainer');
-        const welcomeMessage = messagesContainer.querySelector('.agent-message');
         messagesContainer.innerHTML = '';
-        if (welcomeMessage) {
-            messagesContainer.appendChild(welcomeMessage);
-        }
+        
+        // 重新创建欢迎消息
+        this.createWelcomeMessage();
         
         // 重置输入框
         const messageInput = document.getElementById('messageInput');
         messageInput.placeholder = '请描述您的旅游需求，例如：我想去日本旅游7天，预算1万元...';
+        
+        // 清空当前会话的临时存储
+        this.clearCurrentSessionCache();
         
         // 更新聊天历史
         this.loadChatHistory();
@@ -709,11 +724,175 @@ class TravelingAgentApp {
         this.messageHistory.push({
             timestamp: Date.now(),
             user: userMessage,
-            agent: agentResponse
+            agent: agentResponse,
+            sessionId: this.currentSessionId
         });
         
+        // 限制历史记录数量，避免localStorage溢出
+        this.limitHistorySize();
+        
         // 保存到localStorage
-        localStorage.setItem('travelingAgentHistory', JSON.stringify(this.messageHistory));
+        this.saveHistoryToStorage();
+    }
+    
+    /**
+     * 保存当前对话到历史记录
+     */
+    saveCurrentChatToHistory() {
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messages = messagesContainer.querySelectorAll('.message');
+        
+        if (messages.length > 1) { // 除了欢迎消息
+            let currentUserMessage = '';
+            let currentAgentMessage = '';
+            
+            messages.forEach(message => {
+                if (message.classList.contains('user-message')) {
+                    const messageText = message.querySelector('.message-text');
+                    if (messageText) {
+                        currentUserMessage = messageText.textContent.trim();
+                    }
+                } else if (message.classList.contains('agent-message')) {
+                    const messageText = message.querySelector('.message-text');
+                    if (messageText && !messageText.textContent.includes('您好！我是您的专属旅游智能体')) {
+                        currentAgentMessage = messageText.textContent.trim();
+                    }
+                }
+            });
+            
+            if (currentUserMessage && currentAgentMessage) {
+                this.messageHistory.push({
+                    timestamp: Date.now(),
+                    user: currentUserMessage,
+                    agent: currentAgentMessage,
+                    sessionId: this.currentSessionId
+                });
+                
+                this.limitHistorySize();
+                this.saveHistoryToStorage();
+            }
+        }
+    }
+    
+    /**
+     * 限制历史记录大小
+     */
+    limitHistorySize() {
+        const MAX_HISTORY_SIZE = 50; // 最多保存50条历史记录
+        
+        if (this.messageHistory.length > MAX_HISTORY_SIZE) {
+            // 按时间排序，保留最新的记录
+            this.messageHistory.sort((a, b) => b.timestamp - a.timestamp);
+            this.messageHistory = this.messageHistory.slice(0, MAX_HISTORY_SIZE);
+        }
+    }
+    
+    /**
+     * 保存历史记录到localStorage
+     */
+    saveHistoryToStorage() {
+        try {
+            localStorage.setItem('travelingAgentHistory', JSON.stringify(this.messageHistory));
+        } catch (error) {
+            console.error('保存历史记录失败:', error);
+            // 如果localStorage满了，清理一些旧数据
+            this.cleanupOldHistory();
+            try {
+                localStorage.setItem('travelingAgentHistory', JSON.stringify(this.messageHistory));
+            } catch (retryError) {
+                console.error('重试保存历史记录失败:', retryError);
+                this.showNotification('历史记录保存失败，请清理浏览器缓存', 'error');
+            }
+        }
+    }
+    
+    /**
+     * 清理过期历史记录
+     */
+    cleanupExpiredHistory() {
+        const EXPIRY_DAYS = 30; // 30天过期
+        const expiryTime = Date.now() - (EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+        
+        const originalLength = this.messageHistory.length;
+        this.messageHistory = this.messageHistory.filter(chat => chat.timestamp > expiryTime);
+        
+        if (this.messageHistory.length !== originalLength) {
+            this.saveHistoryToStorage();
+        }
+    }
+    
+    /**
+     * 清理旧历史记录（当localStorage满时）
+     */
+    cleanupOldHistory() {
+        // 保留最新的20条记录
+        this.messageHistory.sort((a, b) => b.timestamp - a.timestamp);
+        this.messageHistory = this.messageHistory.slice(0, 20);
+    }
+    
+    /**
+     * 清空当前会话缓存
+     */
+    clearCurrentSessionCache() {
+        // 清理当前会话相关的临时数据
+        const sessionKey = `traveling_session_${this.currentSessionId}`;
+        localStorage.removeItem(sessionKey);
+    }
+    
+    /**
+     * 删除单个历史记录项
+     */
+    deleteHistoryItem(index) {
+        if (index >= 0 && index < this.messageHistory.length) {
+            this.messageHistory.splice(index, 1);
+            this.saveHistoryToStorage();
+            this.loadChatHistory(); // 重新加载显示
+            this.showNotification('对话记录已删除', 'success');
+        }
+    }
+    
+    /**
+     * 清空所有历史记录
+     */
+    clearAllHistory() {
+        if (confirm('确定要清空所有对话历史吗？此操作不可恢复。')) {
+            this.messageHistory = [];
+            localStorage.removeItem('travelingAgentHistory');
+            this.loadChatHistory();
+            this.showNotification('所有对话历史已清空', 'success');
+        }
+    }
+    
+    /**
+     * 创建欢迎消息
+     */
+    createWelcomeMessage() {
+        const messagesContainer = document.getElementById('messagesContainer');
+        const welcomeMessageDiv = document.createElement('div');
+        welcomeMessageDiv.className = 'message agent-message';
+        welcomeMessageDiv.innerHTML = `
+            <div class="message-avatar">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="sender-name">旅游智能体</span>
+                    <span class="message-time">刚刚</span>
+                </div>
+                <div class="message-text">
+                    <p>👋 您好！我是您的专属旅游智能体，我可以帮助您：</p>
+                    <ul>
+                        <li>🔍 搜索目的地信息和景点详情</li>
+                        <li>📅 制定个性化旅游行程</li>
+                        <li>🏨 预订酒店、机票等服务</li>
+                        <li>🗺️ 提供出行建议和实时监控</li>
+                    </ul>
+                    <p>请告诉我您的旅游需求，让我为您规划一次完美的旅程！</p>
+                </div>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(welcomeMessageDiv);
     }
 
     loadChatHistory() {
@@ -721,12 +900,23 @@ class TravelingAgentApp {
         const saved = localStorage.getItem('travelingAgentHistory');
         
         if (saved) {
-            this.messageHistory = JSON.parse(saved);
+            try {
+                this.messageHistory = JSON.parse(saved);
+            } catch (error) {
+                console.error('解析历史记录失败:', error);
+                this.messageHistory = [];
+                localStorage.removeItem('travelingAgentHistory');
+            }
         }
         
-        // 显示最近的对话
+        // 清理过期数据
+        this.cleanupExpiredHistory();
+        
+        // 显示最近的对话（按时间倒序，最新的在前）
         historyContainer.innerHTML = '';
-        const recentChats = this.messageHistory.slice(-10).reverse();
+        const recentChats = this.messageHistory
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 10);
         
         recentChats.forEach((chat, index) => {
             const historyItem = document.createElement('div');
@@ -735,6 +925,11 @@ class TravelingAgentApp {
                 <div class="history-preview">
                     <div class="history-user-message">${this.truncateText(chat.user, 30)}</div>
                     <div class="history-time">${new Date(chat.timestamp).toLocaleString('zh-CN')}</div>
+                </div>
+                <div class="history-actions">
+                    <button class="delete-history-btn" onclick="event.stopPropagation(); window.travelingAgentApp.deleteHistoryItem(${index})" title="删除此对话">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
             `;
             

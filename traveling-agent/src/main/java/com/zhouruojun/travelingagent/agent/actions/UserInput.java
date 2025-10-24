@@ -29,8 +29,7 @@ public class UserInput implements NodeAction<MainGraphState> {
         // 这是主要的用户输入场景，Scheduler判断需要用户输入时会设置taskDescription
         if (state.getValue("subgraphTaskDescription").isPresent()) {
             inquiryMessage = (String) state.getValue("subgraphTaskDescription").get();
-            log.info("UserInput triggered by Scheduler routing, taskDescription: {}", inquiryMessage);
-        } 
+        }
         // 兜底情况：使用默认消息
         else {
             inquiryMessage = "需要您提供更多的信息以继续...";

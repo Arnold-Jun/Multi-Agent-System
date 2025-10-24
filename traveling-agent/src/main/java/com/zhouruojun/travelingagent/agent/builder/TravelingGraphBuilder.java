@@ -24,8 +24,8 @@ import com.zhouruojun.travelingagent.agent.builder.subgraph.OnTripSubgraphBuilde
 import com.zhouruojun.travelingagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.travelingagent.agent.state.MainGraphState;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
-import com.zhouruojun.travelingagent.common.PromptTemplateManager;
 import com.zhouruojun.travelingagent.mcp.TravelingToolProviderManager;
+import com.zhouruojun.travelingagent.prompts.PromptManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -72,6 +72,9 @@ public class TravelingGraphBuilder {
     
     // 子图状态管理器
     private SubgraphStateManager subgraphStateManager;
+    
+    // 提示词管理器
+    private PromptManager promptManager;
 
     /**
      * 设置聊天语言模型
@@ -145,6 +148,14 @@ public class TravelingGraphBuilder {
     }
 
     /**
+     * 设置提示词管理器
+     */
+    public TravelingGraphBuilder promptManager(PromptManager promptManager) {
+        this.promptManager = promptManager;
+        return this;
+    }
+
+    /**
      * 构建主图
      */
     public StateGraph<MainGraphState> build() throws GraphStateException {
@@ -166,15 +177,15 @@ public class TravelingGraphBuilder {
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<MainGraphState>>> queue = new LinkedBlockingQueue<>();
         
         // 创建智能体
-        CallPlannerAgent callPlanner = new CallPlannerAgent("planner", agents.get("planner"));
+        CallPlannerAgent callPlanner = new CallPlannerAgent("planner", agents.get("planner"), promptManager);
         callPlanner.setQueue(queue);
         
         TodoListParser todoListParser = createTodoListParser();
         
-        CallSchedulerAgent callScheduler = new CallSchedulerAgent("scheduler", agents.get("scheduler"), schedulerResponseParser);
+        CallSchedulerAgent callScheduler = new CallSchedulerAgent("scheduler", agents.get("scheduler"), schedulerResponseParser, promptManager);
         callScheduler.setQueue(queue);
         
-        CallSummaryAgent callSummary = new CallSummaryAgent("summary", agents.get("summary"));
+        CallSummaryAgent callSummary = new CallSummaryAgent("summary", agents.get("summary"), promptManager);
         callSummary.setQueue(queue);
         
         UserInput userInput = new UserInput();
@@ -237,7 +248,7 @@ public class TravelingGraphBuilder {
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .tools(toolProviderManager.getToolSpecificationsByAgent("planner"))
                 .agentName("planner")
-                .prompt(PromptTemplateManager.instance.getPlannerPrompt())
+                .prompt(promptManager.getMainGraphSystemPrompt("planner", "INITIAL"))
                 .build());
                 
         // 创建Scheduler智能体
@@ -245,7 +256,7 @@ public class TravelingGraphBuilder {
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .agentName("scheduler")
-                .prompt(PromptTemplateManager.instance.getSchedulerPrompt())
+                .prompt(promptManager.getMainGraphSystemPrompt("scheduler", "INITIAL_SCHEDULING"))
                 .build());
                 
         // 创建Summary智能体
@@ -253,7 +264,7 @@ public class TravelingGraphBuilder {
                 .chatLanguageModel(chatLanguageModel)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
                 .agentName("summary")
-                .prompt(PromptTemplateManager.instance.getSummaryPrompt())
+                .prompt(promptManager.getMainGraphSystemPrompt("summary", "DEFAULT"))
                 .build());
                 
         return agents;
@@ -315,6 +326,7 @@ public class TravelingGraphBuilder {
                 .checkpointSaver(checkpointSaver)
                 .enableCheckpoint(checkpointEnabled)
                 .checkpointNamespace(namespace)
+                .promptManager(promptManager)
                 .build()
                 .compile();
     }

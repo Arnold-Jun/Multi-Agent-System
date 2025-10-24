@@ -2,19 +2,14 @@ package com.zhouruojun.travelingagent.agent.actions;
 
 import com.zhouruojun.travelingagent.agent.BaseAgent;
 import com.zhouruojun.travelingagent.agent.state.SubgraphState;
-import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
-import com.zhouruojun.travelingagent.common.PromptTemplateManager;
+import com.zhouruojun.travelingagent.prompts.PromptManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import org.bsc.async.AsyncGenerator;
 import org.bsc.langgraph4j.streaming.StreamingOutput;
@@ -27,16 +22,20 @@ import org.bsc.langgraph4j.streaming.StreamingOutput;
 @Slf4j
 public class CallSubAgent extends CallAgent<SubgraphState> {
 
+    @SuppressWarnings("unused")
     private BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>> queue;
+    private final PromptManager promptManager;
 
     /**
      * 构造函数
      *
      * @param agentName 智能体名称
      * @param agent 智能体实例
+     * @param promptManager 提示词管理器
      */
-    public CallSubAgent(@NonNull String agentName, @NonNull BaseAgent agent) {
+    public CallSubAgent(@NonNull String agentName, @NonNull BaseAgent agent, @NonNull PromptManager promptManager) {
         super(agentName, agent);
+        this.promptManager = promptManager;
     }
 
     /**
@@ -48,27 +47,11 @@ public class CallSubAgent extends CallAgent<SubgraphState> {
 
     @Override
     protected List<ChatMessage> buildMessages(SubgraphState state) {
-        List<ChatMessage> messages = new ArrayList<>();
+        // 使用新的提示词管理器构建消息
+        List<ChatMessage> messages = promptManager.buildSubgraphMessages(agentName, state);
         
-        // 获取当前任务
-        Optional<TodoTask> currentTaskOpt = state.getCurrentTask();
-        if (!currentTaskOpt.isPresent()) {
-            log.warn("子图状态中没有当前任务，使用原始消息");
-            return state.messages();
-        }
+        log.debug("子图智能体 {} 消息构建完成，消息数量: {}", agentName, messages.size());
         
-        TodoTask currentTask = currentTaskOpt.get();
-        
-        // 获取子图类型
-        String subgraphType = state.getSubgraphType().orElse("unknown");
-
-        // 根据子图类型获取对应的提示词
-        String systemPrompt = getSystemPromptForSubgraphType(subgraphType);
-        String userPrompt = buildUserPromptForSubgraph(currentTask, state);
-        
-        messages.add(SystemMessage.from(systemPrompt));
-        messages.add(UserMessage.from(userPrompt));
-
         return messages;
     }
 
@@ -92,24 +75,5 @@ public class CallSubAgent extends CallAgent<SubgraphState> {
         }
     }
 
-    /**
-     * 根据子图类型获取系统提示词
-     */
-    private String getSystemPromptForSubgraphType(String subgraphType) {
-        return PromptTemplateManager.instance.buildSubgraphSystemPrompt(subgraphType);
-    }
-
-    /**
-     * 构建用户提示词
-     */
-    private String buildUserPromptForSubgraph(TodoTask currentTask, SubgraphState state) {
-        log.info("工具消息： {}", state.getToolExecutionResult());
-        return PromptTemplateManager.instance.buildSubgraphUserPrompt(
-            currentTask.getDescription(),
-            state.getSubgraphContext().orElse(null),  // Scheduler的上下文
-            state.getToolExecutionResult().orElse(null),
-            state.getSubgraphType().orElse("unknown")
-        );
-    }
 
 }

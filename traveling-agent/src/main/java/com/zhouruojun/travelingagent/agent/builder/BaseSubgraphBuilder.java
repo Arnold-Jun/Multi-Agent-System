@@ -7,6 +7,7 @@ import com.zhouruojun.travelingagent.agent.state.BaseAgentState;
 import com.zhouruojun.travelingagent.agent.state.SubgraphState;
 import com.zhouruojun.travelingagent.config.ParallelExecutionConfig;
 import com.zhouruojun.travelingagent.mcp.TravelingToolProviderManager;
+import com.zhouruojun.travelingagent.prompts.PromptManager;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import org.bsc.async.AsyncGenerator;
@@ -34,6 +35,7 @@ public abstract class BaseSubgraphBuilder<T extends BaseAgentState> {
     protected ParallelExecutionConfig parallelExecutionConfig;
     protected TravelingToolProviderManager toolProviderManager;
     protected BlockingQueue<AsyncGenerator.Data<StreamingOutput<T>>> queue;
+    protected PromptManager promptManager;
     
     // Checkpoint相关配置
     protected BaseCheckpointSaver checkpointSaver;
@@ -103,6 +105,14 @@ public abstract class BaseSubgraphBuilder<T extends BaseAgentState> {
      */
     public BaseSubgraphBuilder<T> checkpointNamespace(String checkpointNamespace) {
         this.checkpointNamespace = checkpointNamespace;
+        return this;
+    }
+
+    /**
+     * 设置提示词管理器
+     */
+    public BaseSubgraphBuilder<T> promptManager(PromptManager promptManager) {
+        this.promptManager = promptManager;
         return this;
     }
 
@@ -185,7 +195,7 @@ public abstract class BaseSubgraphBuilder<T extends BaseAgentState> {
      * 创建调用智能体节点
      */
     protected CallSubAgent createCallAgent(BaseAgent agent) {
-        CallSubAgent callAgent = new CallSubAgent(getAgentName(), agent);
+        CallSubAgent callAgent = new CallSubAgent(getAgentName(), agent, promptManager);
         @SuppressWarnings("unchecked")
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>> subgraphQueue =
             (BlockingQueue<AsyncGenerator.Data<StreamingOutput<SubgraphState>>>) (BlockingQueue<?>) queue;

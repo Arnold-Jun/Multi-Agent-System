@@ -24,7 +24,17 @@
             </div>
             
             <div class="chat-history">
-                <h3>对话历史</h3>
+                <div class="history-header">
+                    <h3>对话历史</h3>
+                    <div class="history-actions">
+                        <button class="clear-history-btn" id="clearAllHistoryBtn" title="清空所有历史">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                        <button class="refresh-history-btn" id="refreshHistoryBtn" title="刷新历史">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
                 <div class="history-list" id="chatHistory">
                     <!-- 动态生成聊天历史 -->
                 </div>

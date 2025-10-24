@@ -2,7 +2,7 @@ package com.zhouruojun.travelingagent.agent.actions;
 
 import com.zhouruojun.travelingagent.agent.BaseAgent;
 import com.zhouruojun.travelingagent.agent.state.MainGraphState;
-import com.zhouruojun.travelingagent.common.PromptTemplateManager;
+import com.zhouruojun.travelingagent.prompts.PromptManager;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.NonNull;
@@ -23,20 +23,24 @@ import java.util.Map;
 @Slf4j
 public class CallPlannerAgent extends CallAgent<MainGraphState> {
 
+    private final PromptManager promptManager;
+
     /**
      * 构造函数
      *
      * @param agentName 智能体名称
      * @param agent 智能体实例
+     * @param promptManager 提示词管理器
      */
-    public CallPlannerAgent(@NonNull String agentName, @NonNull BaseAgent agent) {
+    public CallPlannerAgent(@NonNull String agentName, @NonNull BaseAgent agent, @NonNull PromptManager promptManager) {
         super(agentName, agent);
+        this.promptManager = promptManager;
     }
 
     @Override
     protected List<ChatMessage> buildMessages(MainGraphState state) {
-        // 使用PromptTemplateManager构建消息，它会根据状态自动判断场景
-        List<ChatMessage> messages = PromptTemplateManager.instance.buildPlannerMessages(state);
+        // 使用新的提示词管理器构建消息
+        List<ChatMessage> messages = promptManager.buildMainGraphMessages(agentName, state);
         
         log.debug("规划智能体消息构建完成，消息数量: {}", messages.size());
         
