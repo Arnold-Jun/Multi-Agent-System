@@ -451,8 +451,7 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         
         String trimmed = text.trim();
         char lastChar = trimmed.charAt(trimmed.length() - 1);
-        
-        // 支持英文问号、中文问号、全角问号
+
         return lastChar == '?' || lastChar == '？';
     }
 

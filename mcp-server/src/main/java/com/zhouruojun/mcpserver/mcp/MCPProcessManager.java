@@ -99,6 +99,14 @@ public class MCPProcessManager {
      * 支持各种命令类型，包括npx、node、python等
      */
     public CompletableFuture<MCPProcess> startMCPProcess(String serverName, String command, List<String> args, String workingDirectory) {
+        return startMCPProcess(serverName, command, args, workingDirectory, null);
+    }
+    
+    /**
+     * 启动MCP进程（带工作目录和环境变量）
+     * 支持各种命令类型，包括npx、node、python等
+     */
+    public CompletableFuture<MCPProcess> startMCPProcess(String serverName, String command, List<String> args, String workingDirectory, Map<String, String> environmentVariables) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 // 构建进程
@@ -124,6 +132,12 @@ public class MCPProcessManager {
 
                 // 设置基础环境变量
                 env.put("PATH", System.getenv("PATH"));
+                
+                // 设置自定义环境变量
+                if (environmentVariables != null && !environmentVariables.isEmpty()) {
+                    log.info("设置自定义环境变量: {}", environmentVariables.keySet());
+                    env.putAll(environmentVariables);
+                }
                 
                 // 为特定命令设置特殊环境
                 if ("npx".equals(command)) {

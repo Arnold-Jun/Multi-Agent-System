@@ -60,7 +60,13 @@ public class ToolRegistryConfig implements CommandLineRunner {
         toolRegistry.registerTool("get-interline-tickets", "bookingAgent");
         toolRegistry.registerTool("get-train-route-stations", "bookingAgent");
 
-
+        toolRegistry.registerTool("searchFlightsByDepArr", "bookingAgent");
+        toolRegistry.registerTool("searchFlightsByNumber", "bookingAgent");
+        toolRegistry.registerTool("getFlightTransferInfo", "bookingAgent");
+        toolRegistry.registerTool("flightHappinessIndex", "bookingAgent");
+        toolRegistry.registerTool("getRealtimeLocationByAnum", "bookingAgent");
+        toolRegistry.registerTool("getFutureWeatherByAirport", "bookingAgent");
+        toolRegistry.registerTool("searchFlightItineraries", "bookingAgent");
 
         // OnTripAgent - 出行智能体工具
         toolRegistry.registerTool("maps_search", "onTripAgent");

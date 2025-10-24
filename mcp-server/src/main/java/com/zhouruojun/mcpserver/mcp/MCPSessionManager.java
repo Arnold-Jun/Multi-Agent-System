@@ -198,7 +198,7 @@ public class MCPSessionManager {
                     serverInfo.getArgs() != null ? String.join(" ", serverInfo.getArgs()) : "");
                 
                 processManager.startMCPProcess(serverType, serverInfo.getCommand(), 
-                    serverInfo.getArgs(), serverInfo.getWorkingDirectory()).join();
+                    serverInfo.getArgs(), serverInfo.getWorkingDirectory(), serverInfo.getEnvironmentVariables()).join();
             }
             
             int delaySeconds = serverInfo.getStartupDelaySeconds();
@@ -324,7 +324,7 @@ public class MCPSessionManager {
             try {
                 // 启动进程（内部已有3.5秒等待）
                 processManager.startMCPProcess(serverType, serverInfo.getCommand(), 
-                    serverInfo.getArgs(), serverInfo.getWorkingDirectory()).join();
+                    serverInfo.getArgs(), serverInfo.getWorkingDirectory(), serverInfo.getEnvironmentVariables()).join();
                 
                 // MCPProcessManager已经等待了3.5秒，这里再等待1秒确保完全就绪
                 log.info("等待进程稳定: {}", serverType);

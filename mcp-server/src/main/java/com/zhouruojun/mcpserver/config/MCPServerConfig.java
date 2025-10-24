@@ -125,6 +125,7 @@ public class MCPServerConfig {
         private String description;             // 服务器描述
         private String command;                 // 进程启动命令（如npx, node, go等）
         private List<String> args;              // 命令参数
+        private Map<String, String> env;        // 环境变量
         
         /**
          * 判断是否为进程模式
@@ -197,6 +198,14 @@ public class MCPServerConfig {
          */
         public int getStartupDelaySeconds() {
             return 3;
+        }
+        
+        /**
+         * 获取环境变量
+         * 如果配置了env字段，返回配置的环境变量；否则返回空Map
+         */
+        public Map<String, String> getEnvironmentVariables() {
+            return env != null ? env : new HashMap<>();
         }
     }
 }

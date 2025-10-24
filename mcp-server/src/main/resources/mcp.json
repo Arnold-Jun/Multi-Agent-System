@@ -21,6 +21,16 @@
         "-y",
         "12306-mcp"
       ]
+    },
+    "variflight": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@variflight-ai/variflight-mcp"
+      ],
+      "env": {
+        "VARIFLIGHT_API_KEY": "sk-42A9baUQHFXak9UKMyQDXZwFEVwgghYuInl65wf93B0"
+      }
     }
   }
 }
