@@ -11,6 +11,7 @@ import com.zhouruojun.travelingagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.travelingagent.service.OllamaService;
 import com.zhouruojun.travelingagent.mcp.TravelingToolProviderManager;
 import com.zhouruojun.travelingagent.a2a.TravelingTaskManager;
+import com.zhouruojun.travelingagent.prompts.PromptManager;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -83,6 +84,10 @@ public class TravelingControllerCore {
     @Autowired
     private TravelingToolProviderManager toolProviderManager;
     
+    // 提示词管理器
+    @Autowired
+    private PromptManager promptManager;
+    
     
     // 会话管理 - 从数据分析智能体迁移
     private final Map<String, List<ChatMessage>> sessionHistory = new ConcurrentHashMap<>();
@@ -94,8 +99,6 @@ public class TravelingControllerCore {
 
     @PostConstruct
     public void init() throws GraphStateException {
-        log.info("Initializing TravelingControllerCore with LangGraph4j support");
-        
         // 初始化缓存
         compiledGraphCache = new ConcurrentHashMap<>();
         stateGraphCache = new ConcurrentHashMap<>();
@@ -194,7 +197,8 @@ public class TravelingControllerCore {
             "sessionId", sessionId,
             "username", username
         );
-        
+
+        compiledGraph.setMaxIterations(60);
         // 执行图流程
         return compiledGraph.stream(initialState, runnableConfig);
     }
@@ -214,6 +218,7 @@ public class TravelingControllerCore {
                 .checkpointConfig(checkpointConfig)  // 传递配置对象
                 .schedulerResponseParser(schedulerResponseParser)
                 .subgraphStateManager(subgraphStateManager)  // 传递子图状态管理器
+                .promptManager(promptManager)  // 传递提示词管理器
                 .build();
     }
     
@@ -486,7 +491,7 @@ public class TravelingControllerCore {
                         .build();
                 
                 // 获取当前状态快照（从userInput打断的位置）
-                org.bsc.langgraph4j.state.StateSnapshot<MainGraphState> stateSnapshot = 
+                StateSnapshot<MainGraphState> stateSnapshot =
                         graph.getState(runnableConfig);
 
                 // 更新状态：添加用户输入消息

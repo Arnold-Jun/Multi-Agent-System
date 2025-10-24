@@ -5,7 +5,6 @@ import com.zhouruojun.travelingagent.agent.actions.ExecuteTools;
 import com.zhouruojun.travelingagent.agent.builder.BaseSubgraphBuilder;
 import com.zhouruojun.travelingagent.agent.serializers.AgentSerializers;
 import com.zhouruojun.travelingagent.agent.state.SubgraphState;
-import com.zhouruojun.travelingagent.common.PromptTemplateManager;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
@@ -37,7 +36,7 @@ public class OnTripSubgraphBuilder extends BaseSubgraphBuilder<SubgraphState> {
 
     @Override
     protected String getPrompt() {
-        return PromptTemplateManager.instance.getOnTripPrompt();
+        return promptManager.getSubgraphSystemPrompt("onTripAgent");
     }
 
     @Override
