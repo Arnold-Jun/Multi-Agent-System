@@ -209,6 +209,9 @@ body {
 
 .agent-status {
     margin-bottom: var(--spacing-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
 .status-indicator {
@@ -216,6 +219,32 @@ body {
     align-items: center;
     gap: var(--spacing-sm);
     font-size: var(--font-size-sm);
+    flex: 1;
+}
+
+.test-ws-btn {
+    background: var(--primary-color);
+    border: none;
+    color: var(--text-white);
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: var(--font-size-sm);
+}
+
+.test-ws-btn:hover {
+    background: var(--primary-hover);
+    transform: scale(1.05);
+}
+
+.test-ws-btn:active {
+    transform: scale(0.95);
 }
 
 .status-dot {

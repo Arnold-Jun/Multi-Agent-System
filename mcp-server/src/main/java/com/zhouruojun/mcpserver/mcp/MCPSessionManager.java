@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.io.File;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -35,11 +34,13 @@ public class MCPSessionManager {
     public MCPSessionManager(MCPServerConfig mcpServerConfig, MCPProcessManager processManager) {
         this.mcpServerConfig = mcpServerConfig;
         this.processManager = processManager;
+        // 配置WebClient以避免连接池问题
         this.webClient = WebClient.builder()
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
-                .defaultHeader("Accept", "application/json, text/event-stream")
+                .defaultHeader("Accept", "application/json")
                 .defaultHeader("Content-Type", "application/json")
                 .defaultHeader("User-Agent", "traveling-mcp-server/1.0.0")
+                .defaultHeader("Connection", "close")  // 关键：每次请求后关闭连接，避免连接复用问题
                 .build();
         this.objectMapper = new ObjectMapper();
     }
@@ -194,24 +195,6 @@ public class MCPSessionManager {
                 log.debug("启动Go进程: {}", serverType);
                 processManager.startMCPProcess(serverType, "go", 
                     Arrays.asList("run", "."), "C:\\Users\\ZhuanZ1\\mcp\\xiaohongshu-mcp").join();
-            } 
-            // 特殊处理amadeus-mcp：启动Java进程
-            else if ("amadeus-mcp".equals(serverType)) {
-                String amadeusWorkingDir = System.getProperty("user.dir") + File.separator + "amadeus-mcp";
-                
-                // 清理端口18090避免冲突
-                processManager.forceCleanupPort(18090);
-                Thread.sleep(2000);
-                
-                String jarPath = "target" + File.separator + "amadeus-mcp-1.0-SNAPSHOT.jar";
-                File jarFile = new File(amadeusWorkingDir, jarPath);
-                
-                if (!jarFile.exists()) {
-                    throw new RuntimeException("JAR文件不存在: " + jarFile.getAbsolutePath());
-                }
-                
-                processManager.startMCPProcess(serverType, "java", 
-                    Arrays.asList("-jar", jarPath), amadeusWorkingDir).join();
             } else {
                 log.debug("启动进程: {} - {} {}", serverType, serverInfo.getCommand(),
                     serverInfo.getArgs() != null ? String.join(" ", serverInfo.getArgs()) : "");
@@ -286,7 +269,7 @@ public class MCPSessionManager {
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(Duration.ofSeconds(120))
                     .block();
 
             @SuppressWarnings("unchecked")
@@ -600,7 +583,7 @@ public class MCPSessionManager {
                         .bodyValue(request)
                         .retrieve()
                         .bodyToMono(String.class)
-                        .timeout(Duration.ofSeconds(30))
+                        .timeout(Duration.ofSeconds(120))
                         .block();
 
                 @SuppressWarnings("unchecked")
@@ -660,7 +643,7 @@ public class MCPSessionManager {
                         .bodyValue(batchRequest)
                         .retrieve()
                         .bodyToMono(String.class)
-                        .timeout(Duration.ofSeconds(30))
+                        .timeout(Duration.ofSeconds(120))
                         .block();
                 
                 @SuppressWarnings("unchecked")

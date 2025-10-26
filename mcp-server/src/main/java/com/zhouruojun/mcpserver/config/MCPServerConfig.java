@@ -8,6 +8,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -174,6 +175,14 @@ public class MCPServerConfig {
             if ("go".equals(command)) {
                 return "C:\\Users\\ZhuanZ1\\mcp\\xiaohongshu-mcp";
             }
+            // 如果是Java程序且是amadeus-mcp，使用amadeus-mcp目录
+            if ("java".equals(command) && args != null) {
+                for (String arg : args) {
+                    if (arg.contains("amadeus-mcp-1.0-SNAPSHOT.jar")) {
+                        return System.getProperty("user.dir") + File.separator + "amadeus-mcp";
+                    }
+                }
+            }
             // 其他情况使用用户主目录
             return System.getProperty("user.home");
         }
@@ -186,8 +195,8 @@ public class MCPServerConfig {
             if (isProcessMode()) {
                 return true;
             }
-            // 混合模式：需要启动本地进程然后通过HTTP通信
-            if (url != null && (url.contains("localhost:18060") || url.contains("localhost:18090"))) {
+            // 混合模式：只有xiaohongshu-mcp需要启动Go进程
+            if (url != null && url.contains("localhost:18060")) {
                 return true;
             }
             return false;

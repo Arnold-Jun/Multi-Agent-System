@@ -133,6 +133,11 @@ class TravelingAgentApp {
             this.exportChat();
         });
 
+        // WebSocket测试按钮
+        document.getElementById('testWsBtn').addEventListener('click', () => {
+            this.testWebSocketConnection();
+        });
+
         // 历史记录管理功能
         document.getElementById('clearAllHistoryBtn').addEventListener('click', () => {
             this.clearAllHistory();
@@ -189,34 +194,76 @@ class TravelingAgentApp {
 
     initWebSocket() {
         try {
+            console.log('正在初始化 WebSocket 连接...');
+            
             // 使用 SockJS 和 STOMP
-            const socket = new SockJS('/ws');
+            // 自动检测当前页面的端口
+            const protocol = window.location.protocol;
+            const hostname = window.location.hostname;
+            const port = window.location.port || (protocol === 'https:' ? '443' : '80');
+            const wsUrl = `${protocol}//${hostname}:${port}/ws`;
+            
+            console.log('WebSocket连接URL:', wsUrl);
+            const socket = new SockJS(wsUrl);
             this.stompClient = Stomp.over(socket);
             
-            // 禁用调试日志
-            this.stompClient.debug = null;
+            // 启用调试日志（临时）
+            this.stompClient.debug = function(str) {
+                console.log('STOMP Debug:', str);
+            };
+            
+            // 设置连接选项
+            const connectOptions = {
+                timeout: 10000, // 10秒超时
+                heartbeat_in: 0,
+                heartbeat_out: 20000,
+                debug: true
+            };
             
             // 连接 WebSocket
-            this.stompClient.connect({}, (frame) => {
+            this.stompClient.connect(connectOptions, (frame) => {
                 console.log('WebSocket 连接成功:', frame);
                 this.connected = true;
                 this.updateConnectionStatus(true);
                 
                 // 订阅回复消息
                 this.stompClient.subscribe('/topic/reply', (message) => {
-                    const data = JSON.parse(message.body);
-                    // 只处理当前会话的消息
-                    if (data.sessionId === this.currentSessionId) {
-                        this.handleWebSocketMessage(data);
+                    console.log('收到回复消息:', message.body);
+                    try {
+                        const data = JSON.parse(message.body);
+                        // 只处理当前会话的消息
+                        if (data.sessionId === this.currentSessionId) {
+                            this.handleWebSocketMessage(data);
+                        }
+                    } catch (e) {
+                        console.error('解析回复消息失败:', e);
                     }
                 });
                 
                 // 订阅错误消息
                 this.stompClient.subscribe('/topic/error', (message) => {
-                    const data = JSON.parse(message.body);
-                    // 只处理当前会话的消息
-                    if (data.sessionId === this.currentSessionId) {
-                        this.handleWebSocketError(data);
+                    console.log('收到错误消息:', message.body);
+                    try {
+                        const data = JSON.parse(message.body);
+                        // 只处理当前会话的消息
+                        if (data.sessionId === this.currentSessionId) {
+                            this.handleWebSocketError(data);
+                        }
+                    } catch (e) {
+                        console.error('解析错误消息失败:', e);
+                    }
+                });
+                
+                // 订阅用户输入请求消息
+                this.stompClient.subscribe('/topic/userInput', (message) => {
+                    console.log('收到用户输入请求:', message.body);
+                    try {
+                        const data = JSON.parse(message.body);
+                        if (data.sessionId === this.currentSessionId) {
+                            this.handleUserInputRequest(data.prompt || data.content);
+                        }
+                    } catch (e) {
+                        console.error('解析用户输入请求失败:', e);
                     }
                 });
                 
@@ -228,6 +275,7 @@ class TravelingAgentApp {
                 // 重连机制
                 setTimeout(() => {
                     if (!this.connected) {
+                        console.log('尝试重新连接 WebSocket...');
                         this.initWebSocket();
                     }
                 }, 5000);
@@ -237,6 +285,14 @@ class TravelingAgentApp {
             console.error('WebSocket 初始化失败:', error);
             this.connected = false;
             this.updateConnectionStatus(false);
+            
+            // 重试机制
+            setTimeout(() => {
+                if (!this.connected) {
+                    console.log('重试 WebSocket 初始化...');
+                    this.initWebSocket();
+                }
+            }, 3000);
         }
     }
 
@@ -248,9 +304,36 @@ class TravelingAgentApp {
         if (connected) {
             statusDot.className = 'status-dot';
             statusText.textContent = 'WebSocket 已连接';
+            console.log('✅ WebSocket 连接状态更新为：已连接');
         } else {
             statusDot.className = 'status-dot offline';
             statusText.textContent = 'WebSocket 连接失败';
+            console.log('❌ WebSocket 连接状态更新为：连接失败');
+        }
+    }
+
+    // 添加WebSocket连接测试方法
+    testWebSocketConnection() {
+        console.log('🔍 开始测试 WebSocket 连接...');
+        
+        if (!this.stompClient) {
+            console.log('❌ STOMP 客户端未初始化');
+            return false;
+        }
+        
+        if (!this.connected) {
+            console.log('❌ WebSocket 未连接');
+            return false;
+        }
+        
+        try {
+            // 发送ping测试
+            this.stompClient.send('/app/traveling/ping', {}, 'ping');
+            console.log('✅ Ping 消息已发送');
+            return true;
+        } catch (error) {
+            console.error('❌ Ping 测试失败:', error);
+            return false;
         }
     }
 

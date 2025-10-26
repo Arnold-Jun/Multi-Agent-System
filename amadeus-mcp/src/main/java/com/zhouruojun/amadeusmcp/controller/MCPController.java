@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * MCP协议控制器
@@ -24,27 +23,30 @@ public class MCPController {
 
     /**
      * MCP协议端点 - 处理所有MCP请求
+     * 注意：必须使用同步返回以避免WebClient连接池问题
      */
     @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public CompletableFuture<ResponseEntity<Map<String, Object>>> handleMCPRequest(
+    public ResponseEntity<Map<String, Object>> handleMCPRequest(
             @RequestBody Map<String, Object> request) {
         
         log.debug("收到MCP请求: {}", request);
         
-        return mcpService.handleRequest(request)
-                .thenApply(ResponseEntity::ok)
-                .exceptionally(throwable -> {
-                    log.error("MCP请求处理失败", throwable);
-                    return ResponseEntity.internalServerError()
-                            .body(Map.of(
-                                "jsonrpc", "2.0",
-                                "id", request.get("id"),
-                                "error", Map.of(
-                                    "code", -32603,
-                                    "message", "Internal error: " + throwable.getMessage()
-                                )
-                            ));
-                });
+        try {
+            // 同步等待CompletableFuture完成
+            Map<String, Object> result = mcpService.handleRequest(request).join();
+            return ResponseEntity.ok(result);
+        } catch (Exception throwable) {
+            log.error("MCP请求处理失败", throwable);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of(
+                        "jsonrpc", "2.0",
+                        "id", request.get("id"),
+                        "error", Map.of(
+                            "code", -32603,
+                            "message", "Internal error: " + throwable.getMessage()
+                        )
+                    ));
+        }
     }
 
     /**

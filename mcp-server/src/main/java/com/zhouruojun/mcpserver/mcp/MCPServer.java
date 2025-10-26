@@ -174,8 +174,6 @@ public class MCPServer {
 
             log.debug("调用工具: {}, 参数: {}", toolName, arguments);
             
-            
-            
             // 根据工具名称调用相应的适配器
             Map<String, Object> result = callToolByName(toolName, arguments);
 
@@ -204,8 +202,8 @@ public class MCPServer {
             // 根据工具名称确定服务器类型
             String serverType = determineServerType(toolName);
 
-            // 调用相应的MCP服务器
-            return sessionManager.callTool(toolName, arguments, serverType).join();
+            // 调用相应的MCP服务器 - 使用get()而不是join()避免死锁
+            return sessionManager.callTool(toolName, arguments, serverType).get();
         } catch (Exception e) {
             log.error("工具调用失败: {}", toolName, e);
             throw new RuntimeException("工具调用失败: " + e.getMessage(), e);
