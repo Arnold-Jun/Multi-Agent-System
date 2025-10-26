@@ -37,7 +37,7 @@ public class MCPSessionManager {
         // 配置WebClient以避免连接池问题
         this.webClient = WebClient.builder()
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
-                .defaultHeader("Accept", "application/json")
+                .defaultHeader("Accept", "application/json","text/event-stream")
                 .defaultHeader("Content-Type", "application/json")
                 .defaultHeader("User-Agent", "traveling-mcp-server/1.0.0")
                 .defaultHeader("Connection", "close")  // 关键：每次请求后关闭连接，避免连接复用问题

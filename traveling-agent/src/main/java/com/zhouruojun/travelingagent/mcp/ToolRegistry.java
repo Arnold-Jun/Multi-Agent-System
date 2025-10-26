@@ -23,15 +23,20 @@ public class ToolRegistry {
     
     /**
      * 注册工具与智能体的关系
+     * 支持累积注册，不会覆盖已有的智能体映射
      */
     public void registerTool(String toolName, String... agentNames) {
-        Set<String> agents = new HashSet<>(Arrays.asList(agentNames));
-        toolAgentMap.put(toolName, agents);
+        // 获取现有的智能体集合，如果不存在则创建新的
+        Set<String> existingAgents = toolAgentMap.computeIfAbsent(toolName, (@SuppressWarnings("unused") var k) -> new HashSet<>());
         
-        // 反向映射
+        // 添加新的智能体到现有集合中
+        existingAgents.addAll(Arrays.asList(agentNames));
+        
+        // 反向映射：为每个智能体添加工具
         for (String agentName : agentNames) {
             agentToolMap.computeIfAbsent(agentName, (@SuppressWarnings("unused") var k) -> new HashSet<>()).add(toolName);
         }
+        
     }
     
     /**

@@ -4,6 +4,7 @@ import com.amadeus.Amadeus;
 import com.amadeus.Params;
 import com.amadeus.exceptions.ResponseException;
 import com.amadeus.resources.Location;
+import com.amadeus.referencedata.Locations;
 import com.amadeus.resources.FlightOrder;
 import com.amadeus.resources.FlightOrder.Traveler;
 import com.amadeus.resources.FlightOrder.Name;
@@ -130,8 +131,8 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码"),
-                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码"),
+                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码 (3位英文大写字母，如NYC, LON)"),
+                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码 (3位英文大写字母，如NYC, LON)"),
                     "departureDate", Map.of("type", "string", "description", "出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "returnDate", Map.of("type", "string", "description", "返程日期 (YYYY-MM-DD)，可选，必须是未来日期"),
                     "adults", Map.of("type", "integer", "description", "成人数量，默认1"),
@@ -149,8 +150,8 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码"),
-                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码"),
+                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码 (3位英文大写字母，如NYC, LON)"),
+                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码 (3位英文大写字母，如NYC, LON)"),
                     "departureDate", Map.of("type", "string", "description", "出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "adults", Map.of("type", "integer", "description", "成人数量，默认1")
                 ),
@@ -166,7 +167,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "cityCode", Map.of("type", "string", "description", "城市代码"),
+                    "cityCode", Map.of("type", "string", "description", "城市代码 (英文代码，如NYC, LON)"),
                     "checkInDate", Map.of("type", "string", "description", "入住日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "checkOutDate", Map.of("type", "string", "description", "退房日期 (YYYY-MM-DD)，必须是未来日期"),
                     "adults", Map.of("type", "integer", "description", "成人数量，默认1"),
@@ -183,7 +184,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "hotelIds", Map.of("type", "string", "description", "酒店ID，多个用逗号分隔"),
+                    "hotelIds", Map.of("type", "string", "description", "酒店ID (英文ID，多个用逗号分隔)"),
                     "checkInDate", Map.of("type", "string", "description", "入住日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "checkOutDate", Map.of("type", "string", "description", "退房日期 (YYYY-MM-DD)，必须是未来日期"),
                     "adults", Map.of("type", "integer", "description", "成人数量，默认1")
@@ -215,7 +216,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "activityId", Map.of("type", "string", "description", "活动ID")
+                    "activityId", Map.of("type", "string", "description", "活动ID (英文ID)")
                 ),
                 "required", Arrays.asList("activityId")
             )
@@ -229,7 +230,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "keyword", Map.of("type", "string", "description", "搜索关键词"),
+                    "keyword", Map.of("type", "string", "description", "搜索关键词 (英文，如New York, London)"),
                     "subType", Map.of("type", "string", "description", "子类型：AIRPORT, CITY, ANY")
                 ),
                 "required", Arrays.asList("keyword")
@@ -244,8 +245,8 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码"),
-                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码"),
+                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码 (3位英文大写字母，如NYC, LON)"),
+                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码 (3位英文大写字母，如NYC, LON)"),
                     "departureDate", Map.of("type", "string", "description", "出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "viewBy", Map.of("type", "string", "description", "视图方式：DURATION, DATE, WEEK")
                 ),
@@ -260,7 +261,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码"),
+                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码 (3位英文大写字母，如NYC, LON)"),
                     "departureDate", Map.of("type", "string", "description", "出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "oneWay", Map.of("type", "boolean", "description", "是否单程，默认false")
                 ),
@@ -276,7 +277,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "flightOrderId", Map.of("type", "string", "description", "航班订单ID，可选"),
+                    "flightOrderId", Map.of("type", "string", "description", "航班订单ID (英文ID)，可选"),
                     "flightOfferData", Map.of("type", "string", "description", "航班报价数据(JSON字符串)，可选")
                 ),
                 "required", Arrays.asList()
@@ -292,15 +293,15 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码"),
-                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码"),
+                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码 (3位英文大写字母，如NYC, LON)"),
+                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码 (3位英文大写字母，如NYC, LON)"),
                     "departureDate", Map.of("type", "string", "description", "出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "departureTime", Map.of("type", "string", "description", "出发时间 (HH:mm:ss)"),
                     "arrivalDate", Map.of("type", "string", "description", "到达日期 (YYYY-MM-DD)，必须是未来日期"),
                     "arrivalTime", Map.of("type", "string", "description", "到达时间 (HH:mm:ss)"),
-                    "aircraftCode", Map.of("type", "string", "description", "飞机代码"),
-                    "carrierCode", Map.of("type", "string", "description", "航空公司代码"),
-                    "flightNumber", Map.of("type", "string", "description", "航班号"),
+                    "aircraftCode", Map.of("type", "string", "description", "飞机代码 (英文代码，如320, 737)"),
+                    "carrierCode", Map.of("type", "string", "description", "航空公司代码 (2位英文大写字母，如AA, BA)"),
+                    "flightNumber", Map.of("type", "string", "description", "航班号 (数字，如123, 456)"),
                     "duration", Map.of("type", "string", "description", "飞行时长 (PT格式)")
                 ),
                 "required", Arrays.asList("originLocationCode", "destinationLocationCode", "departureDate", "departureTime", "arrivalDate", "arrivalTime", "aircraftCode", "carrierCode", "flightNumber", "duration")
@@ -315,8 +316,8 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码"),
-                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码"),
+                    "originLocationCode", Map.of("type", "string", "description", "出发地机场代码 (3位英文大写字母，如NYC, LON)"),
+                    "destinationLocationCode", Map.of("type", "string", "description", "目的地机场代码 (3位英文大写字母，如NYC, LON)"),
                     "departureDate", Map.of("type", "string", "description", "出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后"),
                     "returnDate", Map.of("type", "string", "description", "返程日期 (YYYY-MM-DD)，必须是未来日期")
                 ),
@@ -332,7 +333,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originCityCode", Map.of("type", "string", "description", "出发城市代码"),
+                    "originCityCode", Map.of("type", "string", "description", "出发城市代码 (英文代码，如NYC, LON)"),
                     "period", Map.of("type", "string", "description", "时间段 (YYYY-MM)"),
                     "type", Map.of("type", "string", "description", "分析类型: booked, traveled, busiest"),
                     "direction", Map.of("type", "string", "description", "方向: ARRIVING, DEPARTING (仅busiest类型需要)")
@@ -349,8 +350,8 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "originIataCode", Map.of("type", "string", "description", "出发地IATA代码"),
-                    "destinationIataCode", Map.of("type", "string", "description", "目的地IATA代码"),
+                    "originIataCode", Map.of("type", "string", "description", "出发地IATA代码 (3位英文大写字母，如NYC, LON)"),
+                    "destinationIataCode", Map.of("type", "string", "description", "目的地IATA代码 (3位英文大写字母，如NYC, LON)"),
                     "departureDate", Map.of("type", "string", "description", "出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后")
                 ),
                 "required", Arrays.asList("originIataCode", "destinationIataCode", "departureDate")
@@ -365,7 +366,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "departureAirportCode", Map.of("type", "string", "description", "出发机场代码"),
+                    "departureAirportCode", Map.of("type", "string", "description", "出发机场代码 (3位英文大写字母，如NYC, LON)"),
                     "max", Map.of("type", "integer", "description", "最大返回数量，默认10")
                 ),
                 "required", Arrays.asList("departureAirportCode")
@@ -380,8 +381,8 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "carrierCode", Map.of("type", "string", "description", "航空公司代码"),
-                    "flightNumber", Map.of("type", "string", "description", "航班号"),
+                    "carrierCode", Map.of("type", "string", "description", "航空公司代码 (2位英文大写字母，如AA, BA)"),
+                    "flightNumber", Map.of("type", "string", "description", "航班号 (数字，如123, 456)"),
                     "scheduledDepartureDate", Map.of("type", "string", "description", "计划出发日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后")
                 ),
                 "required", Arrays.asList("carrierCode", "flightNumber", "scheduledDepartureDate")
@@ -411,7 +412,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "airlineCode", Map.of("type", "string", "description", "航空公司代码"),
+                    "airlineCode", Map.of("type", "string", "description", "航空公司代码 (2位英文大写字母，如AA, BA)"),
                     "max", Map.of("type", "integer", "description", "最大返回数量，默认10")
                 ),
                 "required", Arrays.asList("airlineCode")
@@ -426,7 +427,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "airportCode", Map.of("type", "string", "description", "机场代码"),
+                    "airportCode", Map.of("type", "string", "description", "机场代码 (3位英文大写字母，如NYC, LON)"),
                     "date", Map.of("type", "string", "description", "日期 (YYYY-MM-DD)，必须是未来日期，建议至少30天后")
                 ),
                 "required", Arrays.asList("airportCode", "date")
@@ -456,7 +457,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "flightOrderId", Map.of("type", "string", "description", "航班订单ID")
+                    "flightOrderId", Map.of("type", "string", "description", "航班订单ID (英文ID)")
                 ),
                 "required", Arrays.asList("flightOrderId")
             )
@@ -469,7 +470,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "flightOrderId", Map.of("type", "string", "description", "航班订单ID")
+                    "flightOrderId", Map.of("type", "string", "description", "航班订单ID (英文ID)")
                 ),
                 "required", Arrays.asList("flightOrderId")
             )
@@ -515,7 +516,7 @@ public class AmadeusToolService {
             Map.of(
                 "type", "object",
                 "properties", Map.of(
-                    "transferOrderId", Map.of("type", "string", "description", "接送服务订单ID")
+                    "transferOrderId", Map.of("type", "string", "description", "接送服务订单ID (英文ID)")
                 ),
                 "required", Arrays.asList("transferOrderId")
             )
@@ -1118,6 +1119,7 @@ public class AmadeusToolService {
             
             String keyword = (String) arguments.get("keyword");
             String subType = (String) arguments.getOrDefault("subType", "ANY");
+
             
             if (keyword == null || keyword.trim().isEmpty()) {
                 return Map.of(
@@ -1128,13 +1130,17 @@ public class AmadeusToolService {
             
             // 构建参数
             Params params = Params.with("keyword", keyword);
-            if (!"ANY".equals(subType)) {
-                params = params.and("subType", subType);
-            }
             
+            // 使用Map映射优化subType处理
+            Map<String, Object> subTypeMap = Map.of(
+                "CITY", Locations.CITY,
+                "AIRPORT", Locations.AIRPORT
+            );
+            Object locationType = subTypeMap.getOrDefault(subType, Locations.ANY);
+            params = params.and("subType", locationType);
+
             log.info("调用Amadeus API，参数: keyword={}, subType={}", keyword, subType);
             
-            // 直接调用API，不进行预测试
             Location[] locations = amadeus.referenceData.locations.get(params);
             
             // 处理结果
@@ -1189,7 +1195,7 @@ public class AmadeusToolService {
             Params params = Params
                 .with("originLocationCode", origin)
                 .and("destinationLocationCode", destination)
-                .and("departureDate", departureDate != null ? departureDate : "2025-06-01")
+                .and("departureDate", departureDate )
                 .and("adults", 1)
                 .and("max", 10);
             

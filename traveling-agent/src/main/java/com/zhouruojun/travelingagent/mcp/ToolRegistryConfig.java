@@ -43,7 +43,7 @@ public class ToolRegistryConfig implements CommandLineRunner {
         toolRegistry.registerTool("get_feed_detail", "metaSearchAgent");
         toolRegistry.registerTool("search_activities", "metaSearchAgent");
         toolRegistry.registerTool("get_activity_details", "metaSearchAgent");
-        toolRegistry.registerTool("search_locations ", "metaSearchAgent");
+        toolRegistry.registerTool("search_locations", "metaSearchAgent");
         toolRegistry.registerTool("search_flights", "metaSearchAgent");
         toolRegistry.registerTool("search_hotels", "metaSearchAgent");
 //        toolRegistry.registerTool("airbnb_search", "metaSearchAgent");
@@ -57,16 +57,16 @@ public class ToolRegistryConfig implements CommandLineRunner {
         toolRegistry.registerTool("maps_direction_walking", "itineraryPlannerAgent");
 
         // BookingAgent - 预订智能体工具
-        toolRegistry.registerTool("get-current-date", "bookingAgent");
-        toolRegistry.registerTool("get-stations-code-in-city", "bookingAgent");
-        toolRegistry.registerTool("get-station-code-of-citys", "bookingAgent");
-        toolRegistry.registerTool("get-station-code-by-names", "bookingAgent");
-        toolRegistry.registerTool("get-station-by-telecode", "bookingAgent");
-        toolRegistry.registerTool("get-tickets", "bookingAgent");
-        toolRegistry.registerTool("get-interline-tickets", "bookingAgent");
-        toolRegistry.registerTool("get-train-route-stations", "bookingAgent");
-
-        toolRegistry.registerTool("search_locations ", "bookingAgent");
+//        toolRegistry.registerTool("get-current-date", "bookingAgent");
+//        toolRegistry.registerTool("get-stations-code-in-city", "bookingAgent");
+//        toolRegistry.registerTool("get-station-code-of-citys", "bookingAgent");
+//        toolRegistry.registerTool("get-station-code-by-names", "bookingAgent");
+//        toolRegistry.registerTool("get-station-by-telecode", "bookingAgent");
+//        toolRegistry.registerTool("get-tickets", "bookingAgent");
+//        toolRegistry.registerTool("get-interline-tickets", "bookingAgent");
+//        toolRegistry.registerTool("get-train-route-stations", "bookingAgent");
+//
+        toolRegistry.registerTool("search_locations", "bookingAgent");
         toolRegistry.registerTool("search_flights", "bookingAgent");
         toolRegistry.registerTool("search_flight_dates", "bookingAgent");
         toolRegistry.registerTool("search_flight_destinations", "bookingAgent");
@@ -78,8 +78,6 @@ public class ToolRegistryConfig implements CommandLineRunner {
         toolRegistry.registerTool("create_hotel_order", "bookingAgent");
         toolRegistry.registerTool("create_transfer_order", "bookingAgent");
         toolRegistry.registerTool("get_transfer_order", "bookingAgent");
-        toolRegistry.registerTool("searchFlightsByDepArr", "bookingAgent");
-        toolRegistry.registerTool("searchFlightsByDepArr", "bookingAgent");
 //        variflight工具
 //        toolRegistry.registerTool("searchFlightsByDepArr", "bookingAgent");
 //        toolRegistry.registerTool("searchFlightsByNumber", "bookingAgent");
@@ -90,11 +88,11 @@ public class ToolRegistryConfig implements CommandLineRunner {
 //        toolRegistry.registerTool("searchFlightItineraries", "bookingAgent");
 
         // OnTripAgent - 出行智能体工具
-        toolRegistry.registerTool("predict_airport_ontime ", "onTripAgent");
-        toolRegistry.registerTool("predict_flight_delay", "bookingAgent");
-        toolRegistry.registerTool("get_flight_status", "bookingAgent");
-        toolRegistry.registerTool("get_flight_order", "bookingAgent");
-        toolRegistry.registerTool("searchFlightsByDepArr", "bookingAgent");
+        toolRegistry.registerTool("predict_airport_ontime", "onTripAgent");
+        toolRegistry.registerTool("predict_flight_delay", "onTripAgent");
+        toolRegistry.registerTool("get_flight_status", "onTripAgent");
+        toolRegistry.registerTool("get_flight_order", "onTripAgent");
+        toolRegistry.registerTool("searchFlightsByDepArr", "onTripAgent");
 
         log.info("MCP工具注册完成");
     }
