@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.io.File;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -193,6 +194,24 @@ public class MCPSessionManager {
                 log.debug("启动Go进程: {}", serverType);
                 processManager.startMCPProcess(serverType, "go", 
                     Arrays.asList("run", "."), "C:\\Users\\ZhuanZ1\\mcp\\xiaohongshu-mcp").join();
+            } 
+            // 特殊处理amadeus-mcp：启动Java进程
+            else if ("amadeus-mcp".equals(serverType)) {
+                String amadeusWorkingDir = System.getProperty("user.dir") + File.separator + "amadeus-mcp";
+                
+                // 清理端口18090避免冲突
+                processManager.forceCleanupPort(18090);
+                Thread.sleep(2000);
+                
+                String jarPath = "target" + File.separator + "amadeus-mcp-1.0-SNAPSHOT.jar";
+                File jarFile = new File(amadeusWorkingDir, jarPath);
+                
+                if (!jarFile.exists()) {
+                    throw new RuntimeException("JAR文件不存在: " + jarFile.getAbsolutePath());
+                }
+                
+                processManager.startMCPProcess(serverType, "java", 
+                    Arrays.asList("-jar", jarPath), amadeusWorkingDir).join();
             } else {
                 log.debug("启动进程: {} - {} {}", serverType, serverInfo.getCommand(),
                     serverInfo.getArgs() != null ? String.join(" ", serverInfo.getArgs()) : "");

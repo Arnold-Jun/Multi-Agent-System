@@ -12,6 +12,7 @@
         <option value="$PROJECT_DIR$/boss-mock-api/pom.xml" />
         <option value="$PROJECT_DIR$/traveling-agent/pom.xml" />
         <option value="$PROJECT_DIR$/mcp-server/pom.xml" />
+        <option value="$PROJECT_DIR$/amadeus-mcp/pom.xml" />
       </list>
     </option>
   </component>

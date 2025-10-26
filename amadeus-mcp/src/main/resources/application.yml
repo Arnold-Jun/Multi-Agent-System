@@ -1,0 +1,28 @@
+server:
+  port: 18090
+
+spring:
+  application:
+    name: amadeus-mcp-server
+
+# Amadeus API配置
+amadeus:
+  api-key: StU1vYrS5QFb1he9af9vAFi16BA6ErDF
+  api-secret: 04keLpVKBHzpAD8Z
+
+logging:
+  level:
+    com.zhouruojun.amadeusmcp: INFO
+    com.amadeus: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 管理端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

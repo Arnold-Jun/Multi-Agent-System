@@ -58,7 +58,6 @@ public class MCPServerApplication implements CommandLineRunner {
             
             if (hasOccupiedPorts) {
                 log.info("发现端口占用，尝试清理...");
-                // 这里可以调用强制清理，但需要注入MCPProcessManager
                 // 暂时只记录日志，实际清理在进程启动时进行
             } else {
                 log.info("所有端口都可用");

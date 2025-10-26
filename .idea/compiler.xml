@@ -18,6 +18,7 @@
         <outputRelativeToContentRoot value="true" />
         <module name="mcp-server" />
         <module name="boss-mock-api" />
+        <module name="amadeus-mcp" />
       </profile>
       <profile name="Annotation profile for traveling-agent" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />

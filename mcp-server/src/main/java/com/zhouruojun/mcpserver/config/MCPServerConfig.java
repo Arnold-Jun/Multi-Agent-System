@@ -179,15 +179,15 @@ public class MCPServerConfig {
         }
         
         /**
-         * 判断是否需要自动启动（进程模式默认自动启动，xiaohongshu-mcp需要混合模式启动）
+         * 判断是否需要自动启动（进程模式默认自动启动，混合模式需要启动本地进程）
          */
         public boolean isAutoStart() {
             // 进程模式：自动启动
             if (isProcessMode()) {
                 return true;
             }
-            // 混合模式：xiaohongshu-mcp需要启动Go进程然后通过HTTP通信
-            if (url != null && url.contains("localhost:18060")) {
+            // 混合模式：需要启动本地进程然后通过HTTP通信
+            if (url != null && (url.contains("localhost:18060") || url.contains("localhost:18090"))) {
                 return true;
             }
             return false;

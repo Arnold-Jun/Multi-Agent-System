@@ -31,6 +31,10 @@
       "env": {
         "VARIFLIGHT_API_KEY": "sk-42A9baUQHFXak9UKMyQDXZwFEVwgghYuInl65wf93B0"
       }
+    },
+    "amadeus-mcp": {
+      "url": "http://localhost:18090/mcp",
+      "description": "Amadeus Travel API - 航班、酒店、目的地查询与预订服务"
     }
   }
 }

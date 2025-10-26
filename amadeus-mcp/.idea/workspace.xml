@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="4ef2867d-40d0-4a0f-99e7-30d4466c0e49" name="更改" comment="">
+      <change beforePath="$PROJECT_DIR$/../.idea/Multi-Agent-System.iml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/Multi-Agent-System.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../mcp-server/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../mcp-server/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../mcp-server/src/main/resources/mcp.json" beforeDir="false" afterPath="$PROJECT_DIR$/../mcp-server/src/main/resources/mcp.json" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "Arnold-Jun"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Arnold-Jun/Multi-Agent-System.git",
+    "accountId": "4bb5f042-55ba-4d89-914b-7a733a2805f6"
+  }
+}]]></component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 0
+}]]></component>
+  <component name="ProjectId" id="34Y5b9zg4gHjDMc5QPAigXxuFIi" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "master",
+    "kotlin-language-version-configured": "true",
+    "onboarding.tips.debug.path": "D:/Program Files (x86)/javaProjects/AgentProjects/Multi-Agent/amadeus-mcp/src/main/java/com/zhouruojun/amadeusmcp/Main.java"
+  }
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="默认任务">
+      <changelist id="4ef2867d-40d0-4a0f-99e7-30d4466c0e49" name="更改" comment="" />
+      <created>1761377738186</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1761377738186</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/src/main/java/com/zhouruojun/amadeusmcp/Main.java</url>
+          <line>13</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+</project>

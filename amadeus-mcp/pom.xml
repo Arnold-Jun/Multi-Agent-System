@@ -4,13 +4,13 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.zhouruojun</groupId>
-    <artifactId>mcp-proxy-server</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.zhouruojun.amadeusmcp</groupId>
+    <artifactId>amadeus-mcp</artifactId>
+    <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>MCP Proxy Server</name>
-    <description>Universal MCP Tool Proxy Server</description>
+    <name>Amadeus MCP Server</name>
+    <description>Amadeus Travel API MCP Server for flights, hotels and destination experiences</description>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -28,14 +28,6 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-bom</artifactId>
-                <version>1.0.0-M7</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -44,12 +36,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-
-        <!-- Spring Boot Starter WebFlux (for reactive HTTP client) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
         <!-- Spring Boot Configuration Processor -->
@@ -65,12 +51,6 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
-        <!-- SnakeYAML for YAML processing -->
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-        </dependency>
-
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -78,24 +58,17 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Apache Commons Lang -->
+        <!-- Amadeus SDK -->
         <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-lang3</artifactId>
+            <groupId>com.amadeus</groupId>
+            <artifactId>amadeus-java</artifactId>
+            <version>10.0.0</version>
         </dependency>
 
-        <!-- Apache Commons IO -->
+        <!-- Gson for JSON processing -->
         <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.11.0</version>
-        </dependency>
-
-        <!-- Spring AI MCP Server -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
-            <version>1.0.0-M7</version>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
         </dependency>
 
         <!-- Test Dependencies -->
@@ -113,7 +86,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring-boot.version}</version>
                 <configuration>
-                    <mainClass>com.zhouruojun.mcpserver.MCPServerApplication</mainClass>
+                    <mainClass>com.zhouruojun.amadeusmcp.AmadeusMCPApplication</mainClass>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
@@ -121,6 +94,13 @@
                         </exclude>
                     </excludes>
                 </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

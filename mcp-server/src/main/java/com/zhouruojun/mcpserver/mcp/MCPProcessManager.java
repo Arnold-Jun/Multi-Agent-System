@@ -142,17 +142,12 @@ public class MCPProcessManager {
                 // 为特定命令设置特殊环境
                 if ("npx".equals(command)) {
                     setupNpxEnvironment(env);
-                    log.info("设置npx环境变量，PATH: {}", env.get("PATH"));
-                    
-                    // 尝试查找npx命令的完整路径
                     String npxPath = findNpxPath(env);
                     if (npxPath != null) {
-                        log.info("找到npx命令: {}", npxPath);
-                        // 使用完整路径替换命令
                         processBuilder.command().set(0, npxPath);
-                    } else {
-                        log.warn("未找到npx命令，将尝试直接运行npx");
                     }
+                } else if ("java".equals(command)) {
+                    setupJavaEnvironment(env);
                 }
                 
                 Process process = processBuilder.start();
@@ -168,6 +163,7 @@ public class MCPProcessManager {
                     errorReader.close();
                     
                     String errorMsg = errorOutput.toString();
+                    
                     if (errorMsg.contains("Cannot run program") && errorMsg.contains("npx")) {
                         throw new RuntimeException("npx命令不可用，请确保已安装Node.js并添加到PATH环境变量中。\n" +
                             "常见解决方案：\n" +
@@ -190,6 +186,7 @@ public class MCPProcessManager {
                 
                 if (!process.isAlive()) {
                     runningProcesses.remove(serverName);
+                    
                     throw new RuntimeException("进程在初始化期间退出: " + serverName);
                 }
                 
@@ -406,6 +403,32 @@ public class MCPProcessManager {
         return null;
     }
     
+    
+    /**
+     * 为Java命令设置特殊的环境变量
+     */
+    private void setupJavaEnvironment(Map<String, String> env) {
+        // 设置Java相关环境变量
+        String javaHome = System.getProperty("java.home");
+        if (javaHome != null) {
+            env.put("JAVA_HOME", javaHome);
+        }
+        
+        // 设置字符编码
+        env.put("JAVA_TOOL_OPTIONS", "-Dfile.encoding=UTF-8");
+        
+        // 设置JVM参数
+        env.put("JAVA_OPTS", "-Xmx512m -Dfile.encoding=UTF-8");
+        
+        // 确保PATH包含Java
+        String currentPath = env.get("PATH");
+        if (currentPath != null && javaHome != null) {
+            String javaBinPath = javaHome + File.separator + "bin";
+            if (!currentPath.contains(javaBinPath)) {
+                env.put("PATH", javaBinPath + File.pathSeparator + currentPath);
+            }
+        }
+    }
     
     /**
      * 为npx命令设置特殊的环境变量
