@@ -227,7 +227,8 @@ public class TravelingGraphBuilder {
                                 "onTripAgent", "onTripAgent",
                                 "userInput", "userInput",
                                 "planner", "planner",
-                                "summary", "summary"))
+                                "summary", "summary",
+                                "Finish", END))
                 .addConditionalEdges("metaSearchAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("itineraryPlannerAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("bookingAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
@@ -559,6 +560,7 @@ public class TravelingGraphBuilder {
         schedulerChildren.add("planner");
         schedulerChildren.add("summary");
         schedulerChildren.add("userInput");
+        schedulerChildren.add("Finish");
         
         return state.next()
                 .filter(schedulerChildren::contains)

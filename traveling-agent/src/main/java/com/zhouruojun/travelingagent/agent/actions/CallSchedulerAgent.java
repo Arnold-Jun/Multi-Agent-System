@@ -59,9 +59,6 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         
         return messages;
     }
-    
-
-
 
     @Override
     protected Map<String, Object> processResponse(AiMessage originalMessage, AiMessage filteredMessage, MainGraphState state) {
@@ -93,8 +90,6 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
             );
         }
     }
-    
-    
 
     /**
      * 处理任务状态更新
@@ -176,6 +171,17 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
             log.error("Scheduler返回的next字段为空，taskId: {}, status: {}", 
                     taskUpdate.getTaskId(), taskUpdate.getStatus());
             throw new IllegalStateException("CallSchedulerAgent必须设置有效的next字段");
+        }
+        
+        // 处理Finish路由
+        if ("Finish".equals(nextNode)) {
+            // 获取最后一个subgraph结果作为finalResponse
+            String lastResult = getLastSubgraphResult(state);
+            Map<String, Object> finishResult = new HashMap<>();
+            finishResult.put("finalResponse", lastResult);
+            finishResult.put("next", "Finish");
+            addCommonStateInfo(finishResult, state);
+            return finishResult;
         }
         
         // 设置子图执行上下文
@@ -442,6 +448,23 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
     }
 
     /**
+     * 获取最后一个subgraph结果
+     */
+    private String getLastSubgraphResult(MainGraphState state) {
+        return state.getSubgraphResults()
+                .map(results -> {
+                    if (results.isEmpty()) {
+                        return "";
+                    }
+                    // 获取最后一个结果（Map的最后一个entry）
+                    return results.values().stream()
+                            .reduce((first, second) -> second)
+                            .orElse("");
+                })
+                .orElse("");
+    }
+
+    /**
      * 检查字符串是否以问号结尾（支持中英文、全角半角）
      */
     private boolean endsWithQuestionMark(String text) {
@@ -455,7 +478,4 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         return lastChar == '?' || lastChar == '？';
     }
 
-    /**
-     * 调度场景枚举
-     */
 }

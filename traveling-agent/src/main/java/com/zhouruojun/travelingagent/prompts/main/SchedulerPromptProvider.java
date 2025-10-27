@@ -179,6 +179,7 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
         - userInput: 需要用户确认或输入时（用于用户交互）
         - planner: 重新规划任务列表（当需要调整策略时）
         - summary: 所有任务完成，生成最终报告
+        - Finish: 用户的单一需求完成，直接返回结果（如订票、查询等）
 
         **任务状态说明**：
         - completed: 当前任务执行成功，可以继续执行下一个任务或结束
@@ -211,6 +212,7 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
         
         **路由决策规则**：
         - 如果当前任务completed且TodoList显示所有任务都已完成 → next设置为"summary"
+        - **如果当前任务completed且是单一功能需求（如订票、查询、搜索）→ next设置为"Finish"**
         - 如果当前任务completed且还有其他待执行任务：
           * 如果需要用户确认当前结果 → next设置为"userInput"
           * 如果缺少执行下一个任务的关键信息 → next设置为"userInput"
@@ -400,13 +402,30 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
         }
         ```
 
+        **输出示例4（单一功能需求完成）**：
+        ```json
+        {
+          "taskUpdate": {
+            "taskId": "task_001",
+            "status": "completed",
+            "reason": "机票预订任务成功完成，已为用户预订了北京到上海的机票"
+          },
+          "nextAction": {
+            "next": "Finish",
+            "taskDescription": "任务完成，直接返回结果",
+            "context": "用户查询'帮我订一张北京到上海的机票'已完成，预订信息已确认，可以直接返回给用户"
+          }
+        }
+        ```
+
         **重要提醒**：
         - taskId必须与当前任务的uniqueId完全一致
-        - nextAction.next可以是智能体名称（如metaSearchAgent）、planner或summary
+        - nextAction.next可以是智能体名称（如metaSearchAgent）、planner、summary或Finish
         - 客观判断任务执行结果，不要过度乐观或悲观
         - context要结合之前的执行结果提供连贯的上下文
         - 根据TodoList的所有任务概览判断是否应该路由到summary
         - 当建议重规划时，确保reason、taskDescription和context提供充分的上下文信息
+        - **Finish路由适用于单一功能需求**：当用户查询是简单的单一功能（如订票、查询、搜索）且任务已完成时使用
         """, originalUserQuery, todoListInfo, subgraphResultsInfo);
     }
     

@@ -26,7 +26,7 @@ public class SchedulerResponseParser {
     
     // 有效的下一个节点值
     private static final List<String> VALID_NEXT_NODES = Arrays.asList(
-        "metaSearchAgent", "itineraryPlannerAgent", "bookingAgent", "userInput", "planner", "summary"
+        "metaSearchAgent", "itineraryPlannerAgent", "bookingAgent", "userInput", "planner", "summary", "Finish"
     );
 
     /**
@@ -155,4 +155,3 @@ public class SchedulerResponseParser {
         return true;
     }
 }
-
