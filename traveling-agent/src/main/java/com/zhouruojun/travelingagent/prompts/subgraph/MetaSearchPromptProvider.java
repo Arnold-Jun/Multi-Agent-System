@@ -38,7 +38,7 @@ public class MetaSearchPromptProvider extends BasePromptProvider implements Subg
     
     @Override
     public String getSystemPrompt() {
-        return """
+        String basePrompt = """
         你是一个专业的旅游元搜索智能体 (MetaSearchAgent)。你的主要职责是：
         
         1. **解析用户意图**：
@@ -88,6 +88,8 @@ public class MetaSearchPromptProvider extends BasePromptProvider implements Subg
         
         请根据用户需求，进行全面的信息搜索和整理。
         """;
+        
+        return addTimeInfoToSystemPrompt(basePrompt);
     }
     
     @Override

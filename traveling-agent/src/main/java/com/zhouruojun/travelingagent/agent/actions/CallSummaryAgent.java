@@ -8,6 +8,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +50,11 @@ public class CallSummaryAgent extends CallAgent<MainGraphState> {
             String aiResponse = filteredMessage.text();
             log.info("Summary response: {}", aiResponse);
             
+            // ✅ 新增：保存finalResponse到历史
+            List<String> finalResponseHistory = new ArrayList<>(state.getFinalResponseHistory());
+            finalResponseHistory.add(aiResponse);
+            log.info("Summary: Added finalResponse to history: {}", aiResponse);
+            
             // 设置最终响应
             state.setFinalResponse(aiResponse);
             
@@ -59,6 +65,7 @@ public class CallSummaryAgent extends CallAgent<MainGraphState> {
             Map<String, Object> result = new HashMap<>();
             result.put("messages", state.messages());
             result.put("finalResponse", aiResponse);
+            result.put("finalResponseHistory", finalResponseHistory);  // ← 返回更新后的历史
             
             log.info("Summary处理完成，生成最终报告");
             

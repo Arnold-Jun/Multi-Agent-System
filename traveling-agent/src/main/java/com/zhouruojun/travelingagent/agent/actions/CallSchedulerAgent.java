@@ -177,8 +177,15 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
         if ("Finish".equals(nextNode)) {
             // 获取最后一个subgraph结果作为finalResponse
             String lastResult = getLastSubgraphResult(state);
+            
+            // ✅ 新增：保存finalResponse到历史
+            List<String> finalResponseHistory = new ArrayList<>(state.getFinalResponseHistory());
+            finalResponseHistory.add(lastResult);
+            log.info("Scheduler: Added finalResponse to history: {}", lastResult);
+            
             Map<String, Object> finishResult = new HashMap<>();
             finishResult.put("finalResponse", lastResult);
+            finishResult.put("finalResponseHistory", finalResponseHistory);  // ← 返回更新后的历史
             finishResult.put("next", "Finish");
             addCommonStateInfo(finishResult, state);
             return finishResult;

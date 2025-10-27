@@ -212,6 +212,44 @@ public class MainGraphState extends BaseAgentState {
     }
     
     /**
+     * 获取finalResponse历史列表
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> getFinalResponseHistory() {
+        return (List<String>) state.getOrDefault("finalResponseHistory", new ArrayList<>());
+    }
+
+    /**
+     * 获取格式化的对话历史（用于Planner提示词）
+     */
+    public String getFormattedConversationHistory() {
+        List<String> queries = getUserQueryHistory();
+        List<String> responses = getFinalResponseHistory();
+        
+        // 确保数量一致
+        int rounds = Math.min(queries.size(), responses.size());
+        
+        StringBuilder history = new StringBuilder();
+        for (int i = 0; i < rounds; i++) {
+            history.append(String.format("【第%d轮对话】\n", i + 1));
+            history.append(String.format("用户: %s\n", queries.get(i)));
+            history.append(String.format("系统: %s\n\n", 
+                truncateIfTooLong(responses.get(i), 300)));
+        }
+        
+        return history.toString();
+    }
+
+    /**
+     * 截断过长的文本
+     */
+    private String truncateIfTooLong(String text, int maxLength) {
+        if (text == null) return "";
+        if (text.length() <= maxLength) return text;
+        return text.substring(0, maxLength) + "...（后续内容省略）";
+    }
+    
+    /**
      * 获取会话ID
      */
     public Optional<String> getSessionId() {

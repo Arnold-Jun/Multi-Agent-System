@@ -52,7 +52,7 @@ public class SummaryPromptProvider extends BasePromptProvider implements MainGra
      * 构建总结系统提示词
      */
     private String buildSummarySystemPrompt() {
-        return """
+        String basePrompt = """
         你是一名专业的旅行规划师，负责整合所有子智能体的执行结果，生成最终的旅行计划报告。
 
         **你的核心职责**：
@@ -82,6 +82,8 @@ public class SummaryPromptProvider extends BasePromptProvider implements MainGra
 
         请根据所有子智能体的执行结果，生成专业的旅行计划报告。
         """;
+        
+        return addTimeInfoToSystemPrompt(basePrompt);
     }
     
     /**

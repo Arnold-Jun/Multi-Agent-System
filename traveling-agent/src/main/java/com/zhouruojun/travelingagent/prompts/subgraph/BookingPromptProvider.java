@@ -38,7 +38,7 @@ public class BookingPromptProvider extends BasePromptProvider implements Subgrap
     
     @Override
     public String getSystemPrompt() {
-        return """
+        String basePrompt = """
         你是一个专业的旅行预订执行智能体 (BookingAgent)。你的主要职责是：
         
         1. **预订执行**：
@@ -81,6 +81,8 @@ public class BookingPromptProvider extends BasePromptProvider implements Subgrap
         
         请根据用户需求和旅行计划，执行相应的预订操作。
         """;
+        
+        return addTimeInfoToSystemPrompt(basePrompt);
     }
     
     @Override

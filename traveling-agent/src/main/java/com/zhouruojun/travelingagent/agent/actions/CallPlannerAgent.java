@@ -8,6 +8,7 @@ import dev.langchain4j.data.message.ChatMessage;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -63,11 +64,33 @@ public class CallPlannerAgent extends CallAgent<MainGraphState> {
                 return createErrorResult(state, "规划智能体返回空响应");
             }
             
+            // ✅ 新增：添加当前查询到userQueryHistory
+            String currentQuery = getCurrentUserQuery(state);
+            List<String> userQueryHistory = new ArrayList<>(state.getUserQueryHistory());
+            
+            // 检查是否已经添加过（避免重复）
+            if (userQueryHistory.isEmpty() || !userQueryHistory.get(userQueryHistory.size() - 1).equals(currentQuery)) {
+                userQueryHistory.add(currentQuery);
+                log.info("Planner: Added current query to userQueryHistory: {}", currentQuery);
+            }
+            
+            // 如果是第一次调用且没有originalUserQuery，设置它
+            if (state.getOriginalUserQuery().isEmpty() && !currentQuery.isEmpty()) {
+                log.info("Planner: Setting originalUserQuery for first call: {}", currentQuery);
+                return Map.of(
+                        "messages", List.of(filteredMessage),
+                        "userQueryHistory", userQueryHistory,
+                        "originalUserQuery", currentQuery,  // ← 设置originalUserQuery
+                        "next", "todoListParser"
+                );
+            }
+            
             // 记录规划结果
             log.debug("规划智能体响应内容: {}", responseText);
             
             return Map.of(
                     "messages", List.of(filteredMessage),
+                    "userQueryHistory", userQueryHistory,  // ← 返回更新后的历史
                     "next", "todoListParser"
             );
             
@@ -84,6 +107,18 @@ public class CallPlannerAgent extends CallAgent<MainGraphState> {
                     "next", "todoListParser"
             );
         }
+    }
+    
+    /**
+     * 获取当前用户查询
+     */
+    private String getCurrentUserQuery(MainGraphState state) {
+        // 从messages中获取最新的UserMessage
+        return state.messages().stream()
+                .filter(msg -> msg instanceof dev.langchain4j.data.message.UserMessage)
+                .map(msg -> ((dev.langchain4j.data.message.UserMessage) msg).singleText())
+                .reduce((first, second) -> second) // 获取最后一个
+                .orElse(state.getOriginalUserQuery().orElse(""));
     }
 
     /**

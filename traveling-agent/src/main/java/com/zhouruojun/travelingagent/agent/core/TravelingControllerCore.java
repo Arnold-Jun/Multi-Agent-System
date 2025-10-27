@@ -191,12 +191,18 @@ public class TravelingControllerCore {
                 .build();
         
         // 构建初始状态
-        Map<String, Object> initialState = Map.of(
-            "messages", UserMessage.from(request.getChat()),
-            "originalUserQuery", request.getChat(),
-            "sessionId", sessionId,
-            "username", username
-        );
+        Map<String, Object> initialState = new HashMap<>();
+        initialState.put("messages", UserMessage.from(request.getChat()));
+        initialState.put("sessionId", sessionId);
+        initialState.put("username", username);
+        
+        // 检查是否是新的session（没有历史状态）
+        boolean isNewSession = !sessionHistory.containsKey(sessionId);
+        if (isNewSession) {
+            // 第一次调用：设置originalUserQuery
+            initialState.put("originalUserQuery", request.getChat());
+        }
+        // 后续调用：不设置originalUserQuery，新的查询会通过userQueryHistory管理
 
         compiledGraph.setMaxIterations(60);
         // 执行图流程
@@ -654,7 +660,6 @@ public class TravelingControllerCore {
                     // 发送最终响应
                     if (state.getFinalResponse().isPresent()) {
                         String finalResponse = state.getFinalResponse().get();
-                        log.info("Final response for WebSocket: {}", finalResponse);
                         updateSessionHistory(sessionId, request.getChat(), finalResponse);
                         
                         // 发送响应到前端

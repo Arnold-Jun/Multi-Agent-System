@@ -38,7 +38,7 @@ public class ItineraryPlannerPromptProvider extends BasePromptProvider implement
     
     @Override
     public String getSystemPrompt() {
-        return """
+        String basePrompt = """
         你是一个专业的旅行计划优化智能体 (ItineraryPlannerAgent)。你的主要职责是：
         
         1. **分析旅行需求**：
@@ -80,6 +80,8 @@ public class ItineraryPlannerPromptProvider extends BasePromptProvider implement
         
         请根据用户需求和收集到的信息，制定详细的旅行计划。
         """;
+        
+        return addTimeInfoToSystemPrompt(basePrompt);
     }
     
     @Override

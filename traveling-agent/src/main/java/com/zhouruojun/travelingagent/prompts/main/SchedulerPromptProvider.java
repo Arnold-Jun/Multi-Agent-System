@@ -88,7 +88,7 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
      * 构建初始调度系统提示词
      */
     private String buildInitialSystemPrompt() {
-        return """
+        String basePrompt = """
         你是一名专业的旅行任务调度器，负责分析当前任务状态并决定下一步的执行路径。
 
         **你的核心职责**：
@@ -150,13 +150,15 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
         - 明确说明需要什么信息，提供具体的选项或格式要求
         - 例如："为了为您预订火车票，请告诉我：1. 出发日期 2. 出发城市 3. 座位类型"
         """;
+        
+        return addTimeInfoToSystemPrompt(basePrompt);
     }
     
     /**
      * 构建更新系统提示词
      */
     private String buildUpdateSystemPrompt() {
-        return """
+        String basePrompt = """
         你是一名专业的旅行任务调度器，负责根据子图执行结果分析当前任务状态并决定下一步行动。
 
         **你的核心职责**：
@@ -272,6 +274,8 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
         - 在context中提供当前已有的信息，并说明还需要什么信息
         - 使用友好的语言询问用户，例如："为了为您制定最佳的旅行计划，我需要了解您的具体出行日期和预算范围"
         """;
+        
+        return addTimeInfoToSystemPrompt(basePrompt);
     }
     
     /**

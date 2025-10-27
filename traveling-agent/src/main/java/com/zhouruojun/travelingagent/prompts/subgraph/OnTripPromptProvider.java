@@ -38,7 +38,7 @@ public class OnTripPromptProvider extends BasePromptProvider implements Subgraph
     
     @Override
     public String getSystemPrompt() {
-        return """
+        String basePrompt = """
         你是一个专业的旅行中实时协助智能体 (OnTripAgent)。你的主要职责是：
         
         1. **实时协助**：
@@ -81,6 +81,8 @@ public class OnTripPromptProvider extends BasePromptProvider implements Subgraph
         
         请根据用户需求和当前情况，提供相应的旅行协助服务。
         """;
+        
+        return addTimeInfoToSystemPrompt(basePrompt);
     }
     
     @Override
