@@ -86,7 +86,8 @@ class TravelVisualization {
         const messageText = messageElement.querySelector('.message-text');
         if (!messageText) return;
 
-        const text = messageText.textContent;
+        // 使用innerHTML而不是textContent，以保留HTML标签
+        const htmlContent = messageText.innerHTML;
         
         // 根据关键词添加图标
         const iconMap = {
@@ -107,14 +108,16 @@ class TravelVisualization {
             '地点': '📍'
         };
 
-        let enhancedText = text;
+        let enhancedHtml = htmlContent;
         Object.entries(iconMap).forEach(([keyword, icon]) => {
-            const regex = new RegExp(`(${keyword})`, 'g');
-            enhancedText = enhancedText.replace(regex, `${icon} $1`);
+            // 使用更精确的正则表达式，避免在HTML标签内替换
+            const regex = new RegExp(`(^|>|\\s)(${keyword})(?=\\s|<|$)`, 'g');
+            enhancedHtml = enhancedHtml.replace(regex, `$1${icon} $2`);
         });
 
-        if (enhancedText !== text) {
-            messageText.innerHTML = enhancedText.replace(/\n/g, '<br>');
+        // 只有当内容确实发生变化时才更新innerHTML
+        if (enhancedHtml !== htmlContent) {
+            messageText.innerHTML = enhancedHtml;
         }
     }
 
@@ -302,15 +305,77 @@ class TravelVisualization {
         const messageText = messageElement.querySelector('.message-text');
         if (!messageText) return;
 
-        const originalText = messageText.textContent;
-        messageText.textContent = '';
+        // 获取原始HTML内容
+        const originalHtml = messageText.innerHTML;
+        
+        // 如果内容为空或太短，跳过动画
+        if (!originalHtml || originalHtml.trim().length < 10) {
+            return;
+        }
+
+        // 清空内容
+        messageText.innerHTML = '';
+        
+        // 创建一个临时元素来解析HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = originalHtml;
+        
+        // 获取纯文本内容用于打字机效果
+        const textContent = tempDiv.textContent || tempDiv.innerText || '';
+        
+        // 如果纯文本为空，直接显示原始HTML
+        if (!textContent.trim()) {
+            messageText.innerHTML = originalHtml;
+            return;
+        }
         
         let index = 0;
         const typeWriter = () => {
-            if (index < originalText.length) {
-                messageText.textContent += originalText.charAt(index);
+            if (index < textContent.length) {
+                // 逐步添加字符
+                const currentText = textContent.substring(0, index + 1);
+                
+                // 重新构建HTML，保持原有的HTML结构
+                let newHtml = originalHtml;
+                
+                // 找到当前文本在原始HTML中的位置，并截取到该位置
+                let htmlIndex = 0;
+                let textIndex = 0;
+                
+                while (htmlIndex < originalHtml.length && textIndex < currentText.length) {
+                    const char = originalHtml[htmlIndex];
+                    if (char === '<') {
+                        // 跳过HTML标签
+                        while (htmlIndex < originalHtml.length && originalHtml[htmlIndex] !== '>') {
+                            htmlIndex++;
+                        }
+                        if (htmlIndex < originalHtml.length) {
+                            htmlIndex++; // 跳过 '>'
+                        }
+                    } else if (char === '&') {
+                        // 跳过HTML实体
+                        const entityEnd = originalHtml.indexOf(';', htmlIndex);
+                        if (entityEnd !== -1) {
+                            htmlIndex = entityEnd + 1;
+                        } else {
+                            htmlIndex++;
+                        }
+                        textIndex++;
+                    } else {
+                        htmlIndex++;
+                        textIndex++;
+                    }
+                }
+                
+                // 截取到当前位置的HTML
+                newHtml = originalHtml.substring(0, htmlIndex);
+                
+                messageText.innerHTML = newHtml;
                 index++;
                 setTimeout(typeWriter, 30);
+            } else {
+                // 动画完成，确保显示完整的原始HTML
+                messageText.innerHTML = originalHtml;
             }
         };
 

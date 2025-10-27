@@ -20,6 +20,12 @@ class TravelingAgentApp {
         // WebSocket 相关
         this.stompClient = null;
         this.connected = false;
+        this.reconnectAttempts = 0; // 重连尝试次数
+        this.maxReconnectAttempts = 3; // 最大重连次数
+        this.reconnectTimeout = null; // 重连定时器
+        this.processedMessages = new Set(); // 已处理消息ID集合，用于去重
+        this.connectionCounter = 0; // 连接计数器，用于调试
+        this.subscriptions = []; // 订阅管理，用于清理
         
         this.init();
     }
@@ -178,6 +184,25 @@ class TravelingAgentApp {
                 }
             });
         });
+
+        // 页面卸载时清理WebSocket连接
+        window.addEventListener('beforeunload', () => {
+            this.cleanupWebSocket();
+        });
+
+        // 页面隐藏时暂停重连
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // 页面隐藏时暂停重连
+                if (this.reconnectTimeout) {
+                    clearTimeout(this.reconnectTimeout);
+                    this.reconnectTimeout = null;
+                }
+            } else if (!this.connected) {
+                // 页面重新可见时恢复重连
+                this.scheduleReconnect();
+            }
+        });
     }
 
     setupAutoResize() {
@@ -192,9 +217,49 @@ class TravelingAgentApp {
         return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
+    /**
+     * 生成消息唯一ID用于去重
+     */
+    generateMessageId(message) {
+        // 使用消息内容、类型、会话ID生成唯一ID
+        const content = message.content || message.prompt || message.error || '';
+        const type = message.type || 'unknown';
+        const sessionId = message.sessionId || this.currentSessionId;
+        
+        // 创建基于内容的哈希值，确保相同内容生成相同ID
+        const hash = this.simpleHash(content + type + sessionId);
+        const messageId = `${type}_${sessionId}_${hash}`;
+        
+        console.log('🔑 生成消息ID详情:');
+        console.log('  - 内容长度:', content.length);
+        console.log('  - 类型:', type);
+        console.log('  - 会话ID:', sessionId);
+        console.log('  - 哈希值:', hash);
+        console.log('  - 最终ID:', messageId);
+        
+        return messageId;
+    }
+
+    /**
+     * 简单的哈希函数
+     */
+    simpleHash(str) {
+        let hash = 0;
+        if (str.length === 0) return hash;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash).toString(36);
+    }
+
     initWebSocket() {
         try {
             console.log('正在初始化 WebSocket 连接...');
+            
+            // 清理之前的连接
+            this.cleanupWebSocket();
             
             // 使用 SockJS 和 STOMP
             // 自动检测当前页面的端口
@@ -221,24 +286,37 @@ class TravelingAgentApp {
             };
             
             // 连接 WebSocket
+            this.connectionCounter++;
+            console.log(`🔗 第${this.connectionCounter}次WebSocket连接尝试`);
+            
             this.stompClient.connect(connectOptions, (frame) => {
-                console.log('WebSocket 连接成功:', frame);
+                console.log(`✅ WebSocket 连接成功 (第${this.connectionCounter}次):`, frame);
                 this.connected = true;
+                this.reconnectAttempts = 0; // 重置重连次数
                 this.updateConnectionStatus(true);
                 
+                // 清理之前的订阅
+                this.cleanupSubscriptions();
+                
                 // 订阅回复消息
-                this.stompClient.subscribe('/topic/reply', (message) => {
-                    console.log('收到回复消息:', message.body);
+                const replySubscription = this.stompClient.subscribe('/topic/reply', (message) => {
+                    console.log('📨 收到回复消息:', message.body);
+                    console.log('📨 当前会话ID:', this.currentSessionId);
                     try {
                         const data = JSON.parse(message.body);
+                        console.log('📨 解析后的数据:', data);
                         // 只处理当前会话的消息
                         if (data.sessionId === this.currentSessionId) {
+                            console.log('📨 会话ID匹配，处理消息');
                             this.handleWebSocketMessage(data);
+                        } else {
+                            console.log('📨 会话ID不匹配，忽略消息');
                         }
                     } catch (e) {
                         console.error('解析回复消息失败:', e);
                     }
                 });
+                this.subscriptions.push(replySubscription);
                 
                 // 订阅错误消息
                 this.stompClient.subscribe('/topic/error', (message) => {
@@ -272,13 +350,8 @@ class TravelingAgentApp {
                 this.connected = false;
                 this.updateConnectionStatus(false);
                 
-                // 重连机制
-                setTimeout(() => {
-                    if (!this.connected) {
-                        console.log('尝试重新连接 WebSocket...');
-                        this.initWebSocket();
-                    }
-                }, 5000);
+                // 智能重连机制
+                this.scheduleReconnect();
             });
             
         } catch (error) {
@@ -286,14 +359,79 @@ class TravelingAgentApp {
             this.connected = false;
             this.updateConnectionStatus(false);
             
-            // 重试机制
-            setTimeout(() => {
-                if (!this.connected) {
-                    console.log('重试 WebSocket 初始化...');
-                    this.initWebSocket();
-                }
-            }, 3000);
+            // 智能重连机制
+            this.scheduleReconnect();
         }
+    }
+
+    /**
+     * 清理订阅
+     */
+    cleanupSubscriptions() {
+        console.log('🧹 清理订阅，当前订阅数量:', this.subscriptions.length);
+        this.subscriptions.forEach(subscription => {
+            try {
+                subscription.unsubscribe();
+            } catch (e) {
+                console.log('清理订阅时出错:', e);
+            }
+        });
+        this.subscriptions = [];
+        console.log('🧹 订阅清理完成');
+    }
+
+    /**
+     * 清理WebSocket连接
+     */
+    cleanupWebSocket() {
+        console.log('🧹 开始清理WebSocket连接...');
+        
+        // 先清理订阅
+        this.cleanupSubscriptions();
+        
+        if (this.stompClient) {
+            try {
+                console.log('🧹 断开WebSocket连接...');
+                this.stompClient.disconnect();
+                console.log('🧹 WebSocket连接已断开');
+            } catch (e) {
+                console.log('清理WebSocket连接时出错:', e);
+            }
+            this.stompClient = null;
+        }
+        
+        // 清理重连定时器
+        if (this.reconnectTimeout) {
+            console.log('🧹 清理重连定时器...');
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+        
+        this.connected = false;
+        console.log('🧹 WebSocket清理完成');
+    }
+
+    /**
+     * 智能重连机制
+     */
+    scheduleReconnect() {
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.log('已达到最大重连次数，停止重连');
+            this.updateConnectionStatus(false);
+            return;
+        }
+        
+        this.reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000); // 指数退避，最大30秒
+        
+        console.log(`第${this.reconnectAttempts}次重连尝试，${delay}ms后执行`);
+        
+        this.reconnectTimeout = setTimeout(() => {
+            if (!this.connected) {
+                console.log('执行重连...');
+                this.initWebSocket();
+            }
+        }, delay);
     }
 
     updateConnectionStatus(connected) {
@@ -340,6 +478,31 @@ class TravelingAgentApp {
     handleWebSocketMessage(message) {
         console.log('收到 WebSocket 消息:', message);
         
+        // 创建消息指纹用于去重
+        const messageContent = message.content || message.prompt || message.error || '';
+        const messageFingerprint = this.createMessageFingerprint(message);
+        
+        console.log('消息指纹:', messageFingerprint);
+        console.log('已处理消息数量:', this.processedMessages.size);
+        
+        // 检查是否已处理过此消息
+        if (this.processedMessages.has(messageFingerprint)) {
+            console.log('❌ 消息已处理过，跳过:', messageFingerprint);
+            return;
+        }
+        
+        // 标记消息为已处理
+        this.processedMessages.add(messageFingerprint);
+        console.log('✅ 消息标记为已处理:', messageFingerprint);
+        
+        // 限制已处理消息集合的大小，避免内存泄漏
+        if (this.processedMessages.size > 50) {
+            // 保留最新的25条记录
+            const messagesArray = Array.from(this.processedMessages);
+            this.processedMessages.clear();
+            messagesArray.slice(-25).forEach(msg => this.processedMessages.add(msg));
+        }
+        
         if (message.type === 'response') {
             // 处理智能体回复
             this.addMessage(message.content, 'agent');
@@ -362,6 +525,19 @@ class TravelingAgentApp {
         
         // 只有在正常响应或错误时才停止加载状态
         this.setLoading(false);
+    }
+
+    /**
+     * 创建消息指纹用于去重
+     */
+    createMessageFingerprint(message) {
+        const content = message.content || message.prompt || message.error || '';
+        const type = message.type || 'unknown';
+        const sessionId = message.sessionId || this.currentSessionId;
+        
+        // 使用更简单的指纹生成方式
+        const fingerprint = `${type}_${sessionId}_${content.length}_${content.substring(0, 50)}`;
+        return fingerprint;
     }
 
     handleWebSocketError(error) {
@@ -470,12 +646,45 @@ class TravelingAgentApp {
     }
 
     showUserInputPrompt(prompt) {
+        // 检查是否已经显示过相同的用户输入提示，避免重复
+        const messagesContainer = document.getElementById('messagesContainer');
+        const lastMessage = messagesContainer.lastElementChild;
+        
+        if (lastMessage && lastMessage.classList.contains('agent-message')) {
+            const lastMessageText = lastMessage.querySelector('.message-text');
+            if (lastMessageText && lastMessageText.textContent.includes(prompt.substring(0, 50))) {
+                console.log('用户输入提示已存在，跳过重复显示');
+                return;
+            }
+        }
+        
         // 直接作为普通智能体消息显示
         this.addMessage(prompt, 'agent');
     }
 
     addMessage(content, sender) {
+        console.log(`💬 添加消息 - 发送者: ${sender}, 内容长度: ${content.length}`);
+        console.log(`💬 消息内容预览: ${content.substring(0, 100)}...`);
+        
+        // 检查是否与最后一条消息重复
         const messagesContainer = document.getElementById('messagesContainer');
+        const lastMessage = messagesContainer.lastElementChild;
+        
+        if (lastMessage && lastMessage.classList.contains(`${sender}-message`)) {
+            const lastMessageText = lastMessage.querySelector('.message-text');
+            if (lastMessageText) {
+                const lastContent = lastMessageText.textContent || lastMessageText.innerText || '';
+                const currentContent = content.replace(/\s+/g, ' ').trim();
+                const lastContentNormalized = lastContent.replace(/\s+/g, ' ').trim();
+                
+                if (currentContent === lastContentNormalized || 
+                    (currentContent.length > 20 && lastContentNormalized.includes(currentContent.substring(0, 20)))) {
+                    console.log('❌ 检测到重复消息，跳过添加');
+                    return;
+                }
+            }
+        }
+        
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}-message`;
         
@@ -511,6 +720,8 @@ class TravelingAgentApp {
             this.travelVisualization.enhanceMessageWithIcons(messageDiv);
             this.travelVisualization.animateMessage(messageDiv);
         }
+        
+        console.log(`💬 消息已添加到界面`);
     }
 
     formatMessage(content) {
@@ -576,7 +787,10 @@ class TravelingAgentApp {
     formatRegularContent(content) {
         // 处理普通内容的Markdown格式化
         let formatted = content
-            // 先处理Markdown格式
+            // 先处理Windows风格的换行符
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            // 处理Markdown格式
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/`(.*?)`/g, '<code>$1</code>')
@@ -648,6 +862,9 @@ class TravelingAgentApp {
         this.messageHistory = [];
         this.waitingForUserInput = false; // 重置用户输入状态
         this.userInputPrompt = '';
+        
+        // 清理已处理消息集合，避免跨会话消息干扰
+        this.processedMessages.clear();
         
         // 清空消息容器并重新创建欢迎消息
         const messagesContainer = document.getElementById('messagesContainer');
@@ -1351,3 +1568,66 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// 添加测试函数到全局作用域
+window.testLineBreakHandling = function() {
+    if (window.travelingAgentApp) {
+        console.log('🧪 测试换行符处理...');
+        
+        const testContent = `这是第一行
+这是第二行
+
+这是空行后的内容
+
+最后一行`;
+
+        console.log('原始内容:');
+        console.log(testContent);
+        
+        const formatted = window.travelingAgentApp.formatMessage(testContent);
+        console.log('格式化后:');
+        console.log(formatted);
+        
+        // 添加到消息中测试
+        window.travelingAgentApp.addMessage(testContent, 'agent');
+    }
+};
+
+window.testWindowsLineBreaks = function() {
+    if (window.travelingAgentApp) {
+        console.log('🧪 测试Windows风格换行符处理...');
+        
+        const testContent = `Windows风格换行符测试:\r\n第一行\r\n第二行\r\n\r\n空行后的内容\r\n\r\n最后一行`;
+
+        console.log('原始内容:');
+        console.log(testContent);
+        
+        const formatted = window.travelingAgentApp.formatMessage(testContent);
+        console.log('格式化后:');
+        console.log(formatted);
+        
+        // 添加到消息中测试
+        window.travelingAgentApp.addMessage(testContent, 'agent');
+    }
+};
+
+window.testDuplicateMessage = function() {
+    if (window.travelingAgentApp) {
+        console.log('🧪 测试重复消息检测...');
+        
+        const testContent = '这是一条测试消息，用于检测重复消息功能';
+        
+        // 添加第一条消息
+        window.travelingAgentApp.addMessage(testContent, 'agent');
+        
+        // 立即添加相同的消息（应该被检测为重复）
+        setTimeout(() => {
+            window.travelingAgentApp.addMessage(testContent, 'agent');
+        }, 100);
+        
+        // 添加不同的消息（应该正常显示）
+        setTimeout(() => {
+            window.travelingAgentApp.addMessage('这是另一条不同的消息', 'agent');
+        }, 200);
+    }
+};

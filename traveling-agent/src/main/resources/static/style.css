@@ -54,7 +54,7 @@
 
 body {
     font-family: var(--font-family);
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-primary);  /* 改为白色背景 */
     color: var(--text-primary);
     line-height: 1.6;
     overflow: hidden;
@@ -368,6 +368,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0;
+    background: var(--bg-primary);  /* 确保消息容器背景为白色 */
 }
 
 /* 消息样式 */
@@ -444,18 +445,22 @@ body {
 }
 
 .message-text {
-    background: var(--bg-secondary);
-    padding: 0.25rem 0.5rem;
-    border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
+    background: transparent;
+    padding: 0.5rem 0;
+    border-radius: 0;
+    border: none;
     line-height: 1.6;
     margin: 0;
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
 }
 
 .user-message .message-text {
     background: var(--primary-color);
     color: var(--text-white);
-    border-color: var(--primary-color);
+    border-radius: var(--border-radius);
+    padding: 0.5rem 0.75rem;
 }
 
 .message-text p {
@@ -493,9 +498,9 @@ body {
 /* 表格内容样式 - 保持原始格式和空行 */
 .table-content {
     white-space: pre-line;  /* 保持换行符和空行 */
-    font-family: 'Courier New', monospace;  /* 等宽字体便于表格对齐 */
+    font-family: var(--font-family);  /* 使用统一的字体 */
     line-height: 1.4;
-    background: var(--bg-tertiary);
+    background: var(--bg-primary);  /* 改为白色背景 */
     padding: var(--spacing-md);
     border-radius: var(--border-radius-sm);
     border: 1px solid var(--border-color);
