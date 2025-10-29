@@ -92,19 +92,19 @@ public class TravelingController {
     @GetMapping("/status")
     public String getStatus() {
         try {
-            String ollamaStatus = controllerCore.checkOllamaStatus();
+            String inferenceService = controllerCore.getCurrentInferenceService();
             String graphStatus = JSONObject.toJSONString(controllerCore.getGraphStatus());
             
             return String.format("""
                 📊 旅游智能体状态:
                 
-                **Ollama服务**: %s
+                **推理服务**: %s
                 
                 **图状态**: %s
                 
                 **活跃会话**: %d
                 """, 
-                ollamaStatus, 
+                inferenceService, 
                 graphStatus,
                 controllerCore.getActiveSessionCount()
             );
@@ -117,10 +117,10 @@ public class TravelingController {
     @GetMapping("/models")
     public String getModels() {
         try {
-            return controllerCore.getAvailableModels();
+            return controllerCore.getCurrentInferenceService();
         } catch (Exception e) {
             log.error("Error getting models", e);
-            return "获取模型列表失败: " + e.getMessage();
+            return "获取模型信息失败: " + e.getMessage();
         }
     }
 

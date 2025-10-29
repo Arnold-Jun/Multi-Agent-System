@@ -1,6 +1,9 @@
 package com.zhouruojun.travelingagent.agent.core;
 
 import com.alibaba.fastjson.JSONObject;
+import com.zhouruojun.a2acore.spec.Message;
+import com.zhouruojun.a2acore.spec.Part;
+import com.zhouruojun.a2acore.spec.TextPart;
 import com.zhouruojun.travelingagent.agent.builder.TravelingGraphBuilder;
 import com.zhouruojun.travelingagent.agent.dto.AgentChatRequest;
 import com.zhouruojun.travelingagent.agent.state.MainGraphState;
@@ -52,6 +55,9 @@ public class TravelingControllerCore {
     // 核心依赖
     @Autowired
     private OllamaService ollamaService;
+    
+    @Autowired
+    private com.zhouruojun.travelingagent.service.QwenApiService qwenApiService;
     
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -423,18 +429,18 @@ public class TravelingControllerCore {
      */
     public void processStreamWithA2a(String requestId,
                                      String sessionId,
-                                     com.zhouruojun.a2acore.spec.Message message,
+                                     Message message,
                                      String userEmail) {
         try {
             log.info("Processing A2A request - requestId: {}, sessionId: {}", requestId, sessionId);
             
             // 从A2A消息中提取文本内容
-            List<com.zhouruojun.a2acore.spec.Part> parts = message.getParts();
-            if (parts.isEmpty() || !(parts.get(0) instanceof com.zhouruojun.a2acore.spec.TextPart)) {
+            List<Part> parts = message.getParts();
+            if (parts.isEmpty() || !(parts.get(0) instanceof TextPart)) {
                 throw new IllegalArgumentException("Invalid A2A message: no text part found");
             }
             
-            com.zhouruojun.a2acore.spec.TextPart textPart = (com.zhouruojun.a2acore.spec.TextPart) parts.get(0);
+            TextPart textPart = (TextPart) parts.get(0);
             String taskInstruction = textPart.getText();
             
             log.info("A2A task instruction: {}", taskInstruction);
@@ -452,13 +458,13 @@ public class TravelingControllerCore {
                     String result = processStreamReturnStr(request);
                     
                     // 使用静态方法发送最终响应
-                    com.zhouruojun.travelingagent.a2a.TravelingTaskManager.sendTextEvent(
+                    TravelingTaskManager.sendTextEvent(
                         requestId, result, "__END__");
                     
                 } catch (Exception e) {
                     log.error("Error processing A2A request", e);
                     // 发送错误事件
-                    com.zhouruojun.travelingagent.a2a.TravelingTaskManager.sendTextEvent(
+                    TravelingTaskManager.sendTextEvent(
                         requestId, "处理任务时发生错误: " + e.getMessage(), "__ERROR__");
                 }
             });
@@ -638,11 +644,12 @@ public class TravelingControllerCore {
             try {
                 // 处理流式响应
                 AsyncGenerator<NodeOutput<MainGraphState>> stream = processStream(request);
-                
+
+                String finalResponse = "";
                 // 处理每个节点的输出
                 for (NodeOutput<MainGraphState> output : stream) {
                     MainGraphState state = output.state();
-                    String nodeName = output.node();
+                    // String nodeName = output.node(); // 暂时注释掉未使用的变量
 
                     // 检查是否需要用户输入
                     if (state.getValue("userInputRequired").isPresent() && 
@@ -659,16 +666,16 @@ public class TravelingControllerCore {
                     
                     // 发送最终响应
                     if (state.getFinalResponse().isPresent()) {
-                        String finalResponse = state.getFinalResponse().get();
+                        finalResponse = state.getFinalResponse().get();
                         updateSessionHistory(sessionId, request.getChat(), finalResponse);
-                        
-                        // 发送响应到前端
-                        sendResponse(sessionId, finalResponse);
+                        state.clearFinalResponse();
                     }
                 }
-                
+
+                // 发送响应到前端
+                sendResponse(sessionId, finalResponse);
                 log.info("WebSocket chat processing completed for sessionId: {}", sessionId);
-                
+
             } catch (Exception e) {
                 log.error("Error processing WebSocket chat request", e);
                 sendError(sessionId, "处理请求时发生错误: " + e.getMessage());
@@ -733,7 +740,7 @@ public class TravelingControllerCore {
                 
                 for (NodeOutput<MainGraphState> output : messages) {
                     MainGraphState state = output.state();
-                    String nodeName = output.node();
+                    // String nodeName = output.node(); // 暂时注释掉未使用的变量
 
                     // 检查是否又需要用户输入
                     if (state.getValue("userInputRequired").isPresent() && 
@@ -752,6 +759,7 @@ public class TravelingControllerCore {
                     if (state.getFinalResponse().isPresent()) {
                         finalResponse = state.getFinalResponse().get();
                         updateSessionHistory(sessionId, userInput, finalResponse);
+                        state.clearFinalResponse();
                     }
                 }
                 
@@ -826,16 +834,20 @@ public class TravelingControllerCore {
     }
 
     /**
-     * 检查Ollama状态
+     * 检查Qwen API状态
      */
-    public String checkOllamaStatus() {
-        return ollamaService.checkOllamaStatus();
+    public String checkQwenApiStatus() {
+        return qwenApiService.checkQwenApiStatus();
     }
 
     /**
-     * 获取可用模型
+     * 获取当前使用的推理服务信息
      */
-    public String getAvailableModels() {
-        return ollamaService.getAvailableModels();
+    public String getCurrentInferenceService() {
+        if (qwenApiService.isEnabled()) {
+            return "当前使用Qwen API进行推理\n" + qwenApiService.getQwenApiInfo();
+        } else {
+            return "当前使用Ollama进行推理\n" + ollamaService.getConfigInfo();
+        }
     }
 }

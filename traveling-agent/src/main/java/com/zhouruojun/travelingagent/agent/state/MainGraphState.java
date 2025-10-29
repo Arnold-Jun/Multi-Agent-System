@@ -1,8 +1,8 @@
 package com.zhouruojun.travelingagent.agent.state;
 
-import com.zhouruojun.travelingagent.agent.dto.SchedulerResponse;
 import com.zhouruojun.travelingagent.agent.state.main.TodoList;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
+import com.zhouruojun.travelingagent.agent.state.subgraph.ToolExecutionHistory;
 import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 
@@ -88,12 +88,16 @@ public class MainGraphState extends BaseAgentState {
         return Optional.ofNullable((TodoList) state.get("todoList"));
     }
 
-    public void setFinalResponse(String finalResponse) {
-        state.put("finalResponse", finalResponse);
-    }
 
     public Optional<String> getFinalResponse() {
         return Optional.ofNullable((String) state.get("finalResponse"));
+    }
+
+    /**
+     * 清空finalResponse
+     */
+    public void clearFinalResponse() {
+        state.put("finalResponse", null);
     }
 
 
@@ -212,29 +216,79 @@ public class MainGraphState extends BaseAgentState {
     }
     
     /**
-     * 获取finalResponse历史列表
+     * 获取任务响应历史列表
      */
     @SuppressWarnings("unchecked")
-    public List<String> getFinalResponseHistory() {
-        return (List<String>) state.getOrDefault("finalResponseHistory", new ArrayList<>());
+    public List<String> getTaskResponseHistory() {
+        return (List<String>) state.getOrDefault("taskResponseHistory", new ArrayList<>());
+    }
+    
+    /**
+     * 获取任务历史列表（保存preprocessor输出的任务描述）
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> getTaskHistory() {
+        return (List<String>) state.getOrDefault("taskHistory", new ArrayList<>());
+    }
+    
+    /**
+     * 获取预处理器响应历史列表（保存preprocessor的finalResponse）
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> getPreprocessorResponseHistory() {
+        return (List<String>) state.getOrDefault("preprocessorResponseHistory", new ArrayList<>());
+    }
+
+    /**
+     * 获取工具执行历史
+     */
+    public ToolExecutionHistory getToolExecutionHistory() {
+        ToolExecutionHistory history = (ToolExecutionHistory) state.get("toolExecutionHistory");
+        if (history == null) {
+            history = new ToolExecutionHistory();
+            state.put("toolExecutionHistory", history);
+        }
+        return history;
+    }
+
+    /**
+     * 获取工具执行结果
+     */
+    public Optional<String> getToolExecutionResult() {
+        return Optional.ofNullable((String) state.get("toolExecutionResult"));
     }
 
     /**
      * 获取格式化的对话历史（用于Planner提示词）
      */
     public String getFormattedConversationHistory() {
-        List<String> queries = getUserQueryHistory();
-        List<String> responses = getFinalResponseHistory();
+        List<String> tasks = getTaskHistory();
+        List<String> responses = getTaskResponseHistory();
         
         // 确保数量一致
-        int rounds = Math.min(queries.size(), responses.size());
+        int rounds = Math.min(tasks.size(), responses.size());
         
         StringBuilder history = new StringBuilder();
         for (int i = 0; i < rounds; i++) {
-            history.append(String.format("【第%d轮对话】\n", i + 1));
-            history.append(String.format("用户: %s\n", queries.get(i)));
+            history.append(String.format("【第%d轮任务】\n", i + 1));
+            history.append(String.format("任务: %s\n", tasks.get(i)));
             history.append(String.format("系统: %s\n\n", 
                 truncateIfTooLong(responses.get(i), 300)));
+        }
+        
+        return history.toString();
+    }
+    
+    /**
+     * 获取格式化的用户查询历史（用于Preprocessor提示词）
+     */
+    public String getFormattedUserQueryHistory() {
+        List<String> queries = getUserQueryHistory();
+        
+        StringBuilder history = new StringBuilder();
+        for (int i = 0; i < queries.size(); i++) {
+            history.append(String.format("【第%d轮查询】\n", i + 1));
+            history.append(String.format("用户: %s\n\n", queries.get(i)));
         }
         
         return history.toString();
@@ -263,19 +317,6 @@ public class MainGraphState extends BaseAgentState {
         state.put("sessionId", sessionId);
     }
 
-    /**
-     * 获取调度响应
-     */
-    public Optional<SchedulerResponse> getSchedulerResponse() {
-        return Optional.ofNullable((SchedulerResponse) state.get("schedulerResponse"));
-    }
-
-    /**
-     * 设置调度响应
-     */
-    public void setSchedulerResponse(SchedulerResponse schedulerResponse) {
-        state.put("schedulerResponse", schedulerResponse);
-    }
 
     /**
      * 检查是否完成

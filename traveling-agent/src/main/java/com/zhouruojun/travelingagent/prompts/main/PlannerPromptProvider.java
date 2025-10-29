@@ -76,9 +76,9 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      * 判断执行场景
      */
     private String determineScenario(MainGraphState state) {
-        // 检查是否有finalResponseHistory（继续对话场景）
-        List<String> finalResponseHistory = state.getFinalResponseHistory();
-        if (!finalResponseHistory.isEmpty()) {
+        // 检查是否有taskResponseHistory（继续对话场景）
+        List<String> taskResponseHistory = state.getTaskResponseHistory();
+        if (!taskResponseHistory.isEmpty()) {
             return CONTINUATION_SCENARIO;
         }
         
@@ -266,10 +266,14 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      * 构建初始规划用户提示词
      */
     private String buildInitialUserPrompt(MainGraphState state) {
-        String userQuery = state.getOriginalUserQuery().orElse("请帮我制定旅游计划");
+        // 使用taskHistory中的最新任务，如果没有则使用originalUserQuery
+        List<String> taskHistory = state.getTaskHistory();
+        String userQuery = taskHistory.isEmpty() ? 
+            state.getOriginalUserQuery().orElse("请帮我制定旅游计划") : 
+            taskHistory.get(taskHistory.size() - 1);
         
         return String.format("""
-        **用户查询**：%s
+        **任务描述**：%s
 
         **输出格式**：
         你必须输出以下JSON格式：
@@ -296,7 +300,11 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      * 构建重新规划用户提示词
      */
     private String buildReplanUserPrompt(MainGraphState state) {
-        String userQuery = state.getOriginalUserQuery().orElse("用户查询");
+        // 使用taskHistory中的最新任务，如果没有则使用originalUserQuery
+        List<String> taskHistory = state.getTaskHistory();
+        String userQuery = taskHistory.isEmpty() ? 
+            state.getOriginalUserQuery().orElse("用户查询") : 
+            taskHistory.get(taskHistory.size() - 1);
         String todoListInfo = state.getTodoListStatistics();
         Map<String, String> subgraphResults = state.getSubgraphResults().orElse(Map.of());
         
@@ -307,7 +315,7 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
         **对话历史**：
         %s
 
-        **当前用户查询**：%s
+        **当前任务描述**：%s
 
         **当前任务列表状态**：
         %s
@@ -354,24 +362,24 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      * 构建对话历史
      */
     private String buildConversationHistory(MainGraphState state) {
-        List<String> userQueryHistory = state.getUserQueryHistory();
-        List<String> finalResponseHistory = state.getFinalResponseHistory();
+        List<String> taskHistory = state.getTaskHistory();
+        List<String> taskResponseHistory = state.getTaskResponseHistory();
         
         StringBuilder history = new StringBuilder();
         
         // 构建对话历史
-        int maxRounds = Math.max(userQueryHistory.size(), finalResponseHistory.size());
+        int maxRounds = Math.max(taskHistory.size(), taskResponseHistory.size());
         for (int i = 0; i < maxRounds; i++) {
-            history.append(String.format("【第%d轮对话】\n", i + 1));
+            history.append(String.format("【第%d轮任务】\n", i + 1));
             
-            // 添加用户查询
-            if (i < userQueryHistory.size()) {
-                history.append(String.format("用户: %s\n", userQueryHistory.get(i)));
+            // 添加任务描述
+            if (i < taskHistory.size()) {
+                history.append(String.format("任务: %s\n", taskHistory.get(i)));
             }
             
             // 添加系统响应
-            if (i < finalResponseHistory.size()) {
-                history.append(String.format("系统: %s\n", finalResponseHistory.get(i)));
+            if (i < taskResponseHistory.size()) {
+                history.append(String.format("系统: %s\n", taskResponseHistory.get(i)));
             }
             
             history.append("\n");
@@ -482,7 +490,11 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      */
     private String buildContinuationUserPrompt(MainGraphState state) {
         String conversationHistory = state.getFormattedConversationHistory();
-        String currentQuery = state.getLatestUserQuery();
+        // 使用taskHistory中的最新任务，如果没有则使用latestUserQuery
+        List<String> taskHistory = state.getTaskHistory();
+        String currentQuery = taskHistory.isEmpty() ? 
+            state.getLatestUserQuery() : 
+            taskHistory.get(taskHistory.size() - 1);
         String todoListInfo = getDetailedTodoListInfo(state);
         Map<String, String> subgraphResults = state.getSubgraphResults().orElse(Map.of());
         
@@ -492,7 +504,7 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
         **对话历史**：
         %s
 
-        **当前用户查询**：%s
+        **当前任务描述**：%s
 
         **当前任务列表状态**：
         %s

@@ -2,6 +2,7 @@ package com.zhouruojun.travelingagent.agent.actions;
 
 import com.zhouruojun.travelingagent.agent.BaseAgent;
 import com.zhouruojun.travelingagent.agent.state.BaseAgentState;
+import com.zhouruojun.travelingagent.agent.state.MainGraphState;
 import com.zhouruojun.travelingagent.agent.state.SubgraphState;
 import com.zhouruojun.travelingagent.agent.state.subgraph.ToolExecutionHistory;
 import com.zhouruojun.travelingagent.config.ParallelExecutionConfig;
@@ -336,12 +337,13 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
      * @throws IllegalStateException 
      */
     private ToolExecutionHistory getToolExecutionHistoryFromState(T state) {
-        if (state instanceof SubgraphState) {
-            return ((SubgraphState) state)
-                .getToolExecutionHistoryOrThrow();
+        if (state instanceof MainGraphState) {
+            return ((MainGraphState) state).getToolExecutionHistory();
+        } else if (state instanceof SubgraphState) {
+            return ((SubgraphState) state).getToolExecutionHistory();
         }
         throw new IllegalStateException(
-            String.format("期望SubgraphState，但实际类型为: %s", state.getClass().getName())
+            String.format("期望MainGraphState或SubgraphState，但实际类型为: %s", state.getClass().getName())
         );
     }
 

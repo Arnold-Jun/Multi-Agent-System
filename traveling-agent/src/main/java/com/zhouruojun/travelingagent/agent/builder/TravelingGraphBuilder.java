@@ -6,7 +6,9 @@ import static org.bsc.langgraph4j.action.AsyncEdgeAction.edge_async;
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
 import com.zhouruojun.travelingagent.agent.BaseAgent;
+import com.zhouruojun.travelingagent.agent.actions.CallPreprocessorAgent;
 import com.zhouruojun.travelingagent.agent.actions.CallPlannerAgent;
+import com.zhouruojun.travelingagent.agent.actions.ExecuteTools;
 import com.zhouruojun.travelingagent.agent.actions.CallSchedulerAgent;
 import com.zhouruojun.travelingagent.agent.actions.CallSummaryAgent;
 import com.zhouruojun.travelingagent.agent.actions.TodoListParser;
@@ -177,6 +179,9 @@ public class TravelingGraphBuilder {
         BlockingQueue<AsyncGenerator.Data<StreamingOutput<MainGraphState>>> queue = new LinkedBlockingQueue<>();
         
         // 创建智能体
+        CallPreprocessorAgent callPreprocessor = new CallPreprocessorAgent("preprocessor", agents.get("preprocessor"), promptManager);
+        callPreprocessor.setQueue(queue);
+        
         CallPlannerAgent callPlanner = new CallPlannerAgent("planner", agents.get("planner"), promptManager);
         callPlanner.setQueue(queue);
         
@@ -190,6 +195,9 @@ public class TravelingGraphBuilder {
         
         UserInput userInput = new UserInput();
         
+        // 创建ExecuteTools节点（用于preprocessor的工具调用）
+        ExecuteTools<MainGraphState> executeTools = new ExecuteTools<>("preprocessor", agents.get("preprocessor"), toolProviderManager, parallelExecutionConfig);
+        
         // 创建子图
         Map<String, CompiledGraph<SubgraphState>> subgraphs = createSubgraphs();
 
@@ -199,6 +207,8 @@ public class TravelingGraphBuilder {
         
         // 构建主图
         return new StateGraph<MainGraphState>(MessagesState.SCHEMA, stateSerializer)
+                .addNode("preprocessor", node_async(callPreprocessor))
+                .addNode("executeTools", node_async(executeTools))
                 .addNode("planner", node_async(callPlanner))
                 .addNode("todoListParser", node_async(todoListParser))
                 .addNode("scheduler", node_async(callScheduler))
@@ -210,7 +220,17 @@ public class TravelingGraphBuilder {
                 .addNode("onTripAgent", createSubgraphNode(subgraphs.get("onTripAgent"), "onTripAgent"))
                 
                 // 边连接
-                .addEdge(START, "planner")
+                .addEdge(START, "preprocessor")
+                .addConditionalEdges("preprocessor",
+                        edge_async(preprocessorRouting),
+                        Map.of(
+                                "planner", "planner",
+                                "Finish", END,
+                                "action", "executeTools",
+                                "retry", "preprocessor"))
+                .addConditionalEdges("executeTools",
+                        edge_async(actionShouldContinue),
+                        Map.of("callback", "preprocessor"))
                 .addEdge("planner", "todoListParser")
                 .addConditionalEdges("todoListParser",
                         edge_async(todoListRouting),
@@ -242,6 +262,15 @@ public class TravelingGraphBuilder {
      */
     private Map<String, BaseAgent> createAgents() {
         Map<String, BaseAgent> agents = new HashMap<>();
+        
+        // 创建Preprocessor智能体
+        agents.put("preprocessor", BaseAgent.builder()
+                .chatLanguageModel(chatLanguageModel)
+                .streamingChatLanguageModel(streamingChatLanguageModel)
+                .tools(toolProviderManager.getToolSpecificationsByAgent("preprocessor"))
+                .agentName("preprocessor")
+                .prompt(promptManager.getMainGraphSystemPrompt("preprocessor", "DEFAULT"))
+                .build());
         
         // 创建Planner智能体
         agents.put("planner", BaseAgent.builder()
@@ -533,6 +562,22 @@ public class TravelingGraphBuilder {
 
 
     /**
+     * Preprocessor路由逻辑
+     */
+    private final EdgeAction<MainGraphState> preprocessorRouting = (state) -> {
+        // 定义Preprocessor路由的有效目标节点
+        List<String> preprocessorChildren = new ArrayList<>();
+        preprocessorChildren.add("planner");
+        preprocessorChildren.add("Finish");
+        preprocessorChildren.add("action");
+        preprocessorChildren.add("retry");
+        
+        return state.next()
+                .filter(preprocessorChildren::contains)
+                .orElseThrow(() -> new IllegalStateException("CallPreprocessorAgent必须设置有效的next字段"));
+    };
+
+    /**
      * TodoList路由逻辑
      */
     private final EdgeAction<MainGraphState> todoListRouting = (state) -> {
@@ -571,6 +616,11 @@ public class TravelingGraphBuilder {
      * 子图路由逻辑
      */
     private final EdgeAction<MainGraphState> subgraphShouldContinue = (state) -> "scheduler";
+
+    /**
+     * 工具执行回调边条件
+     */
+    private final EdgeAction<MainGraphState> actionShouldContinue = (state) -> "callback";
 
     /**
      * 验证参数

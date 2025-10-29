@@ -51,13 +51,10 @@ public class CallSummaryAgent extends CallAgent<MainGraphState> {
             log.info("Summary response: {}", aiResponse);
             
             // ✅ 新增：保存finalResponse到历史
-            List<String> finalResponseHistory = new ArrayList<>(state.getFinalResponseHistory());
-            finalResponseHistory.add(aiResponse);
-            log.info("Summary: Added finalResponse to history: {}", aiResponse);
-            
-            // 设置最终响应
-            state.setFinalResponse(aiResponse);
-            
+            List<String> taskResponseHistory = new ArrayList<>(state.getTaskResponseHistory());
+            taskResponseHistory.add(aiResponse);
+            log.info("Summary: Added finalResponse to taskResponseHistory: {}", aiResponse);
+
             // 添加AI响应到消息历史
             state.addMessage(filteredMessage);
             
@@ -65,7 +62,7 @@ public class CallSummaryAgent extends CallAgent<MainGraphState> {
             Map<String, Object> result = new HashMap<>();
             result.put("messages", state.messages());
             result.put("finalResponse", aiResponse);
-            result.put("finalResponseHistory", finalResponseHistory);  // ← 返回更新后的历史
+            result.put("taskResponseHistory", taskResponseHistory);  // ← 返回更新后的历史
             
             log.info("Summary处理完成，生成最终报告");
             
