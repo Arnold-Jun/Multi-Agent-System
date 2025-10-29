@@ -25,9 +25,10 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
     private static final String INITIAL_SCHEDULING_SCENARIO = "INITIAL_SCHEDULING";
     private static final String RESULT_PROCESSING_SCENARIO = "RESULT_PROCESSING";
     private static final String USER_INPUT_PROCESSING_SCENARIO = "USER_INPUT_PROCESSING";
+    private static final String RETRY_SCENARIO = "RETRY";
     
     public SchedulerPromptProvider() {
-        super("scheduler", List.of(INITIAL_SCHEDULING_SCENARIO, RESULT_PROCESSING_SCENARIO, USER_INPUT_PROCESSING_SCENARIO));
+        super("scheduler", List.of(INITIAL_SCHEDULING_SCENARIO, RESULT_PROCESSING_SCENARIO, USER_INPUT_PROCESSING_SCENARIO, RETRY_SCENARIO));
     }
     
     @Override
@@ -46,17 +47,24 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
     public String getSystemPrompt(String scenario) {
         validateScenario(scenario);
         
-        return switch (scenario) {
+        String base = switch (scenario) {
             case INITIAL_SCHEDULING_SCENARIO -> buildInitialSystemPrompt();
-            case RESULT_PROCESSING_SCENARIO, USER_INPUT_PROCESSING_SCENARIO -> buildUpdateSystemPrompt();
+            case RESULT_PROCESSING_SCENARIO, USER_INPUT_PROCESSING_SCENARIO, RETRY_SCENARIO -> buildUpdateSystemPrompt();
             default -> throw new IllegalArgumentException("Unsupported scenario: " + scenario);
         };
+        if (RETRY_SCENARIO.equals(scenario)) {
+            base += "\n**严格格式要求（仅本次重试有效）**：请只输出规范的调度JSON对象，字段完整且取值合法，不要输出任何额外文本。\n";
+        }
+        return base;
     }
     
     @Override
     public String buildUserPrompt(String scenario, MainGraphState state) {
         validateScenario(scenario);
         
+        if (RETRY_SCENARIO.equals(scenario)) {
+            return buildRetryUserPrompt(state);
+        }
         return switch (scenario) {
             case INITIAL_SCHEDULING_SCENARIO -> buildInitialUserPrompt(state);
             case RESULT_PROCESSING_SCENARIO -> buildResultProcessingUserPrompt(state);
@@ -69,6 +77,15 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
      * 判断调度场景
      */
     private String determineScenario(MainGraphState state) {
+        // 先检查是否处于重试场景
+        int retryCount = 0;
+        try {
+            Object rc = state.getValue("schedulerRetryCount").orElse(0);
+            if (rc instanceof Integer) retryCount = (Integer) rc; else retryCount = Integer.parseInt(rc.toString());
+        } catch (Exception ignored) { retryCount = 0; }
+        if (retryCount > 0) {
+            return RETRY_SCENARIO;
+        }
         // 检查是否有用户输入（从userInput节点恢复）
         if (state.getValue("userInput").isPresent()) {
             return USER_INPUT_PROCESSING_SCENARIO;
@@ -82,6 +99,25 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
         
         // 默认为初始调度场景
         return INITIAL_SCHEDULING_SCENARIO;
+    }
+
+    /**
+     * 重试场景的用户提示词
+     */
+    private String buildRetryUserPrompt(MainGraphState state) {
+        StringBuilder sb = new StringBuilder();
+        // 复用结果处理上下文
+        sb.append(buildResultProcessingUserPrompt(state)).append("\n\n");
+        state.getValue("schedulerRetryContext")
+                .map(Object::toString)
+                .filter(s -> !s.trim().isEmpty())
+                .ifPresent(ctx -> {
+                    sb.append("**错误纠正上下文**：\n").append(ctx).append("\n\n")
+                      .append("**请按以下要求给出结果**：\n")
+                      .append("1. 只输出一个有效的调度JSON对象，字段完整且取值合法；不要输出任何额外文本。\n")
+                      .append("2. 若需要用户输入或重试，请在JSON中明确说明，并给出合理的next与上下文。\n\n");
+                });
+        return sb.toString();
     }
     
     /**

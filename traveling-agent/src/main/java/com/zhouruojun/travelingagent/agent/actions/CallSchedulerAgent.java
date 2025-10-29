@@ -62,9 +62,15 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
 
     @Override
     protected Map<String, Object> processResponse(AiMessage originalMessage, AiMessage filteredMessage, MainGraphState state) {
+        String responseText = filteredMessage.text();
+        if (responseText == null || responseText.trim().isEmpty()) {
+            log.error("调度智能体 {} 返回空响应", agentName);
+            return createErrorResult(state, "调度智能体返回空响应");
+        }
+
         try {
             // 解析调度响应
-            SchedulerResponse response = schedulerResponseParser.parseResponse(filteredMessage.text());
+            SchedulerResponse response = schedulerResponseParser.parseResponse(responseText);
             
             // 处理任务状态更新
             Map<String, Object> result = processTaskUpdate(response, state);
@@ -73,22 +79,62 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
                 result.put("messages", List.of(filteredMessage));
             }
             
+            // 成功解析后，清理重试上下文
+            result.put("schedulerRetryContext", null);
+            result.put("schedulerRetryCount", 0);
+
             log.info("调度智能体 {} 完成调度，任务ID: {}, 状态: {}, 下一步: {}", 
                     agentName, 
                     response.getTaskUpdate().getTaskId(),
                     response.getTaskUpdate().getStatus(),
-                    result.get("next"));  // 使用result中的next，而不是response中的next
+                    result.get("next"));
             
             return result;
             
+        } catch (IllegalArgumentException parseEx) {
+            // 由LLM输出导致的可自修复错误：进入受控重试
+            return buildRetryResult(state, responseText, parseEx.getMessage());
         } catch (Exception e) {
+            // 非预期或系统错误：直接返回给前端
             log.error("调度智能体 {} 处理响应失败: {}", agentName, e.getMessage(), e);
-            
+            return createErrorResult(state, "调度处理失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 构建Scheduler重试结果，包含一次性纠错上下文与重试计数。
+     */
+    private Map<String, Object> buildRetryResult(MainGraphState state, String responseText, String errorMessage) {
+        int retryCount = 0;
+        try {
+            Object rc = state.getValue("schedulerRetryCount").orElse(0);
+            if (rc instanceof Integer) retryCount = (Integer) rc; else retryCount = Integer.parseInt(rc.toString());
+        } catch (Exception ignored) { retryCount = 0; }
+
+        if (retryCount >= 2) {
+            String finalMsg = "抱歉，我多次未能生成有效的调度JSON结果。请稍后重试。";
+            log.warn("scheduler JSON解析连续失败，已达上限: {}", retryCount);
             return Map.of(
-                    "messages", List.of(filteredMessage),
-                    "next", "scheduler"
+                    "finalResponse", finalMsg,
+                    "next", "Finish",
+                    "schedulerRetryContext", null,
+                    "schedulerRetryCount", 0
             );
         }
+
+        String truncatedOutput = responseText != null && responseText.length() > 500
+                ? responseText.substring(0, 500) + "...（已截断）" : (responseText == null ? "" : responseText);
+        String retryContext = "【上一次输出无法解析为有效的调度JSON】\n"
+                + "请严格输出规范的调度JSON，字段必须完整且取值合法。\n"
+                + "错误信息：" + (errorMessage == null ? "" : errorMessage) + "\n"
+                + "原始输出片段：\n" + truncatedOutput + "\n";
+
+        Map<String, Object> retryResult = new HashMap<>();
+        retryResult.put("schedulerRetryContext", retryContext);
+        retryResult.put("schedulerRetryCount", retryCount + 1);
+
+        retryResult.put("retry", "scheduler");
+        return retryResult;
     }
 
     /**
@@ -178,7 +224,7 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
             // 获取最后一个subgraph结果作为finalResponse
             String lastResult = getLastSubgraphResult(state);
             
-            // ✅ 新增：保存finalResponse到历史
+            // 新增：保存finalResponse到历史
             List<String> taskResponseHistory = new ArrayList<>(state.getTaskResponseHistory());
             taskResponseHistory.add(lastResult);
             log.info("Scheduler: Added finalResponse to taskResponseHistory: {}", lastResult);
@@ -438,19 +484,18 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
     
     /**
      * 重写错误结果创建方法
-     * Scheduler解析失败时，应该重新尝试调度，而不是继续执行
+     * 与Preprocessor对齐：不可修复错误直接结束，并返回给前端
      */
     @Override
     protected Map<String, Object> createErrorResult(MainGraphState state, String errorMessage) {
-        log.error("Scheduler错误: {}, 将重新尝试调度", errorMessage);
-        
-        // 创建包含错误信息的消息
-        List<ChatMessage> errorMessages = new ArrayList<>(state.messages());
-        errorMessages.add(UserMessage.from("上一次调度失败: " + errorMessage + "。请重新分析并输出正确的调度结果。"));
-        
+        log.error("Scheduler错误: {}", errorMessage);
+
+        AiMessage errorAiMessage = AiMessage.from(errorMessage);
+
         return Map.of(
-                "messages", errorMessages,
-                "next", "scheduler"  // 重新尝试调度
+                "messages", List.of(errorAiMessage),
+                "finalResponse", errorMessage,
+                "next", "Finish"
         );
     }
 

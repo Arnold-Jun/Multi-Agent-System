@@ -64,7 +64,6 @@ public class QwenChatModel implements ChatLanguageModel {
                 body.put("tools", tools);
                 // 强制设置 tool_choice 为 auto，让模型必须考虑工具调用
                 body.put("tool_choice", "auto");
-                log.info("Tools attached. Count={}, tool_choice=auto", tools.size());
             }
 
             // ---------- HTTP ----------
@@ -77,7 +76,6 @@ public class QwenChatModel implements ChatLanguageModel {
                 url = url.replaceAll("/$", "") + "/chat/completions";
             }
 
-            log.info("Qwen request body keys: {}", body.keySet());
             if (log.isDebugEnabled()) {
                 log.debug("Qwen request url: {}", url);
                 log.debug("Qwen request body(final): {}", safeJson(body));

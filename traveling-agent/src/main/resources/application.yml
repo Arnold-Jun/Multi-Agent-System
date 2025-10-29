@@ -21,11 +21,11 @@ ollama:
 qwen:
   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1  # Qwen API服务地址
   api-key: sk-fae85a271d294b9b9d2309d69fd669b7                 # Qwen API密钥
-  model: qwen3-8b                                           # 使用qwen-turbo模型，避免thinking参数问题
+  model: qwen3-8b
   timeout: 120000                                                # 请求超时时间（毫秒）
-  temperature: 0.7                                               # 温度参数，控制输出随机性 (0.0-2.0)
+  temperature: 0.5                                               # 温度参数，控制输出随机性 (0.0-2.0)
   max-tokens: 4096                                               # 最大Token数量
-  enabled: false                                                  # 是否启用Qwen API（true启用，false使用Ollama）
+  enabled: true                                                  # 是否启用Qwen API（true启用，false使用Ollama）
 
 # 旅游智能体配置
 traveling:

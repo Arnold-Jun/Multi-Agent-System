@@ -23,9 +23,10 @@ import java.util.Optional;
 public class PreprocessorPromptProvider extends BasePromptProvider implements MainGraphPromptProvider {
 
     private static final String DEFAULT_SCENARIO = "DEFAULT";
+    private static final String RETRY_SCENARIO = "RETRY";
 
     public PreprocessorPromptProvider() {
-        super("preprocessor", List.of(DEFAULT_SCENARIO));
+        super("preprocessor", List.of(DEFAULT_SCENARIO, RETRY_SCENARIO));
     }
 
     @Override
@@ -35,12 +36,15 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
 
     @Override
     public List<String> getSupportedScenarios() {
-        return List.of("DEFAULT");
+        return List.of(DEFAULT_SCENARIO, RETRY_SCENARIO);
     }
     
     @Override
     public String buildUserPrompt(String scenario, MainGraphState state) {
         validateScenario(scenario);
+        if (RETRY_SCENARIO.equals(scenario)) {
+            return buildRetryUserPrompt(state);
+        }
         return buildDefaultUserPrompt(state);
     }
 
@@ -166,6 +170,10 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 13. **需求满足判断**：仔细分析工具执行结果是否已完全满足用户的查询需求
                 """;
         
+        if (RETRY_SCENARIO.equals(scenario)) {
+            basePrompt += "\n**严格格式要求（仅本次重试有效）**：若无需调用工具，请只输出一个JSON对象，且仅包含next与output两个字段，不要输出任何额外文本。若需要调用工具，请直接调用相应工具，不要输出JSON或其它文本。\n";
+        }
+
         return addTimeInfoToSystemPrompt(basePrompt);
     }
 
@@ -173,8 +181,12 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
      * 判断执行场景
      */
     private String determineScenario(MainGraphState state) {
-        // Preprocessor目前只有一个默认场景
-        return DEFAULT_SCENARIO;
+        int retryCount = 0;
+        try {
+            Object rc = state.getValue("preprocessorRetryCount").orElse(0);
+            if (rc instanceof Integer) retryCount = (Integer) rc; else retryCount = Integer.parseInt(rc.toString());
+        } catch (Exception ignored) { retryCount = 0; }
+        return retryCount > 0 ? RETRY_SCENARIO : DEFAULT_SCENARIO;
     }
 
     /**
@@ -238,6 +250,57 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
 //            prompt.append("}\n");
 //            prompt.append("```\n\n");
         }
+
+        return prompt.toString();
+    }
+
+    /**
+     * 构建RETRY场景下的用户提示词
+     */
+    private String buildRetryUserPrompt(MainGraphState state) {
+        StringBuilder prompt = new StringBuilder();
+
+        boolean isFirstRound = !hasAiMessages(state);
+        if (!isFirstRound) {
+            String conversationHistory = buildConversationHistory(state);
+            if (!conversationHistory.isEmpty()) {
+                prompt.append("**完整对话历史**：\n").append(conversationHistory).append("\n\n");
+            }
+        }
+
+        String userQueryHistory = state.getFormattedUserQueryHistory();
+        if (!userQueryHistory.isEmpty()) {
+            prompt.append("**用户查询历史**：\n").append(userQueryHistory).append("\n\n");
+        }
+
+        String taskResponseHistory = state.getFormattedConversationHistory();
+        if (!taskResponseHistory.isEmpty()) {
+            prompt.append("**任务处理历史**：\n").append(taskResponseHistory).append("\n\n");
+        }
+
+        state.getToolExecutionResult()
+                .filter(s -> !s.trim().isEmpty())
+                .ifPresent(result -> {
+                    prompt.append("**工具执行结果**：\n").append(result).append("\n\n");
+                });
+
+        String currentQuery = getCurrentUserQuery(state);
+        if (!currentQuery.isEmpty()) {
+            prompt.append("**当前用户查询**：").append(currentQuery).append("\n\n");
+        }
+
+        // 仅在RETRY场景注入纠错上下文和强制执行指令
+        state.getValue("preprocessorRetryContext")
+                .map(Object::toString)
+                .filter(ctx -> !ctx.trim().isEmpty())
+                .ifPresent(ctx -> {
+                    prompt.append("**错误纠正上下文**：\n")
+                          .append(ctx)
+                          .append("\n\n")
+                          .append("**请按以下要求给出结果**：\n")
+                          .append("1. 若无需调用工具：只输出一个JSON对象，且仅包含 next 与 output 两个字段；不要输出任何额外文本。\n")
+                          .append("2. 若需要调用工具：请直接调用相应工具，不要输出JSON或其它文本。\n\n");
+                });
 
         return prompt.toString();
     }

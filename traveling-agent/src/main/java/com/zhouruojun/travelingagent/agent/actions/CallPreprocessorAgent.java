@@ -52,48 +52,45 @@ public class CallPreprocessorAgent extends CallAgent<MainGraphState> {
 
     @Override
     protected Map<String, Object> processResponse(AiMessage originalMessage, AiMessage filteredMessage, MainGraphState state) {
-        try {
-            // 检查是否有工具调用请求
-            if (originalMessage.hasToolExecutionRequests()) {
-                log.info("预处理器智能体 {} 请求工具执行: {}", agentName, originalMessage.toolExecutionRequests());
-                return Map.of(
-                        "messages", List.of(filteredMessage),
-                        "toolExecutionRequests", originalMessage.toolExecutionRequests(),
-                        "next", "action"
-                );
-            }
-            
-            // 解析预处理器响应
-            String responseText = filteredMessage.text();
-            if (responseText == null || responseText.trim().isEmpty()) {
-                log.error("预处理器智能体 {} 返回空响应", agentName);
-                return createErrorResult(state, "预处理器智能体返回空响应");
-            }
-            
-            // 解析JSON输出
-            PreprocessorResponse response = parsePreprocessorResponse(responseText);
-            
-            // 更新状态
-            Map<String, Object> result = updateStateWithResponse(response, state);
-            
-            // 添加消息
+        // 检查是否有工具调用请求
+        if (originalMessage.hasToolExecutionRequests()) {
+            log.info("预处理器智能体 {} 请求工具执行: {}", agentName, originalMessage.toolExecutionRequests());
+            Map<String, Object> result = new HashMap<>();
+            result.put("toolExecutionRequests", originalMessage.toolExecutionRequests());
+            result.put("next", "action");
+            // 工具调用路径清理重试上下文
+            result.put("preprocessorRetryContext", null);
+            result.put("preprocessorRetryCount", 0);
+            // 为了不将错误输出持久进历史，工具调用时不强制加入filteredMessage
             result.put("messages", List.of(filteredMessage));
-            
-            
             return result;
-            
-        } catch (Exception e) {
-            log.error("预处理器智能体 {} 处理响应失败: {}", agentName, e.getMessage(), e);
-            
-            // 发生错误时，创建错误消息并路由到Finish
-            String errorMessage = String.format("预处理器处理失败: %s", e.getMessage());
-            AiMessage errorAiMessage = AiMessage.from(errorMessage);
-            
-            return Map.of(
-                    "messages", List.of(errorAiMessage),
-                    "finalResponse", errorMessage,
-                    "next", "Finish"
-            );
+        }
+
+        // 解析预处理器响应
+        String responseText = filteredMessage.text();
+        if (responseText == null || responseText.trim().isEmpty()) {
+            log.error("预处理器智能体 {} 返回空响应", agentName);
+            return createErrorResult(state, "预处理器智能体返回空响应");
+        }
+
+        // 尝试解析为JSON；失败则进入受控重试
+        try {
+            PreprocessorResponse response = parsePreprocessorResponse(responseText);
+
+            // 成功解析后，清理重试上下文
+            Map<String, Object> result = updateStateWithResponse(response, state);
+            result.put("preprocessorRetryContext", null);
+            result.put("preprocessorRetryCount", 0);
+            // 添加消息（这次为正常模型回复，可计入历史）
+            result.put("messages", List.of(filteredMessage));
+            return result;
+        } catch (IllegalArgumentException parseEx) {
+            // 可由LLM自行修复的错误（解析失败/字段缺失/无效next等）统一走重试链路
+            return buildRetryResult(state, responseText, parseEx.getMessage());
+        } catch (Exception otherEx) {
+            // 其他非预期异常：直接返回错误给前端
+            log.error("预处理器智能体 {} 遇到非预期异常: {}", agentName, otherEx.getMessage(), otherEx);
+            return createErrorResult(state, "预处理器处理失败: " + otherEx.getMessage());
         }
     }
     
@@ -115,8 +112,14 @@ public class CallPreprocessorAgent extends CallAgent<MainGraphState> {
                 throw new IllegalArgumentException("JSON响应中缺少output字段");
             }
             
+            // 验证next字段值是否有效
+            String trimmedNext = next.trim();
+            if (!isValidNextValue(trimmedNext)) {
+                throw new IllegalArgumentException("无效的next字段值: " + trimmedNext + "，有效值为: planner, Finish, action");
+            }
+            
             PreprocessorResponse response = new PreprocessorResponse();
-            response.setNext(next.trim());
+            response.setNext(trimmedNext);
             response.setOutput(output.trim());
             
             return response;
@@ -125,6 +128,49 @@ public class CallPreprocessorAgent extends CallAgent<MainGraphState> {
             log.error("解析预处理器JSON响应失败: {}", e.getMessage());
             throw new IllegalArgumentException("预处理器响应格式错误，必须是包含next和output字段的JSON", e);
         }
+    }
+    
+    /**
+     * 验证next字段值是否有效
+     */
+    private boolean isValidNextValue(String nextValue) {
+        return "planner".equals(nextValue) || "Finish".equals(nextValue) || "action".equals(nextValue);
+    }
+
+    /**
+     * 构建重试结果。
+     */
+    private Map<String, Object> buildRetryResult(MainGraphState state, String responseText, String errorMessage) {
+        int retryCount = 0;
+        try {
+            Object rc = state.getValue("preprocessorRetryCount").orElse(0);
+            if (rc instanceof Integer) retryCount = (Integer) rc; else retryCount = Integer.parseInt(rc.toString());
+        } catch (Exception ignored) { retryCount = 0; }
+
+        if (retryCount >= 2) {
+            String finalMsg = "抱歉，我多次未能生成有效的JSON结果。请稍后重试，或换一种表达方式。";
+            log.warn("preprocessor JSON解析连续失败，已达上限: {}", retryCount);
+            return Map.of(
+                    "finalResponse", finalMsg,
+                    "next", "Finish",
+                    "preprocessorRetryContext", null,
+                    "preprocessorRetryCount", 0
+            );
+        }
+
+        String truncatedOutput = responseText != null && responseText.length() > 500
+                ? responseText.substring(0, 500) + "...（已截断）" : (responseText == null ? "" : responseText);
+        String retryContext = "【上一次输出无法解析为JSON】\n"
+                + "请严格输出仅包含next与output两个字段的JSON，禁止任何额外文本。\n"
+                + "示例：{\"next\":\"planner|Finish\",\"output\":\"...\"}\n"
+                + "错误信息：" + (errorMessage == null ? "" : errorMessage) + "\n"
+                + "原始输出片段：\n" + truncatedOutput + "\n";
+
+        Map<String, Object> retryResult = new HashMap<>();
+        retryResult.put("preprocessorRetryContext", retryContext);
+        retryResult.put("preprocessorRetryCount", retryCount + 1);
+        retryResult.put("next", "retry");
+        return retryResult;
     }
     
     /**
@@ -141,13 +187,14 @@ public class CallPreprocessorAgent extends CallAgent<MainGraphState> {
         
         if (isNewSession) {
             // 第一次调用：将originalUserQuery添加到userQueryHistory
+            //TODO
             String originalQuery = state.getOriginalUserQuery().orElse("");
             if (!originalQuery.isEmpty()) {
                 userQueryHistory.add(originalQuery);
             }
         }
         // 后续调用：userQueryHistory已经在ControllerCore中更新，不需要重复添加
-        
+
         result.put("userQueryHistory", userQueryHistory);
         
         // 更新preprocessor响应历史

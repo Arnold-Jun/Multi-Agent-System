@@ -248,6 +248,7 @@ public class TravelingGraphBuilder {
                                 "userInput", "userInput",
                                 "planner", "planner",
                                 "summary", "summary",
+                                "retry", "scheduler",
                                 "Finish", END))
                 .addConditionalEdges("metaSearchAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("itineraryPlannerAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
@@ -606,6 +607,7 @@ public class TravelingGraphBuilder {
         schedulerChildren.add("summary");
         schedulerChildren.add("userInput");
         schedulerChildren.add("Finish");
+        schedulerChildren.add("retry");
         
         return state.next()
                 .filter(schedulerChildren::contains)
