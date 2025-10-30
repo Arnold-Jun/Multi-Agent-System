@@ -516,6 +516,8 @@ public class TravelingGraphBuilder {
         // 返回更新后的状态
         Map<String, Object> result = new HashMap<>();
         result.put("subgraphResults", updatedState.getSubgraphResults().orElse(new HashMap<>()));
+        // 确保时间线事件也写回主图状态，保障时序上下文
+        result.put("subgraphResultEvents", updatedState.getSubgraphResultEvents().orElse(new ArrayList<>()));
         result.put("messages", updatedState.messages());
         result.put("todoList", updatedState.getTodoList().orElse(null));
         result.put("replanCount", updatedState.getReplanCount());

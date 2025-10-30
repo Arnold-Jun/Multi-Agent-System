@@ -5,7 +5,6 @@ import com.zhouruojun.travelingagent.agent.state.main.TodoList;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
 import com.zhouruojun.travelingagent.prompts.BasePromptProvider;
 import com.zhouruojun.travelingagent.prompts.MainGraphPromptProvider;
-import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -100,22 +99,16 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      * 检查是否有重新规划消息
      */
     private boolean hasReplanMessage(MainGraphState state) {
-        return state.lastMessage()
-                .filter(msg -> msg instanceof UserMessage)
-                .map(msg -> ((UserMessage) msg).singleText())
-                .filter(text -> text.contains("【Scheduler建议重新规划】"))
-                .isPresent();
+        // 改为读取结构化状态键，由Scheduler设置
+        return state.getSchedulerReplanContext().isPresent();
     }
     
     /**
      * 检查是否有JSON解析错误消息
      */
     private boolean hasJsonParseError(MainGraphState state) {
-        return state.lastMessage()
-            .filter(msg -> msg instanceof AiMessage)
-            .map(msg -> ((AiMessage) msg).text())
-            .filter(text -> text.contains("JSON解析失败"))
-            .isPresent();
+        // 改为读取结构化状态键，由TodoListParser设置
+        return state.getPlannerJsonErrorMessage().isPresent();
     }
     
     /**
@@ -308,6 +301,12 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
         String todoListInfo = state.getTodoListStatistics();
         Map<String, String> subgraphResults = state.getSubgraphResults().orElse(Map.of());
         
+        // 读取由Scheduler提供的重规划上下文（如果存在）
+        String schedulerReplanContext = state.getSchedulerReplanContext().orElse(null);
+        String replanContextSection = (schedulerReplanContext != null && !schedulerReplanContext.trim().isEmpty())
+            ? ("**Scheduler建议重规划上下文**：\n" + schedulerReplanContext + "\n\n")
+            : "";
+
         String subgraphInfo = formatSubgraphResults(subgraphResults);
         String conversationHistory = buildConversationHistory(state);
         
@@ -318,6 +317,8 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
         **当前任务描述**：%s
 
         **当前任务列表状态**：
+        %s
+
         %s
 
         **子图执行结果**：
@@ -355,7 +356,9 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
         - 根据失败原因调整任务策略
         - 确保任务顺序合理，避免重复失败
         - 只输出JSON，不要其他内容
-        """, conversationHistory, userQuery, todoListInfo, subgraphInfo);
+        - assignedAgent 仅允许：metaSearchAgent、itineraryPlannerAgent、bookingAgent
+        - 如果连续多个子任务分配给同一智能体，必须合并为一个任务
+        """, conversationHistory, userQuery, todoListInfo, replanContextSection, subgraphInfo);
     }
     
     /**
@@ -418,21 +421,14 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      * 提取最后一次的JSON输出
      */
     private String extractLastJsonOutput(MainGraphState state) {
-        return state.lastMessage()
-            .filter(msg -> msg instanceof AiMessage)
-            .map(msg -> ((AiMessage) msg).text())
-            .orElse(null);
+        return state.getPlannerLastJsonOutput().orElse(null);
     }
     
     /**
      * 提取JSON错误信息
      */
     private String extractJsonErrorMessage(MainGraphState state) {
-        return state.lastMessage()
-            .filter(msg -> msg instanceof AiMessage)
-            .map(msg -> ((AiMessage) msg).text())
-            .filter(text -> text.contains("JSON解析失败"))
-            .orElse("JSON格式错误");
+        return state.getPlannerJsonErrorMessage().orElse("JSON格式错误");
     }
     
     /**
@@ -489,7 +485,8 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
      * 构建继续对话用户提示词
      */
     private String buildContinuationUserPrompt(MainGraphState state) {
-        String conversationHistory = state.getFormattedConversationHistory();
+        // 仅保留最近N轮历史，控制上下文长度
+        String conversationHistory = getWindowedConversationHistory(state, 3);
         // 使用taskHistory中的最新任务，如果没有则使用latestUserQuery
         List<String> taskHistory = state.getTaskHistory();
         String currentQuery = taskHistory.isEmpty() ? 
@@ -544,6 +541,45 @@ public class PlannerPromptProvider extends BasePromptProvider implements MainGra
         - 确保任务描述清晰明确
         - 只输出JSON，不要其他内容
         """, conversationHistory, currentQuery, todoListInfo, subgraphInfo);
+    }
+
+    /**
+     * 仅保留最近N轮任务与系统响应的对话历史
+     */
+    private String getWindowedConversationHistory(MainGraphState state, int maxRounds) {
+        List<String> taskHistory = state.getTaskHistory();
+        List<String> taskResponseHistory = state.getTaskResponseHistory();
+
+        int rounds = Math.min(Math.min(taskHistory.size(), taskResponseHistory.size()), Math.max(0, maxRounds));
+        if (rounds <= 0) {
+            return "暂无历史";
+        }
+
+        int startTaskIdx = Math.max(0, taskHistory.size() - rounds);
+        int startRespIdx = Math.max(0, taskResponseHistory.size() - rounds);
+
+        StringBuilder history = new StringBuilder();
+        for (int i = 0; i < rounds; i++) {
+            int taskIdx = startTaskIdx + i;
+            int respIdx = startRespIdx + i;
+            history.append(String.format("【第%d轮任务】\n", i + 1));
+            if (taskIdx < taskHistory.size()) {
+                history.append(String.format("任务: %s\n", taskHistory.get(taskIdx)));
+            }
+            if (respIdx < taskResponseHistory.size()) {
+                String resp = taskResponseHistory.get(respIdx);
+                history.append(String.format("系统: %s\n\n", truncate(resp, 300)));
+            } else {
+                history.append("\n");
+            }
+        }
+        return history.toString();
+    }
+
+    private String truncate(String text, int maxLen) {
+        if (text == null) return "";
+        if (text.length() <= maxLen) return text;
+        return text.substring(0, maxLen) + "...（后续内容省略）";
     }
     
     /**

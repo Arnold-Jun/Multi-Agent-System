@@ -3,7 +3,6 @@ package com.zhouruojun.travelingagent.prompts.main;
 import com.zhouruojun.travelingagent.agent.state.MainGraphState;
 import com.zhouruojun.travelingagent.prompts.BasePromptProvider;
 import com.zhouruojun.travelingagent.prompts.MainGraphPromptProvider;
-import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -195,22 +194,12 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
     private String buildDefaultUserPrompt(MainGraphState state) {
         StringBuilder prompt = new StringBuilder();
         
-        // 检查是否是第一轮对话（没有AI回复）
-        boolean isFirstRound = !hasAiMessages(state);
-        
-        // 添加完整的对话历史（只在非第一轮时添加）
-        if (!isFirstRound) {
-            String conversationHistory = buildConversationHistory(state);
-            if (!conversationHistory.isEmpty()) {
-                prompt.append("**完整对话历史**：\n").append(conversationHistory).append("\n\n");
-            }
+        // 组装“前几轮”的完整对话历史（不包含当前最新一轮）
+        String conversationHistory = buildPastConversationHistory(state);
+        if (!conversationHistory.isEmpty()) {
+            prompt.append("**完整对话历史**：\n").append(conversationHistory).append("\n\n");
         }
         
-        // 添加用户查询历史（作为补充）
-        String userQueryHistory = state.getFormattedUserQueryHistory();
-        if (!userQueryHistory.isEmpty()) {
-            prompt.append("**用户查询历史**：\n").append(userQueryHistory).append("\n\n");
-        }
         
         // 添加任务响应历史（非空情况下）
         String taskResponseHistory = state.getFormattedConversationHistory();
@@ -218,11 +207,7 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
             prompt.append("**任务处理历史**：\n").append(taskResponseHistory).append("\n\n");
         }
         
-        // 添加预处理器响应历史（非空情况下）
-        String preprocessorResponseHistory = getFormattedPreprocessorResponseHistory(state);
-        if (!preprocessorResponseHistory.isEmpty()) {
-            prompt.append("**预处理器响应历史**：\n").append(preprocessorResponseHistory).append("\n\n");
-        }
+        // 不再单独追加“预处理器响应历史”，其内容已融合进“完整对话历史”
         
         // 添加工具执行结果
         Optional<String> toolExecutionResult = state.getToolExecutionResult();
@@ -242,6 +227,8 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
             prompt.append("1. **如果工具结果已满足用户需求**：使用JSON格式输出最终回复\n");
             prompt.append("2. **如果当前的工具执行结果不能完全回答用户的需求**：继续调用相应工具\n");
             prompt.append("3. **如果没有工具可以解决用户的需求请诚实得告诉用户**\n");
+            prompt.append("4. **如果需要多次执行工具，如果没有前后依赖关系，可以并行执行！**\n");
+            prompt.append("5. **next设置为planner之前，需要询问用户获取足够的信息，以更好地完成用户的需求！**\n");
 //            prompt.append("\n**JSON格式示例**：\n");
 //            prompt.append("```json\n");
 //            prompt.append("{\n");
@@ -260,18 +247,12 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
     private String buildRetryUserPrompt(MainGraphState state) {
         StringBuilder prompt = new StringBuilder();
 
-        boolean isFirstRound = !hasAiMessages(state);
-        if (!isFirstRound) {
-            String conversationHistory = buildConversationHistory(state);
-            if (!conversationHistory.isEmpty()) {
-                prompt.append("**完整对话历史**：\n").append(conversationHistory).append("\n\n");
-            }
+        String conversationHistory = buildPastConversationHistory(state);
+        if (!conversationHistory.isEmpty()) {
+            prompt.append("**完整对话历史**：\n").append(conversationHistory).append("\n\n");
         }
 
-        String userQueryHistory = state.getFormattedUserQueryHistory();
-        if (!userQueryHistory.isEmpty()) {
-            prompt.append("**用户查询历史**：\n").append(userQueryHistory).append("\n\n");
-        }
+        // 不再添加“用户查询历史”，避免与完整对话历史重复
 
         String taskResponseHistory = state.getFormattedConversationHistory();
         if (!taskResponseHistory.isEmpty()) {
@@ -306,46 +287,31 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
     }
     
     /**
-     * 检查是否有AI消息（判断是否为第一轮对话）
+     * 判断是否为第一轮对话
+     * 使用用户查询历史条数判断：只有1条（当前查询）视为第一轮
      */
-    private boolean hasAiMessages(MainGraphState state) {
-        return state.messages().stream()
-                .anyMatch(msg -> msg instanceof AiMessage);
-    }
+    // 保留占位（若未来需要区分首轮策略）；当前逻辑已通过 buildPastConversationHistory 隐式满足需求
     
     /**
-     * 构建完整的对话历史
+     * 构建“前几轮”对话历史：以 userQueryHistory 为主，配对 preprocessorResponseHistory；排除最新一条用户查询
      */
-    private String buildConversationHistory(MainGraphState state) {
-        List<ChatMessage> messages = state.messages();
-        if (messages.isEmpty()) {
-            return "";
-        }
-        
+    private String buildPastConversationHistory(MainGraphState state) {
+        java.util.List<String> queries = state.getUserQueryHistory();
+        java.util.List<String> responses = state.getPreprocessorResponseHistory();
+        if (queries == null || queries.isEmpty()) return "";
+        int rounds = Math.min(Math.max(0, queries.size() - 1), responses.size());
+        if (rounds <= 0) return "";
         StringBuilder history = new StringBuilder();
-        int round = 1;
-        
-        for (int i = 0; i < messages.size(); i++) {
-            ChatMessage message = messages.get(i);
-            
-            if (message instanceof UserMessage) {
-                UserMessage userMsg = (UserMessage) message;
-                history.append(String.format("【第%d轮对话】\n", round));
-                history.append(String.format("用户: %s\n", userMsg.singleText()));
-                
-                // 查找对应的AI回复
-                if (i + 1 < messages.size() && messages.get(i + 1) instanceof dev.langchain4j.data.message.AiMessage) {
-                    dev.langchain4j.data.message.AiMessage aiMsg = (dev.langchain4j.data.message.AiMessage) messages.get(i + 1);
-                    history.append(String.format("系统: %s\n\n", 
-                        truncateIfTooLong(aiMsg.text(), 500)));
-                    i++; // 跳过已处理的AI消息
-                } else {
-                    history.append("系统: [等待回复]\n\n");
-                }
-                round++;
+        for (int i = 0; i < rounds; i++) {
+            history.append(String.format("【第%d轮对话】\n", i + 1));
+            history.append(String.format("用户: %s\n", queries.get(i)));
+            String resp = responses.get(i);
+            if (resp != null && !resp.trim().isEmpty()) {
+                history.append(String.format("系统: %s\n\n", truncateIfTooLong(resp, 500)));
+            } else {
+                history.append("系统: [等待回复]\n\n");
             }
         }
-        
         return history.toString();
     }
     
@@ -361,22 +327,7 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
     /**
      * 获取格式化的预处理器响应历史
      */
-    private String getFormattedPreprocessorResponseHistory(MainGraphState state) {
-        List<String> responses = state.getPreprocessorResponseHistory();
-        
-        if (responses.isEmpty()) {
-            return "";
-        }
-        
-        StringBuilder history = new StringBuilder();
-        for (int i = 0; i < responses.size(); i++) {
-            history.append(String.format("【第%d轮预处理器回复】\n", i + 1));
-            history.append(String.format("系统: %s\n\n", 
-                truncateIfTooLong(responses.get(i), 500)));
-        }
-        
-        return history.toString();
-    }
+    // 已不再单独使用预处理器响应历史的格式化方法，改为融合进对话历史
     
     /**
      * 获取当前用户查询

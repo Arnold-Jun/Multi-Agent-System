@@ -110,6 +110,27 @@ public class MainGraphState extends BaseAgentState {
     }
 
     /**
+     * 供Planner在JSON解析错误场景读取：最后一次Planner原始JSON输出
+     */
+    public Optional<String> getPlannerLastJsonOutput() {
+        return Optional.ofNullable((String) state.get("plannerLastJsonOutput"));
+    }
+
+    /**
+     * 供Planner在JSON解析错误场景读取：解析错误消息
+     */
+    public Optional<String> getPlannerJsonErrorMessage() {
+        return Optional.ofNullable((String) state.get("plannerJsonErrorMessage"));
+    }
+
+    /**
+     * 供Planner在重规划场景读取：由Scheduler填充的重规划上下文
+     */
+    public Optional<String> getSchedulerReplanContext() {
+        return Optional.ofNullable((String) state.get("schedulerReplanContext"));
+    }
+
+    /**
      * 获取为Scheduler优化的TodoList详细信息
      * 包含任务统计、待执行任务详情、执行中任务状态等关键信息
      */
@@ -181,13 +202,39 @@ public class MainGraphState extends BaseAgentState {
 
     /**
      * 更新子图结果 - 使用Builder模式
+     * 同时维护按时间顺序的结果事件列表，避免Map无序导致的不确定性
      */
+    @SuppressWarnings("unchecked")
     public MainGraphState withSubgraphResult(String agentName, String result) {
         Map<String, String> results = getSubgraphResults().orElse(new java.util.HashMap<>());
         results.put(agentName, result);
+
+        // 构建新的状态对象
         MainGraphState newState = new MainGraphState(new java.util.HashMap<>(state));
         newState.state.put("subgraphResults", results);
+
+        // 维护按时间顺序的事件列表：List<Map<agent,result,timestamp>>
+        List<Map<String, String>> events = (List<Map<String, String>>) newState.state.getOrDefault("subgraphResultEvents", new ArrayList<>());
+        Map<String, String> event = new HashMap<>();
+        event.put("agent", agentName);
+        event.put("result", result == null ? "" : result);
+        event.put("timestamp", java.time.Instant.now().toString());
+        events.add(event);
+        newState.state.put("subgraphResultEvents", events);
+
         return newState;
+    }
+
+    /**
+     * 获取子图结果事件时间线（按写入顺序）
+     */
+    @SuppressWarnings("unchecked")
+    public Optional<List<Map<String, String>>> getSubgraphResultEvents() {
+        Object obj = state.get("subgraphResultEvents");
+        if (obj instanceof List) {
+            return Optional.of((List<Map<String, String>>) obj);
+        }
+        return Optional.empty();
     }
 
     /**

@@ -178,24 +178,7 @@ public class CallPreprocessorAgent extends CallAgent<MainGraphState> {
      */
     private Map<String, Object> updateStateWithResponse(PreprocessorResponse response, MainGraphState state) {
         Map<String, Object> result = new HashMap<>();
-        
-        // 处理userQueryHistory的更新
-        List<String> userQueryHistory = new ArrayList<>(state.getUserQueryHistory());
-        
-        // 检查是否是新的session（没有历史状态）
-        boolean isNewSession = userQueryHistory.isEmpty();
-        
-        if (isNewSession) {
-            // 第一次调用：将originalUserQuery添加到userQueryHistory
-            //TODO
-            String originalQuery = state.getOriginalUserQuery().orElse("");
-            if (!originalQuery.isEmpty()) {
-                userQueryHistory.add(originalQuery);
-            }
-        }
-        // 后续调用：userQueryHistory已经在ControllerCore中更新，不需要重复添加
-
-        result.put("userQueryHistory", userQueryHistory);
+        // userQueryHistory 完全由 ControllerCore 维护，这里不做任何修改
         
         // 更新preprocessor响应历史
         List<String> preprocessorResponseHistory = new ArrayList<>(state.getPreprocessorResponseHistory());

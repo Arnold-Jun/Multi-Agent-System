@@ -5,7 +5,6 @@ import com.zhouruojun.travelingagent.agent.state.MainGraphState;
 import com.zhouruojun.travelingagent.agent.state.main.TodoList;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
@@ -98,32 +97,20 @@ public class TodoListParser implements NodeAction<MainGraphState> {
     private Map<String, Object> createErrorResult(MainGraphState state, String errorMessage) {
         log.error("TodoList解析失败: {}", errorMessage);
         
-        // 获取上一次Planner的JSON输出
+        Map<String, Object> result = new HashMap<>();
+        
+        // 获取上一次Planner的JSON输出并写入结构化状态键
         String originalPlannerOutput = state.lastMessage()
             .filter(msg -> msg instanceof AiMessage)
             .map(msg -> ((AiMessage) msg).text())
             .orElse("");
-        
-        // 构建包含原输出和错误信息的AiMessage
-        String errorContent = String.format(
-            "JSON解析失败: %s\n\n原始输出:\n%s",
-            errorMessage,
-            originalPlannerOutput
-        );
 
-        AiMessage errorAiMessage = AiMessage.from(errorContent);
-        
-        // 更新消息列表：替换最后一条消息为包含错误信息的AiMessage
-        List<ChatMessage> errorMessages = new ArrayList<>(state.messages());
-        if (!errorMessages.isEmpty()) {
-            errorMessages.set(errorMessages.size() - 1, errorAiMessage);
-        } else {
-            errorMessages.add(errorAiMessage);
-        }
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("messages", errorMessages);
-        
+        result.put("plannerLastJsonOutput", originalPlannerOutput);
+        result.put("plannerJsonErrorMessage", errorMessage);
+
+        // 保持原有消息历史，不以错误信息覆盖，messages仅用于留痕
+        result.put("messages", state.messages());
+
         // 保持TodoList状态
         if (state.getTodoList().isPresent()) {
             result.put("todoList", state.getTodoList().get());

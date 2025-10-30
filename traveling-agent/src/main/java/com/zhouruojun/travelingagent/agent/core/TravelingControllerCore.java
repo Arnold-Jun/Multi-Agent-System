@@ -170,6 +170,7 @@ public class TravelingControllerCore {
         
         String sessionId = request.getSessionId();
         String username = "user"; // 可以从request中获取
+        String userMessage = request.getChat();
         
         // 获取或构建状态图
         StateGraph<MainGraphState> stateGraph = stateGraphCache.computeIfAbsent(sessionId, 
@@ -198,7 +199,7 @@ public class TravelingControllerCore {
         
         // 构建初始状态
         Map<String, Object> initialState = new HashMap<>();
-        initialState.put("messages", UserMessage.from(request.getChat()));
+        initialState.put("messages", UserMessage.from(userMessage));
         initialState.put("sessionId", sessionId);
         initialState.put("username", username);
         
@@ -206,9 +207,23 @@ public class TravelingControllerCore {
         boolean isNewSession = !sessionHistory.containsKey(sessionId);
         if (isNewSession) {
             // 第一次调用：设置originalUserQuery
-            initialState.put("originalUserQuery", request.getChat());
+            initialState.put("originalUserQuery", userMessage);
         }
         // 后续调用：不设置originalUserQuery，新的查询会通过userQueryHistory管理
+
+        // 统一维护 userQueryHistory：在控制层将本次用户消息加入历史
+        @SuppressWarnings("unchecked")
+        List<String> cachedHistory = (List<String>) sessionCache.getOrDefault(sessionId + ":userQueryHistory", new ArrayList<>());
+        List<String> userQueryHistory = new ArrayList<>(cachedHistory);
+        // 首次调用已通过 originalUserQuery 记录初始查询，但为了统一，历史中也保留一份
+        if (isNewSession && !userMessage.isEmpty()) {
+            userQueryHistory.add(userMessage);
+        } else if (!isNewSession && !userMessage.isEmpty()) {
+            userQueryHistory.add(userMessage);
+        }
+        initialState.put("userQueryHistory", userQueryHistory);
+        // 在控制层缓存最新的 userQueryHistory，供后续请求注入
+        sessionCache.put(sessionId + ":userQueryHistory", new ArrayList<>(userQueryHistory));
 
         compiledGraph.setMaxIterations(60);
         // 执行图流程

@@ -124,9 +124,10 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
 
         String truncatedOutput = responseText != null && responseText.length() > 500
                 ? responseText.substring(0, 500) + "...（已截断）" : (responseText == null ? "" : responseText);
+
         String retryContext = "【上一次输出无法解析为有效的调度JSON】\n"
                 + "请严格输出规范的调度JSON，字段必须完整且取值合法。\n"
-                + "错误信息：" + (errorMessage == null ? "" : errorMessage) + "\n"
+                + "错误信息：" + (errorMessage == null ? "" : errorMessage) + "\n\n"
                 + "原始输出片段：\n" + truncatedOutput + "\n";
 
         Map<String, Object> retryResult = new HashMap<>();
@@ -319,16 +320,13 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
      */
     private Map<String, Object> createReplanRequest(MainGraphState state, String reason, String detailedInfo) {
         String replanMessage = buildReplanMessage(reason, detailedInfo);
-        UserMessage replanUserMessage = UserMessage.from(replanMessage);
-        
-        List<ChatMessage> messages = new ArrayList<>(state.messages());
-        messages.add(replanUserMessage);
         
         log.info("创建重新规划请求，原因: {}", reason);
         
-        // 创建返回结果
+        // 创建返回结果：不依赖messages构造提示词，改为设置结构化键
         Map<String, Object> result = new HashMap<>();
-        result.put("messages", messages);
+        result.put("messages", state.messages()); // 保留历史
+        result.put("schedulerReplanContext", replanMessage);
         result.put("next", "planner");
         
         // 添加通用状态信息
@@ -503,16 +501,16 @@ public class CallSchedulerAgent extends CallAgent<MainGraphState> {
      * 获取最后一个subgraph结果
      */
     private String getLastSubgraphResult(MainGraphState state) {
-        return state.getSubgraphResults()
-                .map(results -> {
-                    if (results.isEmpty()) {
-                        return "";
-                    }
-                    // 获取最后一个结果（Map的最后一个entry）
-                    return results.values().stream()
-                            .reduce((first, second) -> second)
-                            .orElse("");
+        // 优先使用有序事件时间线，避免Map无序导致的不确定
+        return state.getSubgraphResultEvents()
+                .filter(events -> !events.isEmpty())
+                .map(events -> {
+                    Map<String, String> last = events.get(events.size() - 1);
+                    return last.getOrDefault("result", "");
                 })
+                .or(() -> state.getSubgraphResults()
+                        .map(results -> results.isEmpty() ? "" :
+                                results.values().stream().reduce((first, second) -> second).orElse("")))
                 .orElse("");
     }
 

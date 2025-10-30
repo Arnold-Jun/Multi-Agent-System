@@ -363,7 +363,7 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
     private String buildResultProcessingUserPrompt(MainGraphState state) {
         String originalUserQuery = state.getOriginalUserQuery().orElse("用户查询");
         String todoListInfo = state.getTodoListForScheduler();
-        String subgraphResultsInfo = buildSubgraphResultsInfo(state);
+        String subgraphResultsInfo = buildChronologicalSubgraphResultsInfo(state);
         
         return String.format("""
         **用户查询**：%s
@@ -504,12 +504,26 @@ public class SchedulerPromptProvider extends BasePromptProvider implements MainG
     /**
      * 构建子图结果信息
      */
-    private String buildSubgraphResultsInfo(MainGraphState state) {
+    private String buildChronologicalSubgraphResultsInfo(MainGraphState state) {
+        // 优先使用时间线事件，避免Map无序
+        var eventsOpt = state.getSubgraphResultEvents();
+        if (eventsOpt.isPresent() && !eventsOpt.get().isEmpty()) {
+            StringBuilder info = new StringBuilder();
+            for (var e : eventsOpt.get()) {
+                String agent = e.getOrDefault("agent", "unknown");
+                String result = e.getOrDefault("result", "");
+                String ts = e.getOrDefault("timestamp", "");
+                info.append(String.format("[%s] **%s执行结果**：\n%s\n\n", ts, agent, result));
+            }
+            return info.toString();
+        }
+
+        // 回退：旧的Map遍历（顺序不稳定）
         return state.getSubgraphResults()
                 .map(results -> {
                     StringBuilder info = new StringBuilder();
-                    results.forEach((agent, result) -> 
-                        info.append(String.format("**%s执行结果**：\n%s\n\n", agent, result))
+                    results.forEach((agent, result) ->
+                            info.append(String.format("**%s执行结果**：\n%s\n\n", agent, result))
                     );
                     return info.toString();
                 })
