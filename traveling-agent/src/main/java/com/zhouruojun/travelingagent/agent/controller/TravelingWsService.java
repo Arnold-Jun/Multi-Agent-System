@@ -1,5 +1,6 @@
 package com.zhouruojun.travelingagent.agent.controller;
 
+import com.zhouruojun.travelingagent.agent.dto.TravelIntentForm;
 import com.zhouruojun.travelingagent.agent.dto.AgentChatRequest;
 
 import java.util.LinkedHashMap;
@@ -37,6 +38,13 @@ public interface TravelingWsService {
      * @param userEmail 用户邮箱
      */
     void humanInput(AgentChatRequest request, String userEmail);
+
+    /**
+     * 处理表单提交
+     * @param form 表单数据
+     * @param userEmail 用户邮箱
+     */
+    void submitForm(TravelIntentForm form, String userEmail);
 
     /**
      * Ping测试

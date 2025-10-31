@@ -1,5 +1,6 @@
 package com.zhouruojun.travelingagent.prompts.main;
 
+import com.zhouruojun.travelingagent.agent.dto.TravelIntentResult;
 import com.zhouruojun.travelingagent.agent.state.MainGraphState;
 import com.zhouruojun.travelingagent.prompts.BasePromptProvider;
 import com.zhouruojun.travelingagent.prompts.MainGraphPromptProvider;
@@ -102,12 +103,12 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 - 工具调用会自动执行，结果会返回给你
                 - 如果工具请求有多个，如果没有前后依赖关系，可以并行执行！
                 
-                **方式2：JSON格式输出**（任务完成时）
+                **方式2：JSON格式输出**（任务完成或路由时）
                 - 当收到工具执行结果后，如果已满足用户需求，使用JSON格式输出
                 - 当不需要调用工具时，直接使用JSON格式输出
                 ```json
                 {
-                  "next": "planner|Finish",
+                  "next": "planner|Finish|formInput",
                   "output": "具体的任务描述或最终回复"
                 }
                 ```
@@ -120,13 +121,17 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 ## 路由规则
                 - **调用工具**：需要查询信息时，直接调用工具（如 maps_weather, search_locations 等）
                 - **next: "Finish"**：
-                  - 简单任务已完成，直接回答用户
-                  - 复杂任务信息不足，需要向用户询问更多信息
-                  - 用户只是打招呼或询问系统能力，进行日常对话
+                  - 简单任务已完成，直接回答用户（例如打招呼、能力说明、工具结果已完全满足）
+                  - 严禁在复杂规划信息不足时使用 Finish（此种情况请使用 formInput）
                 - **next: "planner"**：复杂任务信息充足，进入完整规划流程
                   - output必须包含：目的地、时间、预算、偏好等完整信息
                   - 为planner提供详细的任务描述和上下文
                   - 注意：只有用户明确提出了具体的旅游规划需求且信息充足时，才使用planner
+                  - 如果用户已通过表单填写了完整信息，可以直接使用表单中的结构化信息
+                - **next: "formInput"**：当检测到用户提出旅游规划需求但信息不足时，使用此路由触发表单收集
+                  - 只在用户明确表达了旅游规划意图但缺少关键信息时使用
+                  - 系统会自动弹出结构化表单供用户填写
+                  - 在此情况下，不要用对话追问代替，请输出JSON并将 next 设为 "formInput"，在 output 中简要告知用户表单将弹出与需要补充的关键信息
                 
                 ## 路由示例
 
@@ -134,6 +139,12 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 - 用户："你好" → next: "Finish", output: "你好！我是你的旅游助手..."
                 - 用户："你能做什么？" → next: "Finish", output: "我可以帮你规划行程、查询天气..."
                 - 用户："我想去北京旅游" → next: "Finish", output: "好的！请告诉我你的出发时间..."
+                
+                **使用formInput的情况（信息不足，触发表单）：**
+                - 用户："想去云南玩一趟，顺便看看大理丽江"
+                  → next: "formInput", output: "为了更好地为您规划，请在表单中选择：出发日期/天数、人数、预算档位或金额、偏好（历史/美食/户外等）、住宿标准、交通偏好和备注。"
+                - 用户："打算去日本，没想好几天，也不确定预算"
+                  → next: "formInput", output: "已为您弹出行程信息表单，请补充目的地具体城市、出发日期或旅行天数、人数、预算与偏好，便于生成更贴合的计划。"
                 
                 **使用planner的情况：**
                 - 用户："我想去北京旅游，3月15日出发，5天行程，预算5000元，喜欢历史文化" 
@@ -170,7 +181,7 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 """;
         
         if (RETRY_SCENARIO.equals(scenario)) {
-            basePrompt += "\n**严格格式要求（仅本次重试有效）**：若无需调用工具，请只输出一个JSON对象，且仅包含next与output两个字段，不要输出任何额外文本。若需要调用工具，请直接调用相应工具，不要输出JSON或其它文本。\n";
+            basePrompt += "\n**严格格式要求（仅本次重试有效）**：若无需调用工具，请只输出一个JSON对象，且仅包含next与output两个字段（next 只能为 planner、Finish 或 formInput），不要输出任何额外文本。若需要调用工具，请直接调用相应工具，不要输出JSON或其它文本。\n";
         }
 
         return addTimeInfoToSystemPrompt(basePrompt);
@@ -219,6 +230,21 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
         String currentQuery = getCurrentUserQuery(state);
         if (!currentQuery.isEmpty()) {
             prompt.append("**当前用户查询**：").append(currentQuery).append("\n\n");
+        }
+        
+        // 检查是否有结构化意图
+        Optional<TravelIntentResult> structuredIntent = state.getStructuredIntent();
+        if (structuredIntent.isPresent()) {
+            TravelIntentResult intent = structuredIntent.get();
+            prompt.append("**已收集的结构化信息**：\n");
+            prompt.append(intent.toPlannerTaskDescription()).append("\n");
+            
+            if (intent.isComplete()) {
+                prompt.append("\n**重要**：用户已通过表单填写了完整的旅游规划信息，信息已足够进入planner。请直接使用JSON格式输出，next设置为\"planner\"，output包含上述结构化信息。\n");
+            } else {
+                prompt.append("\n**注意**：用户已填写部分信息，但仍缺少以下字段：").append(String.join("、", intent.getMissingFields())).append("\n");
+                prompt.append("如果用户继续提供信息，你可以继续收集；如果信息已足够，可以进入planner。\n");
+            }
         }
         
         // 最后添加输出约束提醒（只有在有工具执行结果时才添加）

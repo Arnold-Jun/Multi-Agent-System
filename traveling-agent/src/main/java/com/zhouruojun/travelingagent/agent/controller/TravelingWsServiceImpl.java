@@ -1,5 +1,6 @@
 package com.zhouruojun.travelingagent.agent.controller;
 
+import com.zhouruojun.travelingagent.agent.dto.TravelIntentForm;
 import com.alibaba.fastjson.JSONObject;
 import com.zhouruojun.travelingagent.agent.core.TravelingControllerCore;
 import com.zhouruojun.travelingagent.agent.dto.AgentChatRequest;
@@ -53,6 +54,15 @@ public class TravelingWsServiceImpl implements TravelingWsService {
         
         // 调用TravelingControllerCore处理用户输入
         travelingControllerCore.humanInputWithWs(request, userEmail);
+    }
+
+    @Override
+    public void submitForm(TravelIntentForm form, String userEmail) {
+        log.info("Form submit request - sessionId: {}, destination: {}, userEmail: {}", 
+                form.getSessionId(), form.getDestination(), userEmail);
+        
+        // 调用TravelingControllerCore处理表单提交
+        travelingControllerCore.submitFormWithWs(form, userEmail);
     }
 
     @Override

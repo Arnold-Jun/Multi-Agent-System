@@ -1,5 +1,6 @@
 package com.zhouruojun.travelingagent.agent.controller;
 
+import com.zhouruojun.travelingagent.agent.dto.TravelIntentForm;
 import com.alibaba.fastjson.JSONObject;
 import com.zhouruojun.travelingagent.agent.dto.AgentChatRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,26 @@ public class TravelingWsController {
         } catch (Exception e) {
             log.error("Failed to parse humanInput payload", e);
             throw new RuntimeException("Failed to parse humanInput payload", e);
+        }
+    }
+
+    /**
+     * 处理表单提交
+     * 路径: /traveling/form/submit
+     */
+    @MessageMapping("/traveling/form/submit")
+    public void submitForm(@Payload Object payload, @Headers Map<String, Object> headers) {
+        String userEmail = extractUserEmail(headers);
+        String payloadStr = parsePayload(payload);
+        log.info("WebSocket form submit - userEmail: {}, payload: {}", userEmail, payloadStr);
+
+        try {
+            JSONObject jsonObject = JSONObject.parseObject(payloadStr);
+            TravelIntentForm form = jsonObject.getObject("form", TravelIntentForm.class);
+            travelingWsService.submitForm(form, userEmail);
+        } catch (Exception e) {
+            log.error("Failed to parse form submit payload", e);
+            throw new RuntimeException("Failed to parse form submit payload", e);
         }
     }
 

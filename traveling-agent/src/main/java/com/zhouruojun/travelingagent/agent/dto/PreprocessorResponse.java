@@ -10,7 +10,7 @@ import lombok.Data;
 public class PreprocessorResponse {
     
     @JsonProperty("next")
-    private String next; // "planner", "Finish", "action"
+    private String next; // "planner", "Finish", "action", "userInput"
     
     @JsonProperty("output")
     private String output; // 任务描述或最终回复

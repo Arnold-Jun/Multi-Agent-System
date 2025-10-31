@@ -35,15 +35,15 @@ public class ToolRegistryConfig implements CommandLineRunner {
      */
     private void registerMCPTools() {
         // PreprocessorAgent - 预处理器智能体工具（简单查询工具）
-        toolRegistry.registerTool("maps_weather", "preprocessor");
-        toolRegistry.registerTool("search_locations", "preprocessor");
-        toolRegistry.registerTool("search_flights", "preprocessor");
-        toolRegistry.registerTool("search_hotels", "preprocessor");
-        toolRegistry.registerTool("search_feeds", "preprocessor");
-        toolRegistry.registerTool("get_feed_detail", "preprocessor");
-        toolRegistry.registerTool("search_activities", "preprocessor");
-        toolRegistry.registerTool("get_activity_details", "preprocessor");
-        
+//        toolRegistry.registerTool("maps_weather", "preprocessor");
+//        toolRegistry.registerTool("search_locations", "preprocessor");
+//        toolRegistry.registerTool("search_flights", "preprocessor");
+//        toolRegistry.registerTool("search_hotels", "preprocessor");
+//        toolRegistry.registerTool("search_feeds", "preprocessor");
+//        toolRegistry.registerTool("get_feed_detail", "preprocessor");
+//        toolRegistry.registerTool("search_activities", "preprocessor");
+//        toolRegistry.registerTool("get_activity_details", "preprocessor");
+//
         // MetaSearchAgent - 元搜索智能体工具
         toolRegistry.registerTool("maps_around_search", "metaSearchAgent");
         toolRegistry.registerTool("maps_search_detail", "metaSearchAgent");

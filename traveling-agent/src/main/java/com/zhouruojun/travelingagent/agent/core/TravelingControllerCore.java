@@ -1,5 +1,7 @@
 package com.zhouruojun.travelingagent.agent.core;
 
+import com.zhouruojun.travelingagent.agent.dto.TravelIntentForm;
+import com.zhouruojun.travelingagent.agent.dto.TravelIntentResult;
 import com.alibaba.fastjson.JSONObject;
 import com.zhouruojun.a2acore.spec.Message;
 import com.zhouruojun.a2acore.spec.Part;
@@ -255,7 +257,8 @@ public class TravelingControllerCore {
     private CompileConfig buildCompileConfig() {
         return CompileConfig.builder()
                 .checkpointSaver(checkpointSaver)
-                .interruptAfter("userInput")  // 在userInput节点后打断执行
+                .interruptAfter("formInput")  // 在formInput节点后打断执行（表单输入）
+                .interruptAfter("textInput")  // 在textInput节点后打断执行（文本输入）
                 .build();
     }
     
@@ -517,14 +520,14 @@ public class TravelingControllerCore {
                         .threadId(sessionId)
                         .build();
                 
-                // 获取当前状态快照（从userInput打断的位置）
+                // 获取当前状态快照（从textInput打断的位置）
                 StateSnapshot<MainGraphState> stateSnapshot =
                         graph.getState(runnableConfig);
 
                 // 更新状态：添加用户输入消息
                 Map<String, Object> updateData = Map.of(
                         "messages", UserMessage.from(request.getChat()),
-                        "method", "human_input",
+                        "method", "text_input",
                         "userInputRequired", false  // 清除userInputRequired标志
                 );
                 
@@ -602,7 +605,7 @@ public class TravelingControllerCore {
             // 添加用户输入到历史，但不覆盖原始查询
             Map<String, Object> updateData = new HashMap<>();
             updateData.put("messages", UserMessage.from(userInput));
-            updateData.put("method", "human_input");
+            updateData.put("method", "text_input");
             updateData.put("userInputRequired", false);  // 清除userInputRequired标志
             updateData.put("userInput", userInput);  // 添加用户输入，供Scheduler使用
             
@@ -666,6 +669,15 @@ public class TravelingControllerCore {
                     MainGraphState state = output.state();
                     // String nodeName = output.node(); // 暂时注释掉未使用的变量
 
+                    // 检查是否需要表单输入
+                    if (state.isFormInputRequired()) {
+                        // 发送表单请求到前端
+                        Map<String, Object> formSchema = state.getFormSchema().orElse(new HashMap<>());
+                        String formPrompt = state.getFinalResponse().orElse("请填写以下信息以继续规划您的旅行：");
+                        sendFormInputRequest(sessionId, formPrompt, formSchema);
+                        break;
+                    }
+                    
                     // 检查是否需要用户输入
                     if (state.getValue("userInputRequired").isPresent() && 
                         (Boolean) state.getValue("userInputRequired").get()) {
@@ -725,14 +737,14 @@ public class TravelingControllerCore {
                         .threadId(sessionId)
                         .build();
                 
-                // 获取当前状态快照（从userInput打断的位置）
+                // 获取当前状态快照（从textInput打断的位置）
                 StateSnapshot<MainGraphState> stateSnapshot =
                         graph.getState(runnableConfig);
 
                 // 更新状态：添加用户输入消息
                 Map<String, Object> updateData = new HashMap<>();
                 updateData.put("messages", UserMessage.from(userInput));
-                updateData.put("method", "human_input");
+                updateData.put("method", "text_input");
                 updateData.put("userInputRequired", false);
                 updateData.put("userInput", userInput);
                 
@@ -760,7 +772,7 @@ public class TravelingControllerCore {
                     // 检查是否又需要用户输入
                     if (state.getValue("userInputRequired").isPresent() && 
                         (Boolean) state.getValue("userInputRequired").get()) {
-                        log.info("Graph paused again at userInput node for sessionId: {}", sessionId);
+                        log.info("Graph paused again at textInput node for sessionId: {}", sessionId);
                         needsUserInput = true;
                         
                         // 获取用户输入提示
@@ -809,6 +821,127 @@ public class TravelingControllerCore {
             log.info("Sent response to sessionId {}: {}", sessionId, content);
         } catch (Exception e) {
             log.error("Failed to send response to sessionId: {}", sessionId, e);
+        }
+    }
+
+    /**
+     * 处理表单提交（WebSocket）
+     */
+    public void submitFormWithWs(TravelIntentForm form, String userEmail) {
+        CompletableFuture.runAsync(() -> {
+            String sessionId = form.getSessionId();
+            updateSessionAccess(sessionId);
+            
+            try {
+                log.info("Processing form submission - sessionId: {}, userEmail: {}", sessionId, userEmail);
+                
+                // 将表单转换为结构化意图
+                TravelIntentResult intentResult = TravelIntentResult.fromForm(form);
+                
+                // 更新状态
+                CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
+                if (graph == null) {
+                    log.error("No compiled graph found for sessionId: {}", sessionId);
+                    sendError(sessionId, "错误：未找到会话状态，请重新开始对话");
+                    return;
+                }
+                
+                RunnableConfig runnableConfig = RunnableConfig.builder()
+                        .threadId(sessionId)
+                        .build();
+                
+                StateSnapshot<MainGraphState> stateSnapshot = graph.getState(runnableConfig);
+                
+                // 构建用户输入摘要（用于对话历史）
+                String formSummary = String.format("用户通过表单提交了旅游规划信息：目的地=%s，天数=%s，人数=%s", 
+                    form.getDestination(), form.getDays(), form.getPeopleCount());
+                
+                // 更新状态
+                Map<String, Object> updateData = new HashMap<>();
+                updateData.put("messages", UserMessage.from(formSummary));
+                updateData.put("method", "form_input");
+                updateData.put("formInputRequired", false);
+                updateData.put("preprocessorStructuredIntent", intentResult);
+                
+                // 更新用户查询历史
+                MainGraphState currentState = stateSnapshot.state();
+                List<String> userQueryHistory = currentState.getUserQueryHistory();
+                userQueryHistory.add(formSummary);
+                updateData.put("userQueryHistory", userQueryHistory);
+                
+                // 更新状态并获取新的配置
+                RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
+                
+                // 从打断点恢复执行（会回到preprocessor继续处理）
+                AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
+                
+                // 处理流式响应
+                String finalResponse = "";
+                boolean needsUserInput = false;
+                String userInputPrompt = "";
+                
+                for (NodeOutput<MainGraphState> output : messages) {
+                    MainGraphState state = output.state();
+                    
+                    // 检查是否需要用户输入
+                    if (state.getValue("userInputRequired").isPresent() && 
+                        (Boolean) state.getValue("userInputRequired").get()) {
+                        needsUserInput = true;
+                        userInputPrompt = state.getValue("subgraphTaskDescription").isPresent() ? 
+                            (String) state.getValue("subgraphTaskDescription").get() : 
+                            "需要您提供更多信息以继续...";
+                        break;
+                    }
+                    
+                    // 检查是否需要表单输入
+                    if (state.isFormInputRequired()) {
+                        Map<String, Object> formSchema = state.getFormSchema().orElse(new HashMap<>());
+                        String formPrompt = state.getFinalResponse().orElse("请填写以下信息以继续规划您的旅行：");
+                        sendFormInputRequest(sessionId, formPrompt, formSchema);
+                        return;
+                    }
+                    
+                    // 收集最终响应
+                    if (state.getFinalResponse().isPresent()) {
+                        finalResponse = state.getFinalResponse().get();
+                        updateSessionHistory(sessionId, formSummary, finalResponse);
+                        state.clearFinalResponse();
+                    }
+                }
+                
+                // 根据情况发送消息
+                if (needsUserInput) {
+                    sendUserInputRequest(sessionId, userInputPrompt);
+                } else if (!finalResponse.isEmpty()) {
+                    sendResponse(sessionId, finalResponse);
+                }
+                
+                log.info("Form submission processed for sessionId: {}", sessionId);
+                
+            } catch (Exception e) {
+                log.error("Error processing form submission", e);
+                sendError(sessionId, "处理表单提交时发生错误: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * 发送表单输入请求到前端
+     */
+    private void sendFormInputRequest(String sessionId, String prompt, Map<String, Object> schema) {
+        try {
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "userInputFormRequired");
+            message.put("sessionId", sessionId);
+            message.put("title", "请完善行程关键信息");
+            message.put("description", prompt);
+            message.put("schema", schema);
+            
+            // 使用广播方式发送，前端通过sessionId过滤
+            messagingTemplate.convertAndSend("/topic/reply", message);
+            log.info("Sent form input request to sessionId {}: {}", sessionId, prompt);
+        } catch (Exception e) {
+            log.error("Failed to send form input request to sessionId: {}", sessionId, e);
         }
     }
 

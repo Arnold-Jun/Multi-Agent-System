@@ -12,7 +12,8 @@ import com.zhouruojun.travelingagent.agent.actions.ExecuteTools;
 import com.zhouruojun.travelingagent.agent.actions.CallSchedulerAgent;
 import com.zhouruojun.travelingagent.agent.actions.CallSummaryAgent;
 import com.zhouruojun.travelingagent.agent.actions.TodoListParser;
-import com.zhouruojun.travelingagent.agent.actions.UserInput;
+import com.zhouruojun.travelingagent.agent.actions.FormInput;
+import com.zhouruojun.travelingagent.agent.actions.TextInput;
 import com.zhouruojun.travelingagent.agent.parser.SchedulerResponseParser;
 import com.zhouruojun.travelingagent.agent.state.SubgraphState;
 import com.zhouruojun.travelingagent.agent.state.subgraph.SubgraphStateManager;
@@ -28,6 +29,8 @@ import com.zhouruojun.travelingagent.agent.state.MainGraphState;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
 import com.zhouruojun.travelingagent.mcp.TravelingToolProviderManager;
 import com.zhouruojun.travelingagent.prompts.PromptManager;
+
+import java.util.Optional;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -193,7 +196,8 @@ public class TravelingGraphBuilder {
         CallSummaryAgent callSummary = new CallSummaryAgent("summary", agents.get("summary"), promptManager);
         callSummary.setQueue(queue);
         
-        UserInput userInput = new UserInput();
+        FormInput formInput = new FormInput();
+        TextInput textInput = new TextInput();
         
         // 创建ExecuteTools节点（用于preprocessor的工具调用）
         ExecuteTools<MainGraphState> executeTools = new ExecuteTools<>("preprocessor", agents.get("preprocessor"), toolProviderManager, parallelExecutionConfig);
@@ -213,7 +217,8 @@ public class TravelingGraphBuilder {
                 .addNode("todoListParser", node_async(todoListParser))
                 .addNode("scheduler", node_async(callScheduler))
                 .addNode("summary", node_async(callSummary))
-                .addNode("userInput", node_async(userInput))
+                .addNode("formInput", node_async(formInput))
+                .addNode("textInput", node_async(textInput))
                 .addNode("metaSearchAgent", createSubgraphNode(subgraphs.get("metaSearchAgent"), "metaSearchAgent"))
                 .addNode("itineraryPlannerAgent", createSubgraphNode(subgraphs.get("itineraryPlannerAgent"), "itineraryPlannerAgent"))
                 .addNode("bookingAgent", createSubgraphNode(subgraphs.get("bookingAgent"), "bookingAgent"))
@@ -227,7 +232,8 @@ public class TravelingGraphBuilder {
                                 "planner", "planner",
                                 "Finish", END,
                                 "action", "executeTools",
-                                "retry", "preprocessor"))
+                                "retry", "preprocessor",
+                                "formInput", "formInput"))
                 .addConditionalEdges("executeTools",
                         edge_async(actionShouldContinue),
                         Map.of("callback", "preprocessor"))
@@ -245,7 +251,7 @@ public class TravelingGraphBuilder {
                                 "itineraryPlannerAgent", "itineraryPlannerAgent",
                                 "bookingAgent", "bookingAgent",
                                 "onTripAgent", "onTripAgent",
-                                "userInput", "userInput",
+                                "textInput", "textInput",
                                 "planner", "planner",
                                 "summary", "summary",
                                 "retry", "scheduler",
@@ -254,7 +260,8 @@ public class TravelingGraphBuilder {
                 .addConditionalEdges("itineraryPlannerAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("bookingAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
                 .addConditionalEdges("onTripAgent", edge_async(subgraphShouldContinue), Map.of("scheduler", "scheduler"))
-                .addEdge("userInput", "scheduler")
+                .addEdge("formInput", "preprocessor")  // 表单提交后直接路由回preprocessor
+                .addEdge("textInput", "scheduler")      // 文本输入后直接路由回scheduler
                 .addEdge("summary", END);
     }
 
@@ -574,6 +581,7 @@ public class TravelingGraphBuilder {
         preprocessorChildren.add("Finish");
         preprocessorChildren.add("action");
         preprocessorChildren.add("retry");
+        preprocessorChildren.add("formInput"); // 支持表单路由
         
         return state.next()
                 .filter(preprocessorChildren::contains)
@@ -607,7 +615,7 @@ public class TravelingGraphBuilder {
         schedulerChildren.add("onTripAgent");
         schedulerChildren.add("planner");
         schedulerChildren.add("summary");
-        schedulerChildren.add("userInput");
+        schedulerChildren.add("textInput");
         schedulerChildren.add("Finish");
         schedulerChildren.add("retry");
         
@@ -620,6 +628,7 @@ public class TravelingGraphBuilder {
      * 子图路由逻辑
      */
     private final EdgeAction<MainGraphState> subgraphShouldContinue = (state) -> "scheduler";
+    
 
     /**
      * 工具执行回调边条件

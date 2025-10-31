@@ -1,5 +1,6 @@
 package com.zhouruojun.travelingagent.agent.state;
 
+import com.zhouruojun.travelingagent.agent.dto.TravelIntentResult;
 import com.zhouruojun.travelingagent.agent.state.main.TodoList;
 import com.zhouruojun.travelingagent.agent.state.main.TodoTask;
 import com.zhouruojun.travelingagent.agent.state.subgraph.ToolExecutionHistory;
@@ -372,6 +373,74 @@ public class MainGraphState extends BaseAgentState {
         return getFinalResponse().isPresent();
     }
 
+    /**
+     * 获取结构化旅游意图
+     */
+    @SuppressWarnings("unchecked")
+    public Optional<TravelIntentResult> getStructuredIntent() {
+        Object intentObj = state.get("preprocessorStructuredIntent");
+        if (intentObj instanceof TravelIntentResult) {
+            return Optional.of((TravelIntentResult) intentObj);
+        }
+        // 尝试从Map反序列化
+        if (intentObj instanceof Map) {
+            try {
+                // 这里可以添加从Map到TravelIntentResult的转换逻辑
+                // 为了简化，暂时返回空
+                return Optional.empty();
+            } catch (Exception e) {
+                log.warn("Failed to parse structured intent from Map: {}", e.getMessage());
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * 设置结构化旅游意图
+     */
+    public void setStructuredIntent(TravelIntentResult intent) {
+        state.put("preprocessorStructuredIntent", intent);
+    }
+
+    /**
+     * 检查结构化意图是否完整且可用于Planner
+     */
+    public boolean hasSufficientIntentForPlanner() {
+        return getStructuredIntent()
+                .map(TravelIntentResult::isComplete)
+                .orElse(false);
+    }
+
+    /**
+     * 检查是否需要表单输入
+     */
+    public boolean isFormInputRequired() {
+        Object formRequired = state.get("formInputRequired");
+        return formRequired instanceof Boolean && (Boolean) formRequired;
+    }
+
+    /**
+     * 设置是否需要表单输入
+     */
+    public void setFormInputRequired(boolean required) {
+        state.put("formInputRequired", required);
+    }
+
+    /**
+     * 获取表单schema和默认值（用于前端渲染）
+     */
+    @SuppressWarnings("unchecked")
+    public Optional<Map<String, Object>> getFormSchema() {
+        return Optional.ofNullable((Map<String, Object>) state.get("formSchema"));
+    }
+
+    /**
+     * 设置表单schema和默认值
+     */
+    public void setFormSchema(Map<String, Object> schema) {
+        state.put("formSchema", schema);
+    }
 
     private List<ChatMessage> extractMessages(Map<String, Object> state) {
         Object messagesObj = state.get("messages");

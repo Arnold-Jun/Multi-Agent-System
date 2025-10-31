@@ -518,6 +518,10 @@ class TravelingAgentApp {
             // 处理用户输入请求
             this.handleUserInputRequest(message.prompt);
             return; // 不停止加载状态，等待用户输入
+        } else if (message.type === 'userInputFormRequired') {
+            // 处理表单输入请求
+            this.handleFormInputRequest(message);
+            return; // 不停止加载状态，等待表单提交
         } else if (message.type === 'error') {
             // 处理错误
             this.addMessage('抱歉，处理您的请求时出现了错误：' + message.error, 'agent');
@@ -548,6 +552,13 @@ class TravelingAgentApp {
 
     async sendMessage() {
         const messageInput = document.getElementById('messageInput');
+        
+        // 检查输入框是否被禁用（例如表单填写期间）
+        if (messageInput.disabled) {
+            console.log('输入框已禁用，无法发送消息');
+            return;
+        }
+        
         const message = messageInput.value.trim();
         
         if (!message || this.isLoading || !this.connected) {
@@ -662,7 +673,312 @@ class TravelingAgentApp {
         this.addMessage(prompt, 'agent');
     }
 
+    /**
+     * 处理表单输入请求
+     */
+    handleFormInputRequest(message) {
+        console.log('处理表单输入请求:', message);
+        
+        // 停止加载状态
+        this.setLoading(false);
+        
+        // 立即禁用输入框，防止用户在表单请求期间输入
+        this.setInputDisabled(true, '请先点击"填写表单"按钮完成表单填写...');
+        
+        // 展示为聊天气泡，提供"填写表单"按钮，避免出现空消息
+        const formPrompt = message.description || message.title || '请填写以下信息以继续规划您的旅行：';
+        const schema = message.schema || {};
+        
+        // 构建一个包含按钮的聊天消息卡片
+        const messagesContainer = document.getElementById('messagesContainer');
+        const bubble = document.createElement('div');
+        bubble.className = 'message agent-message';
+        // 生成唯一ID避免重复
+        const btnId = `openTravelFormBtn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        bubble.innerHTML = `
+            <div class="message-avatar"><i class="fas fa-robot"></i></div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="sender-name">旅游智能体</span>
+                    <span class="message-time">${new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'})}</span>
+                </div>
+                <div class="message-text"></div>
+                <div class="actions" style="margin-top: 12px;">
+                    <button class="form-action-btn" data-form-btn="${btnId}">
+                        <i class="fas fa-clipboard-list"></i>
+                        <span>填写表单</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        // 填充富文本内容
+        bubble.querySelector('.message-text').innerHTML = this.formatMessage(formPrompt);
+        messagesContainer.appendChild(bubble);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        // 绑定按钮事件：点击后再打开模态框（支持多次点击）
+        const openBtn = bubble.querySelector(`[data-form-btn="${btnId}"]`);
+        // 保存schema和formPrompt到按钮的data属性，确保可以重复打开
+        openBtn.dataset.schema = JSON.stringify(schema);
+        openBtn.dataset.title = message.title || '请完善行程关键信息';
+        openBtn.dataset.description = formPrompt;
+        
+        openBtn.addEventListener('click', () => {
+            const savedSchema = JSON.parse(openBtn.dataset.schema || '{}');
+            // 注意：这里不需要再次禁用，因为已经在handleFormInputRequest中禁用了
+            this.showTravelFormModal(savedSchema, openBtn.dataset.title, openBtn.dataset.description);
+        });
+    }
+
+    /**
+     * 启用/禁用聊天输入框
+     * @param {boolean} disabled - true禁用，false启用
+     * @param {string} placeholder - 禁用时显示的占位符文本（可选）
+     */
+    setInputDisabled(disabled, placeholder = null) {
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        
+        if (disabled) {
+            messageInput.disabled = true;
+            messageInput.setAttribute('data-form-disabled', 'true');
+            messageInput.style.cursor = 'not-allowed';
+            messageInput.style.opacity = '0.6';
+            if (placeholder) {
+                messageInput.placeholder = placeholder;
+            }
+            sendBtn.disabled = true;
+            sendBtn.style.cursor = 'not-allowed';
+            sendBtn.style.opacity = '0.6';
+        } else {
+            messageInput.removeAttribute('data-form-disabled');
+            messageInput.disabled = false;
+            messageInput.style.cursor = 'text';
+            messageInput.style.opacity = '1';
+            messageInput.placeholder = '请描述您的旅游需求，例如：我想去日本旅游7天，预算1万元...';
+            // 只有在非loading状态时才启用发送按钮
+            if (!this.isLoading) {
+                sendBtn.disabled = false;
+                sendBtn.style.cursor = 'pointer';
+                sendBtn.style.opacity = '1';
+            }
+        }
+    }
+
+    /**
+     * 显示旅游规划表单模态框
+     */
+    showTravelFormModal(schema, title, description) {
+        // 注意：输入框已经在handleFormInputRequest时禁用了，这里只需要更新占位符
+        this.setInputDisabled(true, '请先完成表单填写...');
+        
+        // 移除已存在的表单模态框
+        const existingModal = document.getElementById('travelFormModal');
+        if (existingModal) {
+            existingModal.remove();
+            // 如果之前有模态框被移除，保持禁用状态（因为表单请求还在）
+        }
+
+        // 创建表单模态框
+        const modal = document.createElement('div');
+        modal.id = 'travelFormModal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-content form-modal">
+                <div class="modal-header">
+                    <h3>${title}</h3>
+                    <button class="close-btn" id="closeTravelFormBtn">×</button>
+                </div>
+                <div class="modal-body">
+                    <p class="form-description">${description}</p>
+                    <form id="travelForm">
+                        <div class="form-group">
+                            <label for="destination">目的地 <span class="required">*</span></label>
+                            <input type="text" id="destination" name="destination" required placeholder="例如：云南 昆明-大理-丽江">
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="startDate">出发日期</label>
+                                <input type="date" id="startDate" name="startDate" placeholder="yyyy-MM-dd" inputmode="numeric" pattern="\\d{4}-\\d{2}-\\d{2}">
+                            </div>
+                            <div class="form-group">
+                                <label for="days">旅行天数</label>
+                                <input type="number" id="days" name="days" min="1" max="30" placeholder="天数">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="peopleCount">人数 <span class="required">*</span></label>
+                            <input type="number" id="peopleCount" name="peopleCount" min="1" max="20" required value="2">
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="budgetRange">预算档位</label>
+                                <select id="budgetRange" name="budgetRange">
+                                    <option value="">请选择</option>
+                                    <option value="economy">经济型（人均1000-2000元）</option>
+                                    <option value="standard" selected>适中型（人均2000-5000元）</option>
+                                    <option value="premium">高端型（人均5000元以上）</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="budgetAmount">预算金额（元）</label>
+                                <input type="number" id="budgetAmount" name="budgetAmount" min="0" placeholder="可选">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="preferences">偏好（可多选）</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" name="preferences" value="history">历史文化</label>
+                                <label><input type="checkbox" name="preferences" value="food">美食</label>
+                                <label><input type="checkbox" name="preferences" value="outdoor">户外运动</label>
+                                <label><input type="checkbox" name="preferences" value="shopping">购物</label>
+                                <label><input type="checkbox" name="preferences" value="family">亲子</label>
+                                <label><input type="checkbox" name="preferences" value="relax">休闲</label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="lodgingLevel">住宿标准</label>
+                                <select id="lodgingLevel" name="lodgingLevel">
+                                    <option value="">请选择</option>
+                                    <option value="hostel">青旅</option>
+                                    <option value="budget">经济型</option>
+                                    <option value="comfort" selected>舒适型</option>
+                                    <option value="luxury">高端型</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="transportPreference">交通偏好</label>
+                                <select id="transportPreference" name="transportPreference">
+                                    <option value="none" selected>无偏好</option>
+                                    <option value="train">高铁</option>
+                                    <option value="flight">飞机</option>
+                                    <option value="self-drive">自驾</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="notes">备注</label>
+                            <textarea id="notes" name="notes" rows="3" maxlength="500" placeholder="其他需求或备注（可选）"></textarea>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary" id="cancelTravelFormBtn">取消</button>
+                            <button type="submit" class="btn-primary">提交</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // 关闭表单的回调函数（重新启用输入框）
+        const closeFormAndEnableInput = () => {
+            modal.remove();
+            this.setInputDisabled(false);
+        };
+        
+        // 绑定关闭按钮事件
+        const closeBtn = document.getElementById('closeTravelFormBtn');
+        closeBtn.addEventListener('click', closeFormAndEnableInput);
+        
+        // 绑定取消按钮事件
+        const cancelBtn = document.getElementById('cancelTravelFormBtn');
+        cancelBtn.addEventListener('click', closeFormAndEnableInput);
+        
+        // 点击遮罩层关闭模态框（可选，如果用户想要这个功能）
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeFormAndEnableInput();
+            }
+        });
+        
+        // 绑定表单提交事件
+        const form = document.getElementById('travelForm');
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.submitTravelForm(form);
+        });
+        
+        // 设置默认值（如果有）
+        if (schema.defaults) {
+            const defaults = schema.defaults;
+            if (defaults.destination) document.getElementById('destination').value = defaults.destination;
+            if (defaults.startDate) document.getElementById('startDate').value = defaults.startDate;
+            if (defaults.days) document.getElementById('days').value = defaults.days;
+            if (defaults.peopleCount) document.getElementById('peopleCount').value = defaults.peopleCount;
+            if (defaults.budgetRange) document.getElementById('budgetRange').value = defaults.budgetRange;
+            if (defaults.budgetAmount) document.getElementById('budgetAmount').value = defaults.budgetAmount;
+            if (defaults.lodgingLevel) document.getElementById('lodgingLevel').value = defaults.lodgingLevel;
+            if (defaults.transportPreference) document.getElementById('transportPreference').value = defaults.transportPreference;
+        }
+        
+        // 显示模态框
+        modal.style.display = 'flex';
+    }
+
+    /**
+     * 提交旅游规划表单
+     */
+    submitTravelForm(form) {
+        const formData = new FormData(form);
+        
+        // 构建表单数据对象
+        const formPayload = {
+            sessionId: this.currentSessionId,
+            destination: formData.get('destination'),
+            startDate: formData.get('startDate') || null,
+            days: formData.get('days') ? parseInt(formData.get('days')) : null,
+            peopleCount: parseInt(formData.get('peopleCount')),
+            budgetRange: formData.get('budgetRange') || null,
+            budgetAmount: formData.get('budgetAmount') ? parseFloat(formData.get('budgetAmount')) : null,
+            preferences: formData.getAll('preferences'),
+            lodgingLevel: formData.get('lodgingLevel') || null,
+            transportPreference: formData.get('transportPreference') || 'none',
+            notes: formData.get('notes') || null
+        };
+        
+        // 验证必填字段
+        if (!formPayload.destination || !formPayload.peopleCount) {
+            alert('请填写必填字段：目的地和人数');
+            return;
+        }
+        
+        // 关闭模态框并重新启用输入框
+        const modal = document.getElementById('travelFormModal');
+        if (modal) {
+            modal.remove();
+        }
+        this.setInputDisabled(false);
+        
+        // 显示提交提示
+        this.setLoading(true);
+        this.addMessage(`已提交表单：目的地=${formPayload.destination}，天数=${formPayload.days || '未指定'}，人数=${formPayload.peopleCount}人`, 'user');
+        
+        // 发送表单数据到后端
+        try {
+            this.sendWebSocketMessage('/app/traveling/form/submit', {
+                form: formPayload
+            });
+        } catch (error) {
+            console.error('提交表单失败:', error);
+            this.addMessage('抱歉，提交表单时出现了错误。请稍后重试。', 'agent');
+            this.setLoading(false);
+        }
+    }
+
     addMessage(content, sender) {
+        if (!content || (typeof content === 'string' && content.trim().length === 0)) {
+            console.log('⚠️ 跳过空消息渲染');
+            return;
+        }
         console.log(`💬 添加消息 - 发送者: ${sender}, 内容长度: ${content.length}`);
         console.log(`💬 消息内容预览: ${content.substring(0, 100)}...`);
         
@@ -817,13 +1133,30 @@ class TravelingAgentApp {
         this.isLoading = loading;
         const loadingOverlay = document.getElementById('loadingOverlay');
         const sendBtn = document.getElementById('sendBtn');
+        const messageInput = document.getElementById('messageInput');
         
         if (loading) {
             loadingOverlay.classList.add('show');
             sendBtn.disabled = true;
+            sendBtn.style.cursor = 'not-allowed';
+            sendBtn.style.opacity = '0.6';
+            // 如果输入框没有被禁用（表单场景），则禁用输入框
+            if (!messageInput.disabled) {
+                messageInput.disabled = true;
+                messageInput.style.cursor = 'not-allowed';
+                messageInput.style.opacity = '0.6';
+            }
         } else {
             loadingOverlay.classList.remove('show');
-            sendBtn.disabled = false;
+            // 只有在输入框没有被外部禁用（如表单场景）时才启用
+            if (!messageInput.hasAttribute('data-form-disabled')) {
+                sendBtn.disabled = false;
+                sendBtn.style.cursor = 'pointer';
+                sendBtn.style.opacity = '1';
+                messageInput.disabled = false;
+                messageInput.style.cursor = 'text';
+                messageInput.style.opacity = '1';
+            }
         }
     }
 
