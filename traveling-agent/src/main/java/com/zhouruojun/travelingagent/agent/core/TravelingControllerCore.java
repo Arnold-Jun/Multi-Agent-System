@@ -2,6 +2,9 @@ package com.zhouruojun.travelingagent.agent.core;
 
 import com.zhouruojun.travelingagent.agent.dto.TravelIntentForm;
 import com.zhouruojun.travelingagent.agent.dto.TravelIntentResult;
+import com.zhouruojun.travelingagent.agent.dto.ToolExecutionInfo;
+import com.zhouruojun.travelingagent.agent.state.subgraph.ToolExecutionHistory;
+import com.zhouruojun.travelingagent.agent.state.subgraph.ToolExecutionRecord;
 import com.alibaba.fastjson.JSONObject;
 import com.zhouruojun.a2acore.spec.Message;
 import com.zhouruojun.a2acore.spec.Part;
@@ -17,7 +20,10 @@ import com.zhouruojun.travelingagent.service.OllamaService;
 import com.zhouruojun.travelingagent.mcp.TravelingToolProviderManager;
 import com.zhouruojun.travelingagent.a2a.TravelingTaskManager;
 import com.zhouruojun.travelingagent.prompts.PromptManager;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.extern.slf4j.Slf4j;
@@ -53,49 +59,49 @@ public class TravelingControllerCore {
     private Map<String, CompiledGraph<MainGraphState>> compiledGraphCache;
     private Map<String, StateGraph<MainGraphState>> stateGraphCache;
     private BaseCheckpointSaver checkpointSaver;
-    
+
     // 核心依赖
     @Autowired
     private OllamaService ollamaService;
-    
+
     @Autowired
     private com.zhouruojun.travelingagent.service.QwenApiService qwenApiService;
-    
+
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
-    
+
     @Autowired
     @org.springframework.beans.factory.annotation.Qualifier("travelingChatLanguageModel")
     private ChatLanguageModel chatLanguageModel;
-    
+
     @Autowired
     private CheckpointConfig checkpointConfig;
-    
-    
+
+
     // 并行执行配置
     @Autowired
     private ParallelExecutionConfig parallelExecutionConfig;
-    
+
     // Scheduler相关依赖
     @Autowired
     private SchedulerResponseParser schedulerResponseParser;
-    
+
     // 子图状态管理器
     @Autowired
     private SubgraphStateManager subgraphStateManager;
-    
+
     @Autowired
     @org.springframework.context.annotation.Lazy
     private TravelingTaskManager travelingTaskManager;
-    
+
     // 工具提供者管理器
     @Autowired
     private TravelingToolProviderManager toolProviderManager;
-    
+
     // 提示词管理器
     @Autowired
     private PromptManager promptManager;
-    
+
     // 会话管理 - 从数据分析智能体迁移
     private final Map<String, List<ChatMessage>> sessionHistory = new ConcurrentHashMap<>();
     private final Map<String, Object> sessionCache = new ConcurrentHashMap<>();
@@ -109,20 +115,20 @@ public class TravelingControllerCore {
         // 初始化缓存
         compiledGraphCache = new ConcurrentHashMap<>();
         stateGraphCache = new ConcurrentHashMap<>();
-        
+
         // 初始化checkpoint saver
         checkpointSaver = new MemorySaver();
-        
+
         log.info("TravelingControllerCore initialized successfully");
     }
 
     public String processStreamReturnStr(AgentChatRequest request) {
         try {
             log.info("Processing travel planning request with LangGraph: {}", JSONObject.toJSON(request));
-            
+
             String sessionId = request.getSessionId();
             String chat = request.getChat();
-            
+
             if (chat == null || chat.trim().isEmpty()) {
                 return "错误: 聊天消息为空";
             }
@@ -132,49 +138,49 @@ public class TravelingControllerCore {
 
             // 使用图处理流程
             AsyncGenerator<NodeOutput<MainGraphState>> stream = processStream(request);
-            
+
             StringBuilder resultBuilder = new StringBuilder();
             String finalResponse = "";
-            
+
             // 处理流式输出
             for (NodeOutput<MainGraphState> output : stream) {
                 MainGraphState state = output.state();
-                
+
                 // 获取最终响应
                 if (state.getFinalResponse().isPresent()) {
                     finalResponse = state.getFinalResponse().get();
                     resultBuilder.append(finalResponse);
                 }
             }
-            
+
             String result = resultBuilder.toString();
             if (result.isEmpty()) {
                 result = "旅游规划完成，但未获取到具体结果。";
             }
-            
+
             // 更新会话历史
             updateSessionHistory(sessionId, request.getChat(), result);
-            
+
             return result;
-            
+
         } catch (Exception e) {
             log.error("Error processing travel planning request", e);
             return "错误: " + e.getMessage();
         }
     }
-    
+
     /**
      * 处理请求流程 - 使用LangGraph4j
      */
-    private AsyncGenerator<NodeOutput<MainGraphState>> processStream(AgentChatRequest request) 
+    private AsyncGenerator<NodeOutput<MainGraphState>> processStream(AgentChatRequest request)
             throws GraphStateException {
-        
+
         String sessionId = request.getSessionId();
         String username = "user"; // 可以从request中获取
         String userMessage = request.getChat();
-        
+
         // 获取或构建状态图
-        StateGraph<MainGraphState> stateGraph = stateGraphCache.computeIfAbsent(sessionId, 
+        StateGraph<MainGraphState> stateGraph = stateGraphCache.computeIfAbsent(sessionId,
             key -> {
                 try {
                     return buildGraph(request);
@@ -182,7 +188,7 @@ public class TravelingControllerCore {
                     throw new RuntimeException("Failed to build graph", e);
                 }
             });
-        
+
         // 获取或编译图
         CompiledGraph<MainGraphState> compiledGraph = compiledGraphCache.computeIfAbsent(sessionId,
             key -> {
@@ -192,18 +198,18 @@ public class TravelingControllerCore {
                     throw new RuntimeException("Failed to compile graph", e);
                 }
             });
-        
+
         // 构建运行配置
         RunnableConfig runnableConfig = RunnableConfig.builder()
                 .threadId(sessionId)
                 .build();
-        
+
         // 构建初始状态
         Map<String, Object> initialState = new HashMap<>();
         initialState.put("messages", UserMessage.from(userMessage));
         initialState.put("sessionId", sessionId);
         initialState.put("username", username);
-        
+
         // 检查是否是新的session（没有历史状态）
         boolean isNewSession = !sessionHistory.containsKey(sessionId);
         if (isNewSession) {
@@ -230,14 +236,14 @@ public class TravelingControllerCore {
         // 执行图流程
         return compiledGraph.stream(initialState, runnableConfig);
     }
-    
+
     /**
      * 构建旅游图
      */
     private StateGraph<MainGraphState> buildGraph(AgentChatRequest request) throws GraphStateException {
         String sessionId = request.getSessionId();
         log.info("Building travel planning graph for session: {}", sessionId);
-        
+
         return new TravelingGraphBuilder()
                 .chatLanguageModel(chatLanguageModel)
                 .toolProviderManager(toolProviderManager)  // 传递工具提供者管理器
@@ -249,7 +255,7 @@ public class TravelingControllerCore {
                 .promptManager(promptManager)  // 传递提示词管理器
                 .build();
     }
-    
+
     /**
      * 构建编译配置
      */
@@ -260,7 +266,7 @@ public class TravelingControllerCore {
                 .interruptAfter("textInput")  // 在textInput节点后打断执行（文本输入）
                 .build();
     }
-    
+
 
 
     /**
@@ -270,19 +276,19 @@ public class TravelingControllerCore {
         sessionHistory.remove(sessionId);
         sessionCache.remove(sessionId);
         sessionAccessTimes.remove(sessionId);
-        
+
         // 清除图缓存
         stateGraphCache.remove(sessionId);
         compiledGraphCache.remove(sessionId);
-        
+
         // 清除子图状态
         if (subgraphStateManager != null) {
             subgraphStateManager.clearSessionStates(sessionId);
         }
-        
+
         log.info("Cleared session history, graph cache and subgraph states for: {}", sessionId);
     }
-    
+
     /**
      * 获取所有活跃会话
      */
@@ -316,7 +322,7 @@ public class TravelingControllerCore {
     /**
      * A2A同步处理方法
      * 处理来自主智能体的A2A调用请求
-     * 
+     *
      * @param sessionId 会话ID
      * @param userMessage 用户消息
      * @return 处理结果
@@ -326,10 +332,10 @@ public class TravelingControllerCore {
         cleanupExpiredSessionsIfNeeded();
         try {
             log.info("Processing A2A sync request: sessionId={}, message={}", sessionId, userMessage);
-            
+
             // 检查是否是第一次调用（cache中没有图）
             boolean isFirstCall = !compiledGraphCache.containsKey(sessionId);
-            
+
             if (isFirstCall) {
                 // 情况1：第一次调用 - 初始化状态图和编译图
                 log.info("First call to travel planning agent for session: {}", sessionId);
@@ -339,13 +345,13 @@ public class TravelingControllerCore {
                 log.info("Resume call to travel planning agent for session: {}", sessionId);
                 return processResumeA2aCall(sessionId, userMessage);
             }
-            
+
         } catch (Exception e) {
             log.error("Error processing A2A sync request: sessionId={}", sessionId, e);
             return "Error: 处理A2A请求时发生错误: " + e.getMessage();
         }
     }
-    
+
     /**
      * 处理第一次A2A调用
      */
@@ -355,19 +361,19 @@ public class TravelingControllerCore {
             AgentChatRequest request = new AgentChatRequest();
             request.setSessionId(sessionId);
             request.setChat(userMessage);
-            
+
             // 使用标准的流式处理方法
             String result = processStreamReturnStr(request);
             updateSessionAccess(sessionId);
             cleanupExpiredSessionsIfNeeded();
             return result;
-            
+
         } catch (Exception e) {
             log.error("Error processing first A2A call: sessionId={}", sessionId, e);
             return "Error: 处理第一次A2A调用时发生错误: " + e.getMessage();
         }
     }
-    
+
     /**
      * 处理恢复A2A调用
      */
@@ -377,13 +383,13 @@ public class TravelingControllerCore {
             AgentChatRequest request = new AgentChatRequest();
             request.setSessionId(sessionId);
             request.setChat(userMessage);
-            
+
             // 使用标准的流式处理方法
             String result = processStreamReturnStr(request);
             updateSessionAccess(sessionId);
             cleanupExpiredSessionsIfNeeded();
             return result;
-            
+
         } catch (Exception e) {
             log.error("Error processing resume A2A call: sessionId={}", sessionId, e);
             return "Error: 处理恢复A2A调用时发生错误: " + e.getMessage();
@@ -397,7 +403,7 @@ public class TravelingControllerCore {
         List<ChatMessage> history = sessionHistory.computeIfAbsent(sessionId, k -> new ArrayList<>());
         history.add(UserMessage.from(userMessage));
         history.add(dev.langchain4j.data.message.AiMessage.from(response));
-        
+
         // 限制历史记录长度
         if (history.size() > 100) {
             history.subList(0, history.size() - 100).clear();
@@ -450,34 +456,34 @@ public class TravelingControllerCore {
                                      String userEmail) {
         try {
             log.info("Processing A2A request - requestId: {}, sessionId: {}", requestId, sessionId);
-            
+
             // 从A2A消息中提取文本内容
             List<Part> parts = message.getParts();
             if (parts.isEmpty() || !(parts.get(0) instanceof TextPart)) {
                 throw new IllegalArgumentException("Invalid A2A message: no text part found");
             }
-            
+
             TextPart textPart = (TextPart) parts.get(0);
             String taskInstruction = textPart.getText();
-            
+
             log.info("A2A task instruction: {}", taskInstruction);
-            
+
             // 构建AgentChatRequest
             AgentChatRequest request = new AgentChatRequest();
             request.setSessionId(requestId);  // 使用requestId作为sessionId
             request.setRequestId(requestId);
             request.setChat(taskInstruction);
-            
+
             // 异步处理
-            java.util.concurrent.CompletableFuture.runAsync(() -> {
+            CompletableFuture.runAsync(() -> {
                 try {
                     // 处理并发送事件
                     String result = processStreamReturnStr(request);
-                    
+
                     // 使用静态方法发送最终响应
                     TravelingTaskManager.sendTextEvent(
                         requestId, result, "__END__");
-                    
+
                 } catch (Exception e) {
                     log.error("Error processing A2A request", e);
                     // 发送错误事件
@@ -485,7 +491,7 @@ public class TravelingControllerCore {
                         requestId, "处理任务时发生错误: " + e.getMessage(), "__ERROR__");
                 }
             });
-            
+
         } catch (Exception e) {
             log.error("Error in processStreamWithA2a", e);
             throw new RuntimeException(e);
@@ -494,7 +500,7 @@ public class TravelingControllerCore {
 
     /**
      * 处理用户输入（从userInput节点恢复执行）
-     * 
+     *
      * 工作流程：
      * 1. 获取当前会话的图状态（从userInput节点打断的位置）
      * 2. 更新状态，添加用户输入消息
@@ -505,20 +511,20 @@ public class TravelingControllerCore {
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             String sessionId = request.getSessionId();
             updateSessionAccess(sessionId);
-            
+
             try {
                 log.info("Processing humanInput for sessionId: {}, chat: {}", sessionId, request.getChat());
-                
+
                 CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
                 if (graph == null) {
                     log.error("No compiled graph found for sessionId: {}", sessionId);
                     return;
                 }
-                
+
                 RunnableConfig runnableConfig = RunnableConfig.builder()
                         .threadId(sessionId)
                         .build();
-                
+
                 // 获取当前状态快照（从textInput打断的位置）
                 StateSnapshot<MainGraphState> stateSnapshot =
                         graph.getState(runnableConfig);
@@ -529,33 +535,33 @@ public class TravelingControllerCore {
                         "method", "text_input",
                         "userInputRequired", false  // 清除userInputRequired标志
                 );
-                
+
                 // 更新状态并获取新的配置
                 RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
-                
+
                 // 从打断点恢复执行（传null表示从当前状态继续）
                 AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
-                
+
                 // 处理流式响应
                 String finalResponse = "";
                 for (NodeOutput<MainGraphState> output : messages) {
                     log.info("humanInput processing node: {}", output.node());
-                    
+
                     MainGraphState state = output.state();
-                    
+
                     // 获取最终响应
                     if (state.getFinalResponse().isPresent()) {
                         finalResponse = state.getFinalResponse().get();
                     }
                 }
-                
+
                 // 更新会话历史
                 if (!finalResponse.isEmpty()) {
                     updateSessionHistory(sessionId, request.getChat(), finalResponse);
                 }
-                
+
                 log.info("humanInput completed for sessionId: {}", sessionId);
-                
+
             } catch (Exception e) {
                 log.error("Error processing humanInput", e);
                 throw new RuntimeException(e);
@@ -571,33 +577,33 @@ public class TravelingControllerCore {
     public String humanInputSync(AgentChatRequest request) {
         String sessionId = request.getSessionId();
         updateSessionAccess(sessionId);
-        
+
         try {
             log.info("Processing humanInputSync for sessionId: {}, chat: {}", sessionId, request.getChat());
-            
+
             // 将用户输入存储到 TravelingTaskManager 中
             String userInput = request.getChat();
             if (userInput == null || userInput.trim().isEmpty()) {
                 log.warn("No user input in request for sessionId: {}", sessionId);
                 return "错误：用户输入为空，请提供有效输入";
             }
-            
+
             // 存储用户输入到 TravelingTaskManager
             travelingTaskManager.setUserInput(sessionId, userInput);
             log.info("Stored user input in TravelingTaskManager: {}", userInput);
-            
+
             CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
             if (graph == null) {
                 log.error("No compiled graph found for sessionId: {}", sessionId);
                 return "错误：未找到会话状态，请重新开始对话";
             }
-            
+
             RunnableConfig runnableConfig = RunnableConfig.builder()
                     .threadId(sessionId)
                     .build();
-            
+
             // 获取当前状态快照（从userInput打断的位置）
-            org.bsc.langgraph4j.state.StateSnapshot<MainGraphState> stateSnapshot = 
+            org.bsc.langgraph4j.state.StateSnapshot<MainGraphState> stateSnapshot =
                     graph.getState(runnableConfig);
 
             // 使用从 TravelingTaskManager 获取的用户输入
@@ -607,41 +613,41 @@ public class TravelingControllerCore {
             updateData.put("method", "text_input");
             updateData.put("userInputRequired", false);  // 清除userInputRequired标志
             updateData.put("userInput", userInput);  // 添加用户输入，供Scheduler使用
-            
+
             // 更新状态并获取新的配置
             RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
-            
+
             // 从打断点恢复执行（传null表示从当前状态继续）
             AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
-            
+
             // 处理流式响应
             StringBuilder resultBuilder = new StringBuilder();
             String finalResponse = "";
-            
+
             for (NodeOutput<MainGraphState> output : messages) {
                 log.info("humanInputSync processing node: {}", output.node());
-                
+
                 MainGraphState state = output.state();
-                
+
                 // 获取最终响应
                 if (state.getFinalResponse().isPresent()) {
                     finalResponse = state.getFinalResponse().get();
                     resultBuilder.append(finalResponse);
                 }
             }
-            
+
             String result = resultBuilder.toString();
             if (result.isEmpty()) {
                 result = "处理完成";
             }
-            
+
             // 更新会话历史
             updateSessionHistory(sessionId, userInput, result);
-            
+
             log.info("humanInputSync completed for sessionId: {}", sessionId);
-            
+
             return result;
-            
+
         } catch (Exception e) {
             log.error("Error processing humanInputSync", e);
             return "错误：处理用户输入失败 - " + e.getMessage();
@@ -657,16 +663,145 @@ public class TravelingControllerCore {
         CompletableFuture.runAsync(() -> {
             String sessionId = request.getSessionId();
             updateSessionAccess(sessionId);
-            
+
             try {
                 // 处理流式响应
                 AsyncGenerator<NodeOutput<MainGraphState>> stream = processStream(request);
 
                 String finalResponse = "";
+                // 用于跟踪已发送的工具执行记录数量，避免重复发送
+                String cacheKey = sessionId + ":lastSentToolCount";
+                int lastSentRecordCount = (Integer) sessionCache.getOrDefault(cacheKey, 0);
+                
+                // 用于跟踪已发送"即将执行"消息的工具批次
+                String pendingBatchKey = sessionId + ":pendingToolBatch";
+                // 用于存储当前批次ID
+                String currentBatchIdKey = sessionId + ":currentBatchId";
+                
                 // 处理每个节点的输出
                 for (NodeOutput<MainGraphState> output : stream) {
                     MainGraphState state = output.state();
-                    // String nodeName = output.node(); // 暂时注释掉未使用的变量
+                    String nodeName = output.node();
+                    
+                    log.debug("处理节点输出: {}", nodeName);
+
+                    // 关键理解：NodeOutput 延迟一个节点
+                    // preprocessor 节点输出时 → state 有工具请求 → 此时工具正在执行！发送 executing=true
+                    // executeTools 节点输出时 → state 有执行结果 → 此时工具已完成！发送 executing=false
+                    
+                    // 1. 检测 preprocessor 节点输出，发送"正在执行"消息
+                    if ("preprocessor".equals(nodeName) && !sessionCache.containsKey(pendingBatchKey)) {
+                        // 检查最后一条消息是否包含工具请求
+                        Optional<ChatMessage> lastMsg = state.lastMessage();
+                        if (lastMsg.isPresent() && lastMsg.get().type() == ChatMessageType.AI) {
+                            AiMessage aiMessage = (AiMessage) lastMsg.get();
+                            if (aiMessage.hasToolExecutionRequests()) {
+                                List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
+
+                                // 生成唯一的批次ID
+                                String batchId = sessionId + "_" + System.currentTimeMillis();
+                                
+                                // 发送"正在执行"消息（不包含耗时）
+                                List<ToolExecutionInfo.ToolExecutionDetail> pendingDetails = new ArrayList<>();
+                                int order = 1;
+                                for (ToolExecutionRequest toolRequest : toolRequests) {
+                                    String arguments = extractArgumentsFromRequest(toolRequest);
+                                    
+                                    ToolExecutionInfo.ToolExecutionDetail detail = ToolExecutionInfo.ToolExecutionDetail.builder()
+                                            .toolName(toolRequest.name())
+                                            .arguments(arguments)
+                                            .result(null)
+                                            .success(false)
+                                            .executionOrder(order++)
+                                            .executing(true)
+                                            .errorMessage(null)
+                                            .build();
+                                    
+                                    pendingDetails.add(detail);
+                                }
+                                
+                                if (!pendingDetails.isEmpty()) {
+                                    String executionMode = determineExecutionMode(pendingDetails.size());
+                                    ToolExecutionInfo pendingToolInfo = ToolExecutionInfo.builder()
+                                            .batchId(batchId)  // 设置批次ID
+                                            .nodeName("executeTools")
+                                            .toolExecutions(pendingDetails)
+                                            .executionMode(executionMode)
+                                            .totalTools(pendingDetails.size())
+                                            .successCount(0)
+                                            .failureCount(0)
+                                            .timestamp(System.currentTimeMillis())
+                                            .build();
+                                    
+                                    sendToolExecutionInfo(sessionId, pendingToolInfo);
+                                    sessionCache.put(pendingBatchKey, true);
+                                    sessionCache.put(currentBatchIdKey, batchId);  // 缓存批次ID
+                                    
+                                    log.info("已发送工具正在执行信息到前端 (批次ID: {})", batchId);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 2. 检测 executeTools 节点输出，发送"执行完成"消息
+                    if ("executeTools".equals(nodeName)) {
+                        ToolExecutionHistory currentHistory = state.getToolExecutionHistory();
+                        int currentRecordCount = currentHistory != null ? currentHistory.getTotalCount() : 0;
+                        
+                        // 发送执行完成的消息（当有新的执行结果时）
+                        if (currentHistory != null && currentRecordCount > lastSentRecordCount) {
+                            // 获取新增的记录
+                            List<ToolExecutionRecord> allRecords = currentHistory.getRecords();
+                            List<ToolExecutionRecord> newRecords = allRecords.subList(
+                                lastSentRecordCount, 
+                                allRecords.size()
+                            );
+                            
+                            if (!newRecords.isEmpty()) {
+                                // 获取之前缓存的批次ID
+                                String batchId = (String) sessionCache.get(currentBatchIdKey);
+                                
+                                // 转换为ToolExecutionDetail（不截断结果，不包含耗时）
+                                List<ToolExecutionInfo.ToolExecutionDetail> completedDetails = 
+                                    newRecords.stream().map(record -> {
+                                        return ToolExecutionInfo.ToolExecutionDetail.builder()
+                                                .toolName(record.getToolName())
+                                                .arguments(record.getArguments())
+                                                .result(record.getResult())  // 不截断结果，发送完整内容
+                                                .success(record.isSuccess())
+                                                .executionOrder(record.getExecutionOrder())
+                                                .executing(false)  // 执行完成（勾）
+                                                .errorMessage(record.isSuccess() ? null : extractErrorMessage(record.getResult()))
+                                                .build();
+                                    }).collect(java.util.stream.Collectors.toList());
+                                
+                                // 创建工具信息对象（使用相同的批次ID）
+                                String executionMode = determineExecutionMode(completedDetails.size());
+                                ToolExecutionInfo completedToolInfo = ToolExecutionInfo.builder()
+                                        .batchId(batchId)  // 使用相同的批次ID
+                                        .nodeName(nodeName)
+                                        .toolExecutions(completedDetails)
+                                        .executionMode(executionMode)
+                                        .totalTools(completedDetails.size())
+                                        .successCount((int) completedDetails.stream().filter(d -> d.isSuccess()).count())
+                                        .failureCount((int) completedDetails.stream().filter(d -> !d.isSuccess()).count())
+                                        .timestamp(System.currentTimeMillis())
+                                        .build();
+                                
+                                sendToolExecutionInfo(sessionId, completedToolInfo);
+                                
+                                // 更新已发送记录数
+                                lastSentRecordCount = currentRecordCount;
+                                sessionCache.put(cacheKey, lastSentRecordCount);
+                                
+                                // 清除批次相关的缓存
+                                sessionCache.remove(pendingBatchKey);
+                                sessionCache.remove(currentBatchIdKey);
+                                
+                                log.info("✅ 发送工具执行完成信息到前端（勾选标记, 批次ID: {}）: {} 个工具", batchId, completedDetails.size());
+                            }
+                        }
+                    }
 
                     // 检查是否需要表单输入
                     if (state.isFormInputRequired()) {
@@ -676,20 +811,20 @@ public class TravelingControllerCore {
                         sendFormInputRequest(sessionId, formPrompt, formSchema);
                         break;
                     }
-                    
+
                     // 检查是否需要用户输入
-                    if (state.getValue("userInputRequired").isPresent() && 
+                    if (state.getValue("userInputRequired").isPresent() &&
                         (Boolean) state.getValue("userInputRequired").get()) {
                         // 图已在userInput节点暂停，等待用户输入
                         // 发送用户输入请求到前端
-                        String prompt = state.getValue("subgraphTaskDescription").isPresent() ? 
-                            (String) state.getValue("subgraphTaskDescription").get() : 
+                        String prompt = state.getValue("subgraphTaskDescription").isPresent() ?
+                            (String) state.getValue("subgraphTaskDescription").get() :
                             "需要您提供更多信息以继续...";
-                        
+
                         sendUserInputRequest(sessionId, prompt);
                         break;
                     }
-                    
+
                     // 发送最终响应
                     if (state.getFinalResponse().isPresent()) {
                         finalResponse = state.getFinalResponse().get();
@@ -718,24 +853,24 @@ public class TravelingControllerCore {
         java.util.concurrent.CompletableFuture.runAsync(() -> {
             String sessionId = request.getSessionId();
             updateSessionAccess(sessionId);
-            
+
             try {
                 log.info("Processing humanInput - sessionId: {}, userEmail: {}", sessionId, userEmail);
-                
+
                 // 存储用户输入到 TravelingTaskManager
                 String userInput = request.getChat();
                 travelingTaskManager.setUserInput(sessionId, userInput);
-                
+
                 CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
                 if (graph == null) {
                     log.error("No compiled graph found for sessionId: {}", sessionId);
                     return;
                 }
-                
+
                 RunnableConfig runnableConfig = RunnableConfig.builder()
                         .threadId(sessionId)
                         .build();
-                
+
                 // 获取当前状态快照（从textInput打断的位置）
                 StateSnapshot<MainGraphState> stateSnapshot =
                         graph.getState(runnableConfig);
@@ -746,41 +881,41 @@ public class TravelingControllerCore {
                 updateData.put("method", "text_input");
                 updateData.put("userInputRequired", false);
                 updateData.put("userInput", userInput);
-                
+
                 // 更新用户输入历史
                 MainGraphState currentState = stateSnapshot.state();
                 List<String> userQueryHistory = currentState.getUserQueryHistory();
                 userQueryHistory.add(userInput);
                 updateData.put("userQueryHistory", userQueryHistory);
-                
+
                 // 更新状态并获取新的配置
                 RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
-                
+
                 // 从打断点恢复执行
                 AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
-                
+
                 // 处理流式响应
                 String finalResponse = "";
                 boolean needsUserInput = false;
                 String userInputPrompt = "";
-                
+
                 for (NodeOutput<MainGraphState> output : messages) {
                     MainGraphState state = output.state();
                     // String nodeName = output.node(); // 暂时注释掉未使用的变量
 
                     // 检查是否又需要用户输入
-                    if (state.getValue("userInputRequired").isPresent() && 
+                    if (state.getValue("userInputRequired").isPresent() &&
                         (Boolean) state.getValue("userInputRequired").get()) {
                         log.info("Graph paused again at textInput node for sessionId: {}", sessionId);
                         needsUserInput = true;
-                        
+
                         // 获取用户输入提示
-                        userInputPrompt = state.getValue("subgraphTaskDescription").isPresent() ? 
-                            (String) state.getValue("subgraphTaskDescription").get() : 
+                        userInputPrompt = state.getValue("subgraphTaskDescription").isPresent() ?
+                            (String) state.getValue("subgraphTaskDescription").get() :
                             "需要您提供更多信息以继续...";
                         break;
                     }
-                    
+
                     // 只有在不需要用户输入时才收集最终响应
                     if (state.getFinalResponse().isPresent()) {
                         finalResponse = state.getFinalResponse().get();
@@ -788,7 +923,7 @@ public class TravelingControllerCore {
                         state.clearFinalResponse();
                     }
                 }
-                
+
                 // 根据情况发送消息
                 if (needsUserInput) {
                     // 需要用户输入，发送用户输入请求
@@ -814,7 +949,7 @@ public class TravelingControllerCore {
             message.put("type", "response");
             message.put("content", content);
             message.put("sessionId", sessionId);
-            
+
             // 使用广播方式发送，前端通过sessionId过滤
             messagingTemplate.convertAndSend("/topic/reply", message);
             log.info("Sent response to sessionId {}: {}", sessionId, content);
@@ -830,13 +965,13 @@ public class TravelingControllerCore {
         CompletableFuture.runAsync(() -> {
             String sessionId = form.getSessionId();
             updateSessionAccess(sessionId);
-            
+
             try {
                 log.info("Processing form submission - sessionId: {}, userEmail: {}", sessionId, userEmail);
-                
+
                 // 将表单转换为结构化意图
                 TravelIntentResult intentResult = TravelIntentResult.fromForm(form);
-                
+
                 // 更新状态
                 CompiledGraph<MainGraphState> graph = compiledGraphCache.get(sessionId);
                 if (graph == null) {
@@ -844,54 +979,54 @@ public class TravelingControllerCore {
                     sendError(sessionId, "错误：未找到会话状态，请重新开始对话");
                     return;
                 }
-                
+
                 RunnableConfig runnableConfig = RunnableConfig.builder()
                         .threadId(sessionId)
                         .build();
-                
+
                 StateSnapshot<MainGraphState> stateSnapshot = graph.getState(runnableConfig);
-                
+
                 // 构建用户输入摘要（用于对话历史）
-                String formSummary = String.format("用户通过表单提交了旅游规划信息：目的地=%s，天数=%s，人数=%s", 
+                String formSummary = String.format("用户通过表单提交了旅游规划信息：目的地=%s，天数=%s，人数=%s",
                     form.getDestination(), form.getDays(), form.getPeopleCount());
-                
+
                 // 更新状态
                 Map<String, Object> updateData = new HashMap<>();
                 updateData.put("messages", UserMessage.from(formSummary));
                 updateData.put("method", "form_input");
                 updateData.put("formInputRequired", false);
                 updateData.put("preprocessorStructuredIntent", intentResult);
-                
+
                 // 更新用户查询历史
                 MainGraphState currentState = stateSnapshot.state();
                 List<String> userQueryHistory = currentState.getUserQueryHistory();
                 userQueryHistory.add(formSummary);
                 updateData.put("userQueryHistory", userQueryHistory);
-                
+
                 // 更新状态并获取新的配置
                 RunnableConfig newConfig = graph.updateState(stateSnapshot.config(), updateData);
-                
+
                 // 从打断点恢复执行（会回到preprocessor继续处理）
                 AsyncGenerator<NodeOutput<MainGraphState>> messages = graph.stream(null, newConfig);
-                
+
                 // 处理流式响应
                 String finalResponse = "";
                 boolean needsUserInput = false;
                 String userInputPrompt = "";
-                
+
                 for (NodeOutput<MainGraphState> output : messages) {
                     MainGraphState state = output.state();
-                    
+
                     // 检查是否需要用户输入
-                    if (state.getValue("userInputRequired").isPresent() && 
+                    if (state.getValue("userInputRequired").isPresent() &&
                         (Boolean) state.getValue("userInputRequired").get()) {
                         needsUserInput = true;
-                        userInputPrompt = state.getValue("subgraphTaskDescription").isPresent() ? 
-                            (String) state.getValue("subgraphTaskDescription").get() : 
+                        userInputPrompt = state.getValue("subgraphTaskDescription").isPresent() ?
+                            (String) state.getValue("subgraphTaskDescription").get() :
                             "需要您提供更多信息以继续...";
                         break;
                     }
-                    
+
                     // 检查是否需要表单输入
                     if (state.isFormInputRequired()) {
                         Map<String, Object> formSchema = state.getFormSchema().orElse(new HashMap<>());
@@ -899,7 +1034,7 @@ public class TravelingControllerCore {
                         sendFormInputRequest(sessionId, formPrompt, formSchema);
                         return;
                     }
-                    
+
                     // 收集最终响应
                     if (state.getFinalResponse().isPresent()) {
                         finalResponse = state.getFinalResponse().get();
@@ -907,16 +1042,16 @@ public class TravelingControllerCore {
                         state.clearFinalResponse();
                     }
                 }
-                
+
                 // 根据情况发送消息
                 if (needsUserInput) {
                     sendUserInputRequest(sessionId, userInputPrompt);
                 } else if (!finalResponse.isEmpty()) {
                     sendResponse(sessionId, finalResponse);
                 }
-                
+
                 log.info("Form submission processed for sessionId: {}", sessionId);
-                
+
             } catch (Exception e) {
                 log.error("Error processing form submission", e);
                 sendError(sessionId, "处理表单提交时发生错误: " + e.getMessage());
@@ -935,7 +1070,7 @@ public class TravelingControllerCore {
             message.put("title", "请完善行程关键信息");
             message.put("description", prompt);
             message.put("schema", schema);
-            
+
             // 使用广播方式发送，前端通过sessionId过滤
             messagingTemplate.convertAndSend("/topic/reply", message);
             log.info("Sent form input request to sessionId {}: {}", sessionId, prompt);
@@ -953,7 +1088,7 @@ public class TravelingControllerCore {
             message.put("type", "userInputRequired");
             message.put("prompt", prompt);
             message.put("sessionId", sessionId);
-            
+
             // 使用广播方式发送，前端通过sessionId过滤
             messagingTemplate.convertAndSend("/topic/reply", message);
             log.info("Sent user input request to sessionId {}: {}", sessionId, prompt);
@@ -971,7 +1106,7 @@ public class TravelingControllerCore {
             message.put("type", "error");
             message.put("error", error);
             message.put("sessionId", sessionId);
-            
+
             // 使用广播方式发送，前端通过sessionId过滤
             messagingTemplate.convertAndSend("/topic/error", message);
             log.info("Sent error to sessionId {}: {}", sessionId, error);
@@ -980,6 +1115,83 @@ public class TravelingControllerCore {
         }
     }
 
+    /**
+     * 判断执行模式
+     */
+    private String determineExecutionMode(int toolCount) {
+        // 根据工具数量和配置判断
+        if (parallelExecutionConfig != null &&
+            parallelExecutionConfig.isEnabled() &&
+            toolCount >= parallelExecutionConfig.getMinToolsForParallel()) {
+            return "parallel";
+        }
+        return "sequential";
+    }
+
+    /**
+     * 从结果中提取错误信息
+     */
+    private String extractErrorMessage(String result) {
+        if (result == null || result.isEmpty()) {
+            return "未知错误";
+        }
+        if (result.startsWith("Error") || result.startsWith("错误")) {
+            return result;
+        }
+        // 尝试从结果中提取错误信息
+        if (result.contains("Exception") || result.contains("异常")) {
+            int start = Math.max(0, result.indexOf("Exception"));
+            return result.substring(Math.min(start, result.length() - 100));
+        }
+        return "工具执行失败";
+    }
+
+    /**
+     * 发送工具执行信息到前端
+     */
+    private void sendToolExecutionInfo(String sessionId, ToolExecutionInfo toolInfo) {
+        try {
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "toolExecution");
+            message.put("sessionId", sessionId);
+            message.put("data", toolInfo);
+
+            // 使用广播方式发送，前端通过sessionId过滤
+            messagingTemplate.convertAndSend("/topic/reply", message);
+            log.info("已发送工具执行信息到前端: sessionId={}, 工具数量={}", sessionId, toolInfo.getTotalTools());
+        } catch (Exception e) {
+            log.error("发送工具执行信息失败: sessionId={}", sessionId, e);
+        }
+    }
+    
+    /**
+     * 从工具执行请求中提取参数字符串
+     */
+    private String extractArgumentsFromRequest(ToolExecutionRequest request) {
+        if (request == null) {
+            return "{}";
+        }
+
+        Object argsObj = request.arguments();
+        if (argsObj == null) {
+            return "{}";
+        }
+
+        // 将参数对象转换为字符串
+        if (argsObj instanceof String) {
+            return (String) argsObj;
+        }
+
+        // 如果是Map或其他对象，转换为JSON字符串
+        try {
+            return com.alibaba.fastjson.JSONObject.toJSONString(argsObj);
+        } catch (Exception e) {
+            log.debug("参数转换失败，使用toString: {}", e.getMessage());
+            return String.valueOf(argsObj);
+        }
+    }
+
+    
     /**
      * 检查Qwen API状态
      */

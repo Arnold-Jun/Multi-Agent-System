@@ -262,34 +262,99 @@ class TravelingAgentApp {
             this.cleanupWebSocket();
             
             // 使用 SockJS 和 STOMP
-            // 自动检测当前页面的端口
-            const protocol = window.location.protocol;
-            const hostname = window.location.hostname;
-            const port = window.location.port || (protocol === 'https:' ? '443' : '80');
+            // 智能检测端口：如果页面是从服务器加载的，使用当前端口；否则使用配置的端口
+            const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+            const hostname = window.location.hostname || 'localhost';
+            
+            // 如果是 file:// 协议或者没有端口，使用默认端口 8085
+            let port;
+            if (window.location.protocol === 'file:' || !window.location.port) {
+                port = '8085'; // 使用应用配置的端口
+            } else {
+                port = window.location.port; // 使用当前页面端口
+            }
+            
             const wsUrl = `${protocol}//${hostname}:${port}/ws`;
             
+            console.log('=== WebSocket 连接信息 ===');
             console.log('WebSocket连接URL:', wsUrl);
+            console.log('当前页面协议:', window.location.protocol);
+            console.log('当前页面主机:', window.location.hostname);
+            console.log('当前页面端口:', window.location.port);
+            console.log('使用的端口:', port);
+            console.log('========================');
+            
+            // 检查 SockJS 是否已加载
+            if (typeof SockJS === 'undefined') {
+                console.error('❌ SockJS 未加载！请检查 CDN 连接');
+                this.updateConnectionStatus(false);
+                return;
+            }
+            
+            // 检查 Stomp 是否已加载
+            if (typeof Stomp === 'undefined') {
+                console.error('❌ Stomp 未加载！请检查 CDN 连接');
+                this.updateConnectionStatus(false);
+                return;
+            }
+            
+            console.log('✅ SockJS 和 Stomp 库已加载');
             const socket = new SockJS(wsUrl);
             this.stompClient = Stomp.over(socket);
+            
+            // 添加 socket 事件监听，用于诊断
+            socket.onopen = function() {
+                console.log('✅ SockJS socket 已打开');
+            };
+            
+            socket.onmessage = function(e) {
+                console.log('📨 SockJS 收到原始消息:', e.data);
+            };
+            
+            socket.onclose = function(e) {
+                console.log('❌ SockJS socket 已关闭:', e.code, e.reason);
+                console.log('关闭原因:', e.wasClean ? '正常关闭' : '异常关闭');
+            };
+            
+            socket.onerror = function(error) {
+                console.error('❌ SockJS socket 错误:', error);
+                console.error('错误详情:', error.type, error.target);
+            };
             
             // 启用调试日志（临时）
             this.stompClient.debug = function(str) {
                 console.log('STOMP Debug:', str);
             };
             
-            // 设置连接选项
-            const connectOptions = {
-                timeout: 10000, // 10秒超时
-                heartbeat_in: 0,
-                heartbeat_out: 20000,
-                debug: true
-            };
+            // 设置心跳
+            this.stompClient.heartbeat.outgoing = 20000; // 客户端发送心跳间隔 20秒
+            this.stompClient.heartbeat.incoming = 0;     // 不接收服务器心跳
             
             // 连接 WebSocket
             this.connectionCounter++;
             console.log(`🔗 第${this.connectionCounter}次WebSocket连接尝试`);
+            console.log('⏳ 正在连接，请稍候...');
             
-            this.stompClient.connect(connectOptions, (frame) => {
+            // 设置连接超时（10秒）
+            const connectTimeout = setTimeout(() => {
+                if (!this.connected) {
+                    console.error('⏱️ 连接超时（10秒），可能的原因：');
+                    console.error('  1. 后端服务未启动');
+                    console.error('  2. WebSocket端点配置错误');
+                    console.error('  3. 端口被防火墙阻止');
+                    console.error('  4. 跨域问题');
+                    this.connected = false;
+                    this.updateConnectionStatus(false);
+                    
+                    // 尝试重新连接
+                    console.log('🔄 将尝试重新连接...');
+                    this.scheduleReconnect();
+                }
+            }, 10000);
+            
+            // STOMP connect 方法签名: connect(headers, connectCallback, errorCallback)
+            this.stompClient.connect({}, (frame) => {
+                clearTimeout(connectTimeout);
                 console.log(`✅ WebSocket 连接成功 (第${this.connectionCounter}次):`, frame);
                 this.connected = true;
                 this.reconnectAttempts = 0; // 重置重连次数
@@ -346,7 +411,20 @@ class TravelingAgentApp {
                 });
                 
             }, (error) => {
-                console.error('WebSocket 连接失败:', error);
+                clearTimeout(connectTimeout);
+                console.error('❌ WebSocket 连接失败:');
+                console.error('错误对象:', error);
+                console.error('错误类型:', typeof error);
+                console.error('错误信息:', error?.toString ? error.toString() : JSON.stringify(error));
+                
+                // 打印详细的错误信息
+                if (error.headers) {
+                    console.error('错误头信息:', error.headers);
+                }
+                if (error.body) {
+                    console.error('错误体:', error.body);
+                }
+                
                 this.connected = false;
                 this.updateConnectionStatus(false);
                 
@@ -445,34 +523,96 @@ class TravelingAgentApp {
             console.log('✅ WebSocket 连接状态更新为：已连接');
         } else {
             statusDot.className = 'status-dot offline';
-            statusText.textContent = 'WebSocket 连接失败';
+            statusText.textContent = '连接失败 - 点击WiFi图标诊断';
             console.log('❌ WebSocket 连接状态更新为：连接失败');
         }
     }
 
     // 添加WebSocket连接测试方法
-    testWebSocketConnection() {
-        console.log('🔍 开始测试 WebSocket 连接...');
+    async testWebSocketConnection() {
+        console.log('🧪 ========== 开始诊断 WebSocket 连接 ==========');
         
-        if (!this.stompClient) {
-            console.log('❌ STOMP 客户端未初始化');
-            return false;
-        }
+        // 1. 测试后端服务是否可访问
+        const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+        const hostname = window.location.hostname || 'localhost';
+        const port = window.location.port || '8085';
+        const baseUrl = `${protocol}//${hostname}:${port}`;
+        const healthUrl = `${baseUrl}/actuator/health`;
         
-        if (!this.connected) {
-            console.log('❌ WebSocket 未连接');
-            return false;
-        }
+        console.log('📍 测试目标:', baseUrl);
+        console.log('🔍 健康检查URL:', healthUrl);
         
         try {
-            // 发送ping测试
-            this.stompClient.send('/app/traveling/ping', {}, 'ping');
-            console.log('✅ Ping 消息已发送');
-            return true;
+            console.log('正在检查后端服务...');
+            const response = await fetch(healthUrl, {
+                method: 'GET',
+                cache: 'no-cache',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ 后端服务正常运行');
+                console.log('健康状态:', data);
+            } else {
+                console.error('❌ 后端服务响应异常:', response.status, response.statusText);
+                alert(`后端服务响应异常 (${response.status})\n请检查应用是否正常启动在端口 ${port}`);
+                return false;
+            }
         } catch (error) {
-            console.error('❌ Ping 测试失败:', error);
+            console.error('❌ 无法连接到后端服务:', error.message);
+            alert(`无法连接到后端服务！\n\n` + 
+                  `请检查:\n` + 
+                  `1. 应用是否已启动\n` + 
+                  `2. 端口是否正确: ${port}\n` + 
+                  `3. URL: ${baseUrl}\n\n` +
+                  `错误: ${error.message}`);
             return false;
         }
+        
+        // 2. 检查当前WebSocket状态
+        console.log('\n📊 当前WebSocket状态:');
+        console.log('  - 已连接:', this.connected);
+        console.log('  - STOMP客户端存在:', !!this.stompClient);
+        console.log('  - 重连次数:', this.reconnectAttempts);
+        
+        // 3. 如果未连接，尝试重新连接
+        if (!this.connected) {
+            console.log('\n🔄 尝试重新建立连接...');
+            this.cleanupWebSocket();
+            this.reconnectAttempts = 0; // 重置重连次数
+            this.initWebSocket();
+            
+            // 等待3秒检查连接结果
+            setTimeout(() => {
+                if (this.connected) {
+                    console.log('✅ 重连成功！');
+                    alert('WebSocket 连接已恢复！');
+                } else {
+                    console.error('❌ 重连失败');
+                    alert('WebSocket 重连失败\n请查看浏览器控制台了解详情');
+                }
+            }, 3000);
+        } else {
+            // 已连接，发送ping测试
+            try {
+                this.stompClient.send('/app/traveling/ping', {}, 'ping');
+                console.log('✅ Ping 消息已发送');
+                alert('WebSocket 连接正常！');
+                return true;
+            } catch (error) {
+                console.error('❌ Ping 测试失败:', error);
+                alert('WebSocket 连接异常\n正在尝试重新连接...');
+                this.cleanupWebSocket();
+                this.initWebSocket();
+                return false;
+            }
+        }
+        
+        console.log('========== 诊断结束 ==========\n');
+        return true;
     }
 
     handleWebSocketMessage(message) {
@@ -504,16 +644,82 @@ class TravelingAgentApp {
         }
         
         if (message.type === 'response') {
+            // 保留工具执行容器，只更新状态标签为"已完成"
+            const thinkingContainer = document.querySelector('.agent-thinking-container');
+            if (thinkingContainer) {
+                const thinkingLabel = thinkingContainer.querySelector('.thinking-label');
+                if (thinkingLabel) {
+                    // 停止旋转动画，更新为"已完成"
+                    thinkingLabel.innerHTML = '<i class="fas fa-check-circle" style="color: #10b981;"></i><span style="color: #10b981;">思考完成</span>';
+                    
+                    // 确保容器在更新后保持可见，不会向上移动覆盖其他内容
+                    thinkingContainer.style.position = 'relative';
+                    thinkingContainer.style.marginBottom = '16px';
+                }
+            }
+            
             // 处理智能体回复
             this.addMessage(message.content, 'agent');
             this.parseSpecialContent(message.content);
             this.saveToHistory(this.lastUserMessage, message.content);
+            
+            // 确保滚动到最新消息
+            const messagesContainer = document.getElementById('messagesContainer');
+            if (messagesContainer) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
             
             // 检查是否需要用户输入
             if (this.checkForUserInputRequest(message.content)) {
                 this.handleUserInputRequest(message.content);
                 return; // 不停止加载状态，等待用户输入
             }
+            
+            // 保留思考容器和工具执行信息，不删除
+            // 工具执行历史会一直保留在界面上，直到开始新对话
+        } else if (message.type === 'toolExecution') {
+            // 确保思考容器存在（通用设计）
+            const messagesContainer = document.getElementById('messagesContainer');
+            let thinkingContainer = messagesContainer.querySelector('.agent-thinking-container');
+            if (!thinkingContainer) {
+                console.log('⚠️ 思考容器不存在，创建新的');
+                thinkingContainer = this.createThinkingContainer();
+                messagesContainer.appendChild(thinkingContainer);
+            }
+            
+            // 显示工具执行信息在思考容器中
+            this.handleToolExecution(message.data);
+            
+            // 检查是否有工具正在执行
+            const hasExecuting = message.data && message.data.toolExecutions && 
+                                message.data.toolExecutions.some(tool => tool.executing);
+            
+            if (!hasExecuting) {
+                // 工具执行完成，更新思考标签为"正在处理结果"
+                const thinkingContainer = document.querySelector('.agent-thinking-container');
+                if (thinkingContainer) {
+                    const thinkingLabel = thinkingContainer.querySelector('.thinking-label');
+                    if (thinkingLabel) {
+                        thinkingLabel.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>正在处理工具执行结果...</span>';
+                    }
+                    // 确保滚动位置正确
+                    const messagesContainer = document.getElementById('messagesContainer');
+                    if (messagesContainer) {
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    }
+                }
+            } else {
+                // 工具开始执行，更新思考标签为"正在执行工具"
+                const thinkingContainer = document.querySelector('.agent-thinking-container');
+                if (thinkingContainer) {
+                    const thinkingLabel = thinkingContainer.querySelector('.thinking-label');
+                    if (thinkingLabel) {
+                        thinkingLabel.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>正在执行工具...</span>';
+                    }
+                }
+            }
+            
+            return; // 不停止加载状态，继续等待后续消息
         } else if (message.type === 'userInputRequired') {
             // 处理用户输入请求
             this.handleUserInputRequest(message.prompt);
@@ -538,8 +744,32 @@ class TravelingAgentApp {
         const content = message.content || message.prompt || message.error || '';
         const type = message.type || 'unknown';
         const sessionId = message.sessionId || this.currentSessionId;
+        const timestamp = message.timestamp || Date.now();
         
-        // 使用更简单的指纹生成方式
+        // 特殊处理 toolExecution 消息：使用批次ID和执行状态来区分
+        if (type === 'toolExecution' && message.data) {
+            const batchId = message.data.batchId || 'no-batch';
+            const hasExecuting = message.data.toolExecutions && 
+                                message.data.toolExecutions.some(tool => tool.executing);
+            const executingState = hasExecuting ? 'executing' : 'completed';
+            const fingerprint = `${type}_${sessionId}_${batchId}_${executingState}`;
+            return fingerprint;
+        }
+        
+        // 对于 response 类型的消息，使用完整内容的哈希值来避免误判重复
+        if (type === 'response') {
+            // 使用完整内容生成哈希值（简单的字符串哈希）
+            let hash = 0;
+            for (let i = 0; i < content.length; i++) {
+                const char = content.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            const fingerprint = `${type}_${sessionId}_${timestamp}_${hash}`;
+            return fingerprint;
+        }
+        
+        // 其他类型的消息使用原有逻辑
         const fingerprint = `${type}_${sessionId}_${content.length}_${content.substring(0, 50)}`;
         return fingerprint;
     }
@@ -561,9 +791,18 @@ class TravelingAgentApp {
         
         const message = messageInput.value.trim();
         
-        if (!message || this.isLoading || !this.connected) {
-            if (!this.connected) {
-                this.addMessage('WebSocket 连接未建立，请稍后重试', 'agent');
+        if (!message || this.isLoading) {
+            return;
+        }
+        
+        // 检查WebSocket连接状态
+        if (!this.connected) {
+            console.error('❌ WebSocket 未连接，无法发送消息');
+            alert('WebSocket 连接未建立！\n\n请点击左侧WiFi图标进行诊断，或等待连接自动恢复。');
+            // 尝试重新连接
+            if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                console.log('🔄 自动尝试重新连接...');
+                this.initWebSocket();
             }
             return;
         }
@@ -573,7 +812,10 @@ class TravelingAgentApp {
         this.lastUserMessage = message; // 保存用户消息用于历史记录
         messageInput.value = '';
         messageInput.style.height = 'auto';
-
+        
+        // 立即显示"正在思考中"容器（通用设计）
+        this.showThinkingContainer();
+        
         // 显示加载状态
         this.setLoading(true);
 
@@ -962,6 +1204,9 @@ class TravelingAgentApp {
         this.setLoading(true);
         this.addMessage(`已提交表单：目的地=${formPayload.destination}，天数=${formPayload.days || '未指定'}，人数=${formPayload.peopleCount}人`, 'user');
         
+        // 立即显示"正在思考中"容器（通用设计）
+        this.showThinkingContainer();
+        
         // 发送表单数据到后端
         try {
             this.sendWebSocketMessage('/app/traveling/form/submit', {
@@ -982,21 +1227,23 @@ class TravelingAgentApp {
         console.log(`💬 添加消息 - 发送者: ${sender}, 内容长度: ${content.length}`);
         console.log(`💬 消息内容预览: ${content.substring(0, 100)}...`);
         
-        // 检查是否与最后一条消息重复
-        const messagesContainer = document.getElementById('messagesContainer');
-        const lastMessage = messagesContainer.lastElementChild;
-        
-        if (lastMessage && lastMessage.classList.contains(`${sender}-message`)) {
-            const lastMessageText = lastMessage.querySelector('.message-text');
-            if (lastMessageText) {
-                const lastContent = lastMessageText.textContent || lastMessageText.innerText || '';
-                const currentContent = content.replace(/\s+/g, ' ').trim();
-                const lastContentNormalized = lastContent.replace(/\s+/g, ' ').trim();
-                
-                if (currentContent === lastContentNormalized || 
-                    (currentContent.length > 20 && lastContentNormalized.includes(currentContent.substring(0, 20)))) {
-                    console.log('❌ 检测到重复消息，跳过添加');
-                    return;
+        // 只对用户消息进行严格的去重检查
+        // 智能体消息不进行去重，因为每条响应都应该显示
+        if (sender === 'user') {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const lastMessage = messagesContainer.lastElementChild;
+            
+            if (lastMessage && lastMessage.classList.contains('user-message')) {
+                const lastMessageText = lastMessage.querySelector('.message-text');
+                if (lastMessageText) {
+                    const lastContent = lastMessageText.textContent || lastMessageText.innerText || '';
+                    const currentContent = content.replace(/\s+/g, ' ').trim();
+                    const lastContentNormalized = lastContent.replace(/\s+/g, ' ').trim();
+                    
+                    if (currentContent === lastContentNormalized) {
+                        console.log('❌ 检测到重复的用户消息，跳过添加');
+                        return;
+                    }
                 }
             }
         }
@@ -1129,17 +1376,20 @@ class TravelingAgentApp {
         return formatted;
     }
 
-    setLoading(loading) {
+    setLoading(loading, progressText = '智能体正在思考中...') {
         this.isLoading = loading;
-        const loadingOverlay = document.getElementById('loadingOverlay');
         const sendBtn = document.getElementById('sendBtn');
         const messageInput = document.getElementById('messageInput');
         
         if (loading) {
-            loadingOverlay.classList.add('show');
+            // 不显示单独的思考消息，等待工具执行容器
+            // this.showThinkingMessage(progressText);
+            
+            // 禁用发送按钮
             sendBtn.disabled = true;
             sendBtn.style.cursor = 'not-allowed';
             sendBtn.style.opacity = '0.6';
+            
             // 如果输入框没有被禁用（表单场景），则禁用输入框
             if (!messageInput.disabled) {
                 messageInput.disabled = true;
@@ -1147,7 +1397,9 @@ class TravelingAgentApp {
                 messageInput.style.opacity = '0.6';
             }
         } else {
-            loadingOverlay.classList.remove('show');
+            // 移除思考中的消息
+            this.hideThinkingMessage();
+            
             // 只有在输入框没有被外部禁用（如表单场景）时才启用
             if (!messageInput.hasAttribute('data-form-disabled')) {
                 sendBtn.disabled = false;
@@ -1157,6 +1409,63 @@ class TravelingAgentApp {
                 messageInput.style.cursor = 'text';
                 messageInput.style.opacity = '1';
             }
+        }
+    }
+    
+    /**
+     * 显示思考中的消息
+     */
+    showThinkingMessage(text = '智能体正在思考中...') {
+        // 先移除已存在的思考消息
+        this.hideThinkingMessage();
+        
+        const messagesContainer = document.getElementById('messagesContainer');
+        const thinkingBubble = document.createElement('div');
+        thinkingBubble.className = 'message agent-message thinking-message';
+        thinkingBubble.id = 'thinkingMessage';
+        
+        const currentTime = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+        
+        thinkingBubble.innerHTML = `
+            <div class="message-avatar">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="sender-name">旅游智能体</span>
+                    <span class="message-time">${currentTime}</span>
+                </div>
+                <div class="message-text thinking-content">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <span>${text}</span>
+                </div>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(thinkingBubble);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    /**
+     * 更新思考消息的文本
+     */
+    updateThinkingMessage(text) {
+        const thinkingMessage = document.getElementById('thinkingMessage');
+        if (thinkingMessage) {
+            const textSpan = thinkingMessage.querySelector('.thinking-content span');
+            if (textSpan) {
+                textSpan.textContent = text;
+            }
+        }
+    }
+    
+    /**
+     * 隐藏思考中的消息
+     */
+    hideThinkingMessage() {
+        const thinkingMessage = document.getElementById('thinkingMessage');
+        if (thinkingMessage) {
+            thinkingMessage.remove();
         }
     }
 
@@ -1195,6 +1504,7 @@ class TravelingAgentApp {
         this.messageHistory = [];
         this.waitingForUserInput = false; // 重置用户输入状态
         this.userInputPrompt = '';
+        this.isLoading = false; // 重置加载状态
         
         // 清理已处理消息集合，避免跨会话消息干扰
         this.processedMessages.clear();
@@ -1203,12 +1513,33 @@ class TravelingAgentApp {
         const messagesContainer = document.getElementById('messagesContainer');
         messagesContainer.innerHTML = '';
         
+        // 清理可能残留的思考容器和工具执行容器（双重保险）
+        const existingThinkingContainer = document.querySelector('.agent-thinking-container');
+        if (existingThinkingContainer) {
+            existingThinkingContainer.remove();
+        }
+        
+        // 清理可能残留的思考消息
+        const existingThinkingMessage = document.getElementById('thinkingMessage');
+        if (existingThinkingMessage) {
+            existingThinkingMessage.remove();
+        }
+        
         // 重新创建欢迎消息
         this.createWelcomeMessage();
         
         // 重置输入框
         const messageInput = document.getElementById('messageInput');
         messageInput.placeholder = '请描述您的旅游需求，例如：我想去日本旅游7天，预算1万元...';
+        messageInput.disabled = false;
+        messageInput.style.opacity = '1';
+        messageInput.style.cursor = 'text';
+        
+        // 重置发送按钮
+        const sendBtn = document.getElementById('sendBtn');
+        sendBtn.disabled = false;
+        sendBtn.style.cursor = 'pointer';
+        sendBtn.style.opacity = '1';
         
         // 清空当前会话的临时存储
         this.clearCurrentSessionCache();
@@ -1218,6 +1549,11 @@ class TravelingAgentApp {
         
         // 显示提示
         this.showNotification('新对话已开始', 'success');
+        
+        // 确保滚动到底部
+        setTimeout(() => {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 100);
     }
 
     showSettingsModal() {
@@ -1735,6 +2071,353 @@ class TravelingAgentApp {
     }
 
     // 解析智能体回复中的特殊内容
+    /**
+     * 处理工具执行信息
+     * @param {Object} toolInfo 工具执行信息对象
+     */
+    handleToolExecution(toolInfo) {
+        console.log('🔧 收到工具执行信息:', toolInfo);
+        console.log('   批次ID:', toolInfo.batchId);
+        console.log('   当前会话ID:', this.currentSessionId);
+        
+        const messagesContainer = document.getElementById('messagesContainer');
+        if (!messagesContainer) {
+            console.error('❌ 找不到消息容器');
+            return;
+        }
+        
+        // 检查是否有工具正在执行
+        const hasExecuting = toolInfo.toolExecutions && toolInfo.toolExecutions.some(tool => tool.executing);
+        console.log('工具执行状态 - hasExecuting:', hasExecuting);
+        
+        // 查找所有思考容器，使用最后一个（最新的）
+        const allThinkingContainers = messagesContainer.querySelectorAll('.agent-thinking-container');
+        let thinkingContainer = allThinkingContainers.length > 0 ? 
+                                allThinkingContainers[allThinkingContainers.length - 1] : null;
+        
+        if (!thinkingContainer) {
+            console.log('✨ 创建新的思考容器');
+            thinkingContainer = this.createThinkingContainer();
+            messagesContainer.appendChild(thinkingContainer);
+        } else {
+            console.log('📦 使用最新的思考容器 (共' + allThinkingContainers.length + '个)');
+        }
+        
+        const toolList = thinkingContainer.querySelector('.tool-execution-list');
+        if (!toolList) {
+            console.error('❌ 找不到工具执行列表');
+            return;
+        }
+        
+        // 为每个工具创建独立的项
+        toolInfo.toolExecutions.forEach((tool, index) => {
+            const toolItemId = toolInfo.batchId ? `${toolInfo.batchId}_${index}` : `tool_${Date.now()}_${index}`;
+            let existingToolItem = toolList.querySelector(`[data-tool-id="${toolItemId}"]`);
+            
+            if (hasExecuting && !existingToolItem) {
+                // 执行前：创建新的工具执行项（显示转圈）
+                console.log(`✨ 创建新的工具执行项: ${tool.toolName} (转圈状态)`);
+                const toolItemHtml = this.createSingleToolItem(tool, toolItemId);
+                toolList.insertAdjacentHTML('beforeend', toolItemHtml);
+            } else if (!hasExecuting && existingToolItem) {
+                // 执行后：更新已有的工具执行项（显示结果）
+                console.log(`🔄 更新工具执行项: ${tool.toolName} (显示结果)`);
+                const toolItemHtml = this.createSingleToolItem(tool, toolItemId);
+                existingToolItem.outerHTML = toolItemHtml;
+            } else if (!hasExecuting && !existingToolItem) {
+                // 兼容处理：如果工具已完成但项不存在，创建新项
+                console.log(`✨ 创建已完成工具执行项: ${tool.toolName} (显示结果)`);
+                const toolItemHtml = this.createSingleToolItem(tool, toolItemId);
+                toolList.insertAdjacentHTML('beforeend', toolItemHtml);
+            }
+        });
+        
+        // 滚动到底部（使用已声明的 messagesContainer）
+        if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    }
+    
+    /**
+     * 显示思考容器（通用方法，在发送消息后立即调用）
+     */
+    showThinkingContainer() {
+        const messagesContainer = document.getElementById('messagesContainer');
+        if (!messagesContainer) return;
+        
+        // 检查是否已存在思考容器
+        let existingThinkingContainer = messagesContainer.querySelector('.agent-thinking-container');
+        
+        if (existingThinkingContainer) {
+            console.log('📦 已存在思考容器，检查状态');
+            
+            // 检查思考容器是否已完成（显示"思考完成"）
+            const thinkingLabel = existingThinkingContainer.querySelector('.thinking-label');
+            if (thinkingLabel && thinkingLabel.textContent.includes('思考完成')) {
+                console.log('✨ 之前的思考已完成，创建新的思考容器');
+                // 创建新的思考容器，保留旧的
+                const newThinkingContainer = this.createThinkingContainer();
+                messagesContainer.appendChild(newThinkingContainer);
+            } else {
+                console.log('♻️ 重置现有思考容器状态');
+                // 如果还在思考中或执行工具中，重置为"正在思考中"
+                if (thinkingLabel) {
+                    thinkingLabel.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>正在思考中...</span>';
+                }
+            }
+        } else {
+            console.log('✨ 创建新的思考容器');
+            const thinkingContainer = this.createThinkingContainer();
+            messagesContainer.appendChild(thinkingContainer);
+        }
+        
+        // 确保滚动到底部
+        setTimeout(() => {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 100);
+    }
+    
+    /**
+     * 隐藏思考容器（在收到最终响应后调用）
+     */
+    hideThinkingContainer() {
+        const thinkingContainer = document.querySelector('.agent-thinking-container');
+        if (thinkingContainer) {
+            thinkingContainer.remove();
+        }
+    }
+    
+    /**
+     * 创建"思考中"容器（统一容纳所有工具执行信息）
+     */
+    createThinkingContainer() {
+        const container = document.createElement('div');
+        container.className = 'message agent-message agent-thinking-container';
+        
+        const currentTime = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+        
+        container.innerHTML = `
+            <div class="message-avatar">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="sender-name">旅游智能体</span>
+                    <span class="message-time">${currentTime}</span>
+                </div>
+                <div class="message-text thinking-content">
+                    <div class="thinking-label">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>正在思考中...</span>
+                    </div>
+                    <div class="tool-execution-list">
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        return container;
+    }
+    
+    /**
+     * 创建单个工具项的HTML
+     */
+    createSingleToolItem(tool, toolItemId) {
+        // 根据执行状态显示不同的图标
+        let statusIcon, statusClass;
+        if (tool.executing) {
+            statusIcon = '<i class="fas fa-circle-notch fa-spin"></i>';
+            statusClass = 'executing';
+        } else if (tool.success) {
+            statusIcon = '<i class="fas fa-check-circle" style="color: #10b981;"></i>'; // 绿色勾选
+            statusClass = 'success';
+        } else {
+            statusIcon = '<i class="fas fa-times-circle" style="color: #ef4444;"></i>';
+            statusClass = 'failed';
+        }
+        
+        // 格式化参数显示
+        let argumentsDisplay = '无参数';
+        if (tool.arguments) {
+            try {
+                const argsObj = JSON.parse(tool.arguments);
+                argumentsDisplay = JSON.stringify(argsObj, null, 2);
+                if (argumentsDisplay.length > 200) {
+                    argumentsDisplay = argumentsDisplay.substring(0, 200) + '...';
+                }
+            } catch (e) {
+                argumentsDisplay = tool.arguments.length > 200 
+                    ? tool.arguments.substring(0, 200) + '...' 
+                    : tool.arguments;
+            }
+        }
+        
+        return `
+            <div class="tool-execution-item ${statusClass}" data-tool-id="${toolItemId}">
+                <div class="tool-header" onclick="this.parentElement.classList.toggle('expanded')">
+                    <div class="tool-main-info">
+                        <span class="tool-status-icon">${statusIcon}</span>
+                        <span class="tool-label">执行工具：</span>
+                        <span class="tool-name">${this.escapeHtml(tool.toolName)}</span>
+                    </div>
+                    <i class="fas fa-chevron-down tool-expand-icon"></i>
+                </div>
+                <div class="tool-details">
+                    <div class="tool-detail-section">
+                        <div class="detail-label"><i class="fas fa-code"></i> 参数</div>
+                        <div class="detail-content code-block">${this.escapeHtml(argumentsDisplay)}</div>
+                    </div>
+                    ${tool.executing ? `
+                        <div class="tool-detail-section">
+                            <div class="detail-label"><i class="fas fa-spinner fa-spin"></i> 状态</div>
+                            <div class="detail-content">
+                                <span class="executing-text">正在执行中...</span>
+                            </div>
+                        </div>
+                    ` : tool.success ? `
+                        <div class="tool-detail-section">
+                            <div class="detail-label"><i class="fas fa-check"></i> 结果</div>
+                            <div class="detail-content result-text">
+                                ${this.formatResult(tool.result)}
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="tool-detail-section">
+                            <div class="detail-label"><i class="fas fa-exclamation-triangle"></i> 错误</div>
+                            <div class="detail-content error-text">${this.escapeHtml(tool.errorMessage || tool.result || '未知错误')}</div>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * 创建工具执行可视化组件
+     * @param {Object} toolInfo 工具执行信息
+     * @return {HTMLElement} 工具执行组件元素
+     */
+    createToolExecutionWidget(toolInfo) {
+        const widget = document.createElement('div');
+        widget.className = 'tool-execution-widget';
+        
+        const executionMode = toolInfo.executionMode === 'parallel' ? '并行执行' : '串行执行';
+        const modeIcon = toolInfo.executionMode === 'parallel' ? '⚡' : '➡️';
+        
+        // 构建工具列表HTML
+        const toolsListHtml = toolInfo.toolExecutions.map((tool, index) => {
+            // 根据执行状态显示不同的图标
+            let statusIcon, statusClass;
+            if (tool.executing) {
+                statusIcon = '<i class="fas fa-circle-notch fa-spin"></i>';
+                statusClass = 'executing';
+            } else if (tool.success) {
+                statusIcon = '<i class="fas fa-check-circle" style="color: #10b981;"></i>'; // 绿色勾选
+                statusClass = 'success';
+            } else {
+                statusIcon = '<i class="fas fa-times-circle"></i>';
+                statusClass = 'failed';
+            }
+            
+            // 格式化参数显示
+            let argumentsDisplay = '无参数';
+            if (tool.arguments) {
+                try {
+                    const argsObj = JSON.parse(tool.arguments);
+                    argumentsDisplay = JSON.stringify(argsObj, null, 2);
+                    if (argumentsDisplay.length > 200) {
+                        argumentsDisplay = argumentsDisplay.substring(0, 200) + '...';
+                    }
+                } catch (e) {
+                    argumentsDisplay = tool.arguments.length > 200 
+                        ? tool.arguments.substring(0, 200) + '...' 
+                        : tool.arguments;
+                }
+            }
+            
+            // 格式化结果显示（完整显示，不截断）
+            let resultDisplay = tool.result || '无结果';
+            
+            return `
+                <div class="tool-execution-item ${statusClass}" data-tool-index="${index}">
+                    <div class="tool-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="tool-main-info">
+                            <span class="tool-status-icon">${statusIcon}</span>
+                            <span class="tool-label">执行工具：</span>
+                            <span class="tool-name">${this.escapeHtml(tool.toolName)}</span>
+                        </div>
+                        <i class="fas fa-chevron-down tool-expand-icon"></i>
+                    </div>
+                    <div class="tool-details">
+                        <div class="tool-detail-section">
+                            <div class="detail-label"><i class="fas fa-code"></i> 参数</div>
+                            <div class="detail-content code-block">${this.escapeHtml(argumentsDisplay)}</div>
+                        </div>
+                        ${tool.executing ? `
+                            <div class="tool-detail-section">
+                                <div class="detail-label"><i class="fas fa-spinner fa-spin"></i> 状态</div>
+                                <div class="detail-content">
+                                    <span class="executing-text">正在执行中...</span>
+                                </div>
+                            </div>
+                        ` : tool.success ? `
+                            <div class="tool-detail-section">
+                                <div class="detail-label"><i class="fas fa-check"></i> 结果</div>
+                                <div class="detail-content result-text">
+                                    ${this.formatResult(tool.result)}
+                                </div>
+                            </div>
+                        ` : `
+                            <div class="tool-detail-section">
+                                <div class="detail-label"><i class="fas fa-exclamation-triangle"></i> 错误</div>
+                                <div class="detail-content error-text">${this.escapeHtml(tool.errorMessage || tool.result || '未知错误')}</div>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // 简化显示：只显示工具列表，删除标题行
+        widget.innerHTML = `
+            <div class="tool-execution-list">
+                ${toolsListHtml}
+            </div>
+        `;
+        
+        return widget;
+    }
+    
+    /**
+     * 转义HTML字符
+     */
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    /**
+     * 格式化工具执行结果
+     */
+    formatResult(result) {
+        if (!result) return '<span class="empty-result">无结果</span>';
+        
+        // 如果是JSON格式，尝试美化显示
+        if (result.trim().startsWith('{') || result.trim().startsWith('[')) {
+            try {
+                const parsed = JSON.parse(result);
+                return `<pre class="json-result">${this.escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`;
+            } catch (e) {
+                // 不是有效JSON，按普通文本处理
+            }
+        }
+        
+        // 普通文本，保留换行
+        return `<div class="text-result">${this.escapeHtml(result).replace(/\n/g, '<br>')}</div>`;
+    }
+
     parseSpecialContent(content) {
         // 检查是否包含旅游地图信息
         const mapMatch = content.match(/地图信息[：:](.*?)(?=\n\n|\n$|$)/s);
