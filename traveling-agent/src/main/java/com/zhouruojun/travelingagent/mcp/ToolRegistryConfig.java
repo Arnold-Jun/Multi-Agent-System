@@ -39,8 +39,8 @@ public class ToolRegistryConfig implements CommandLineRunner {
 //        toolRegistry.registerTool("search_locations", "preprocessor");
 //        toolRegistry.registerTool("search_flights", "preprocessor");
 //        toolRegistry.registerTool("search_hotels", "preprocessor");
-//        toolRegistry.registerTool("search_feeds", "preprocessor");
-//        toolRegistry.registerTool("get_feed_detail", "preprocessor");
+        toolRegistry.registerTool("search_feeds", "preprocessor");
+        toolRegistry.registerTool("get_feed_detail", "preprocessor");
 //        toolRegistry.registerTool("search_activities", "preprocessor");
 //        toolRegistry.registerTool("get_activity_details", "preprocessor");
 //
@@ -60,11 +60,21 @@ public class ToolRegistryConfig implements CommandLineRunner {
 //        toolRegistry.registerTool("airbnb_listing_details", "metaSearchAgent");
 
 
-        // ItineraryPlannerAgent - 行程规划智能体工具
-        toolRegistry.registerTool("maps_direction_driving", "itineraryPlannerAgent");
-        toolRegistry.registerTool("maps_direction_bicycling", "itineraryPlannerAgent");
-        toolRegistry.registerTool("maps_direction_transit_integrated", "itineraryPlannerAgent");
-        toolRegistry.registerTool("maps_direction_walking", "itineraryPlannerAgent");
+        // ItineraryPlannerAgent子图 - itineraryPlanner工具（制定方案需要查询详细信息）
+        toolRegistry.registerTool("maps_direction_driving", "itineraryPlanner");
+        toolRegistry.registerTool("maps_direction_bicycling", "itineraryPlanner");
+        toolRegistry.registerTool("maps_direction_transit_integrated", "itineraryPlanner");
+        toolRegistry.registerTool("maps_direction_walking", "itineraryPlanner");
+        toolRegistry.registerTool("search_flights", "itineraryPlanner");  // 查询具体日期的机票
+        toolRegistry.registerTool("search_hotels", "itineraryPlanner");   // 查询具体日期的酒店
+        toolRegistry.registerTool("search_locations", "itineraryPlanner"); // 查询地点详细信息
+        toolRegistry.registerTool("maps_search_detail", "itineraryPlanner"); // 查询景点详细信息
+        toolRegistry.registerTool("maps_weather", "itineraryPlanner");     // 查询天气（用于规划）
+        toolRegistry.registerTool("get_activity_details", "itineraryPlanner"); // 查询活动详细信息
+        toolRegistry.registerTool("maps_text_search", "itineraryPlanner"); // 文本搜索地点
+        toolRegistry.registerTool("maps_around_search", "itineraryPlanner"); // 周边搜索
+
+        // itinerarySupervisor不需要工具（只负责审查方案，不需要查询信息）
 
         // BookingAgent - 预订智能体工具
 //        toolRegistry.registerTool("get-current-date", "bookingAgent");

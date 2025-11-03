@@ -55,12 +55,15 @@ public class ToolExecutionHistory implements Serializable {
      * 添加单个工具执行记录（带耗时）
      */
     public void addRecord(String toolName, String result, long duration) {
+        addRecord(toolName, null, result, duration);
+    }
+    
+    /**
+     * 添加单个工具执行记录（带参数和耗时）
+     */
+    public void addRecord(String toolName, String arguments, String result, long duration) {
         int order = records.size() + 1;
-        ToolExecutionRecord record = new ToolExecutionRecord(
-            toolName, 
-            result, 
-            order
-        );
+        ToolExecutionRecord record = new ToolExecutionRecord(toolName, arguments, result, order);
         record.setDuration(duration);
         
         records.add(record);

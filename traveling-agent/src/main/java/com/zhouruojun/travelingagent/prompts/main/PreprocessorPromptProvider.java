@@ -122,6 +122,7 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 - **调用工具**：需要查询信息时，直接调用工具（如 maps_weather, search_locations 等）
                 - **next: "Finish"**：
                   - 简单任务已完成，直接回答用户（例如打招呼、能力说明、工具结果已完全满足）
+                  - **重要**：当使用工具结果回复时，必须充分利用工具返回的详细信息，给出详细、具体的回复，不要只是简单概括
                   - 严禁在复杂规划信息不足时使用 Finish（此种情况请使用 formInput）
                 - **next: "planner"**：复杂任务信息充足，进入完整规划流程
                   - output必须包含：目的地、时间、预算、偏好等完整信息
@@ -135,10 +136,11 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 
                 ## 路由示例
 
-                **使用Finish的情况：**
+                **使用Finish的情况（注意详细程度）：**
                 - 用户："你好" → next: "Finish", output: "你好！我是你的旅游助手..."
                 - 用户："你能做什么？" → next: "Finish", output: "我可以帮你规划行程、查询天气..."
-                - 用户："我想去北京旅游" → next: "Finish", output: "好的！请告诉我你的出发时间..."
+                - 用户："搜索北京的信息"（已执行工具并获得详细结果）
+                  → next: "Finish", output: "根据搜索结果，北京有以下信息：\n\n【景点推荐】\n1. 故宫博物院：明清两朝的皇家宫殿...\n2. 天坛公园：...\n\n【美食推荐】\n1. 北京烤鸭：...\n2. 炸酱面：...\n\n[详细列出工具结果中的具体内容，不要只概括]"
                 
                 **使用formInput的情况（信息不足，触发表单）：**
                 - 用户："想去云南玩一趟，顺便看看大理丽江"
@@ -157,27 +159,26 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
                 4. **保持对话连贯性**：确保回复与之前的对话内容保持一致和连贯
                 
                 ## 工具结果处理流程
-                1. **收到工具执行结果**：分析工具返回的信息
+                1. **收到工具执行结果**：仔细阅读并分析工具返回的所有详细信息
                 2. **判断是否满足用户需求**：检查工具结果是否已回答用户的问题
                 3. **决定下一步行动**：
                    - 如果还需要更多信息 → 继续调用相应工具
                    - 如果已满足用户需求 → 使用JSON格式输出最终回复
-                4. **循环执行**：工具调用后会再次收到结果，重复上述流程直到满足用户需求
+                4. **详细回复要求**：当使用工具结果回复用户时，必须：
+                   - 充分提取和利用工具结果中的详细信息（景点名称、描述、美食推荐、实用建议等）
+                   - 不要只是简单总结，要展示工具结果中的具体内容（如具体景点、美食名称、路线建议等）
+                   - 尽量保持工具结果中的格式（列表、分段等），使回复更易读
+                   - 回复长度应该与工具结果的丰富程度相匹配，信息越多回复越详细
+                5. **循环执行**：工具调用后会再次收到结果，重复上述流程直到满足用户需求
                 
                 ## 注意事项
-                1. 保持友好、自然的对话风格
-                2. 对于简单查询，尽量直接回答或调用相关工具
-                3. 对于复杂任务，主动收集关键信息后再路由到planner
-                4. 确保JSON格式正确，避免解析错误
-                5. 在询问信息时，要具体明确，避免模糊问题
-                6. **重要**：只有用户明确提出了具体的旅游规划需求且信息充足时，才使用planner
-                7. **工具并行执行**：如果需要调用多个工具，前后没有依赖关系的工具可以并行调用
-                8. **工具调用循环**：可以多次调用工具直到满足用户需求
-                9. **输出格式**：只有在满足用户需求时才使用JSON格式，继续调用工具时直接调用工具
-                10. **上下文理解**：必须仔细分析完整对话历史，理解用户的真实意图，特别是对简短回复的理解
-                11. **对话连贯性**：确保回复与之前的对话内容保持一致，避免重复询问或误解用户意图
-                12. **第一轮对话**：第一轮对话时不显示对话历史，从第二轮开始显示完整对话历史
-                13. **需求满足判断**：仔细分析工具执行结果是否已完全满足用户的查询需求
+                1. 对于简单查询，尽量直接回答或调用相关工具
+                2. 对于复杂任务，主动收集关键信息后再路由到planner
+                3. 确保JSON格式正确，避免解析错误
+                4. **重要**：只有用户明确提出了具体的旅游规划需求且信息充足时，才使用planner
+                5. **工具并行执行**：如果需要调用多个工具，前后没有依赖关系的工具可以并行调用
+                6. **上下文理解**：必须仔细分析完整对话历史，理解用户的真实意图，特别是对简短回复的理解
+                7. **需求满足判断**：仔细分析工具执行结果是否已完全满足用户的查询需求
                 """;
         
         if (RETRY_SCENARIO.equals(scenario)) {
@@ -210,8 +211,14 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
         if (!conversationHistory.isEmpty()) {
             prompt.append("**完整对话历史**：\n").append(conversationHistory).append("\n\n");
         }
-        
-        
+
+        // 添加当前用户查询
+        String currentQuery = getCurrentUserQuery(state);
+        if (!currentQuery.isEmpty()) {
+            prompt.append("**当前用户查询**：").append(currentQuery).append("\n\n");
+        }
+
+
         // 添加任务响应历史（非空情况下）
         String taskResponseHistory = state.getFormattedConversationHistory();
         if (!taskResponseHistory.isEmpty()) {
@@ -223,15 +230,9 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
         // 添加工具执行结果
         Optional<String> toolExecutionResult = state.getToolExecutionResult();
         if (toolExecutionResult.isPresent() && !toolExecutionResult.get().trim().isEmpty()) {
-            prompt.append("**工具执行结果**：\n").append(toolExecutionResult.get()).append("\n\n");
+            prompt.append("**工具执行结果**：\n").append(toolExecutionResult.get()).append("\n");
         }
-        
-        // 添加当前用户查询
-        String currentQuery = getCurrentUserQuery(state);
-        if (!currentQuery.isEmpty()) {
-            prompt.append("**当前用户查询**：").append(currentQuery).append("\n\n");
-        }
-        
+
         // 检查是否有结构化意图
         Optional<TravelIntentResult> structuredIntent = state.getStructuredIntent();
         if (structuredIntent.isPresent()) {
@@ -255,6 +256,14 @@ public class PreprocessorPromptProvider extends BasePromptProvider implements Ma
             prompt.append("3. **如果没有工具可以解决用户的需求请诚实得告诉用户**\n");
             prompt.append("4. **如果需要多次执行工具，如果没有前后依赖关系，可以并行执行！**\n");
             prompt.append("5. **next设置为planner之前，需要询问用户获取足够的信息，以更好地完成用户的需求！**\n");
+            prompt.append("6. **详细回复要求（非常重要）**：\n");
+            prompt.append("   - 必须充分提取和使用工具结果中的具体信息，包括但不限于：景点名称、详细描述、地址、开放时间、美食名称、推荐理由、实用建议等\n");
+            prompt.append("   - 回复要尽可能详细，信息量要与工具结果匹配。如果工具返回了22条帖子内容，你的回复也应该包含相应数量的信息点\n");
+            prompt.append("   - 使用工具结果中的具体数据、名称、描述，不要只做概括性总结\n");
+            prompt.append("   - 可以保留工具结果中的格式（列表、分段），使回复更易读\n");
+            prompt.append("   - 回复长度应该足够详细，至少应该覆盖工具结果中的主要信息点\n");
+            prompt.append("7. **重要！！！**：search_feeds和get_feed_detail每次对于同一个关键词只需要调用一次，不能相同的提示词重复调用search_feeds！！！\n");
+
 //            prompt.append("\n**JSON格式示例**：\n");
 //            prompt.append("```json\n");
 //            prompt.append("{\n");

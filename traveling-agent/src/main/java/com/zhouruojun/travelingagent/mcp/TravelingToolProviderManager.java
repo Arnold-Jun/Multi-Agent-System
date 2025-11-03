@@ -28,6 +28,9 @@ public class TravelingToolProviderManager {
     @Resource
     private ToolRegistry toolRegistry;
     
+    @Resource
+    private com.zhouruojun.travelingagent.tools.extractor.ToolExtractionManager toolExtractionManager;
+    
     // 工具规格缓存
     private volatile List<ToolSpecification> cachedToolSpecifications;
     private volatile long lastCacheTime = 0;
@@ -213,6 +216,13 @@ public class TravelingToolProviderManager {
      */
     public Map<String, Boolean> getMCPStatus() {
         return mcpClientManager.getAllServerStatus();
+    }
+
+    /**
+     * 获取工具结果提取管理器
+     */
+    public com.zhouruojun.travelingagent.tools.extractor.ToolExtractionManager getToolExtractionManager() {
+        return toolExtractionManager;
     }
 
 }

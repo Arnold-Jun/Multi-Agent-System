@@ -48,10 +48,23 @@ public class ToolExecutionRecord implements Serializable {
     private long duration;
     
     /**
+     * 工具调用参数（JSON字符串格式）
+     */
+    private String arguments;
+    
+    /**
      * 简化构造函数
      */
     public ToolExecutionRecord(String toolName, String result, int executionOrder) {
+        this(toolName, null, result, executionOrder);
+    }
+    
+    /**
+     * 带参数的构造函数
+     */
+    public ToolExecutionRecord(String toolName, String arguments, String result, int executionOrder) {
         this.toolName = toolName;
+        this.arguments = arguments;
         this.result = result;
         this.executionOrder = executionOrder;
         this.timestamp = System.currentTimeMillis();
@@ -63,11 +76,36 @@ public class ToolExecutionRecord implements Serializable {
      * 获取格式化的执行记录
      */
     public String getFormattedRecord() {
-        return String.format("%d. 工具: %s%s\n   结果: %s\n",
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("%d. 工具: %s%s\n", 
                 executionOrder,
                 toolName,
-                success ? "" : " [失败]",
-                result);
+                success ? "" : " [失败]"));
+        
+        // 如果有参数信息，显示参数
+        if (arguments != null && !arguments.trim().isEmpty()) {
+            sb.append("   参数: ").append(formatArguments(arguments)).append("\n");
+        }
+        
+        sb.append("   结果: ").append(result).append("\n");
+        
+        return sb.toString();
+    }
+    
+    /**
+     * 格式化参数字符串
+     * 如果是JSON字符串，尝试美化输出；否则直接返回
+     * 注意：调用方已确保args不为null且非空
+     */
+    private String formatArguments(String args) {
+        String trimmed = args.trim();
+        
+        // 如果参数过长，统一截断
+        if (trimmed.length() > 200) {
+            return trimmed.substring(0, 200) + "...（已截断）";
+        }
+        
+        return trimmed;
     }
 }
 

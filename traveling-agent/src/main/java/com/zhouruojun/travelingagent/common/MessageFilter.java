@@ -61,28 +61,13 @@ public class MessageFilter {
     }
 
     /**
-     * 为主图节点创建过滤后的AI消息
-     * 主图节点不应该有工具调用请求，只替换文本内容
-     * 
-     * @param originalAiMessage 原始AI消息
-     * @return 过滤后的AI消息
-     */
-    public static AiMessage createMainGraphFilteredMessage(AiMessage originalAiMessage) {
-        // 过滤掉思考过程，只保留实际响应
-        String filteredText = filterThinkingContent(originalAiMessage.text());
-        
-        // 主图节点不应该有工具调用请求，只替换文本内容
-        return AiMessage.from(filteredText);
-    }
-
-    /**
      * 为子图节点创建过滤后的AI消息
      * 子图节点支持工具调用，保留工具调用请求
      * 
      * @param originalAiMessage 原始AI消息
      * @return 过滤后的AI消息
      */
-    public static AiMessage createSubGraphFilteredMessage(AiMessage originalAiMessage) {
+    public static AiMessage createFilteredMessage(AiMessage originalAiMessage) {
         // 过滤掉思考过程，只保留实际响应
         String filteredText = filterThinkingContent(originalAiMessage.text());
         
@@ -96,24 +81,5 @@ public class MessageFilter {
         }
     }
 
-    /**
-     * 为子图节点创建过滤后的AI消息（支持工具调用）
-     * 
-     * @param originalAiMessage 原始AI消息
-     * @return 过滤后的AI消息
-     */
-    public static AiMessage createSubGraphFilteredMessageWithTools(AiMessage originalAiMessage) {
-        // 过滤掉思考过程，只保留实际响应
-        String filteredText = filterThinkingContent(originalAiMessage.text());
-        
-        // 创建新的AI消息，保留原始消息的所有属性，只替换文本内容
-        if (originalAiMessage.hasToolExecutionRequests()) {
-            // 如果有工具调用请求，保留工具调用请求
-            return AiMessage.from(filteredText, originalAiMessage.toolExecutionRequests());
-        } else {
-            // 如果没有工具调用请求，只替换文本内容
-            return AiMessage.from(filteredText);
-        }
-    }
 }
 

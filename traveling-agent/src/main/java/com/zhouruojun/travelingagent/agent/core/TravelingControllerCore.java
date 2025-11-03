@@ -96,7 +96,6 @@ public class TravelingControllerCore {
     @Autowired
     private PromptManager promptManager;
     
-    
     // 会话管理 - 从数据分析智能体迁移
     private final Map<String, List<ChatMessage>> sessionHistory = new ConcurrentHashMap<>();
     private final Map<String, Object> sessionCache = new ConcurrentHashMap<>();

@@ -7,14 +7,13 @@ import com.zhouruojun.travelingagent.agent.state.SubgraphState;
 import com.zhouruojun.travelingagent.agent.state.subgraph.ToolExecutionHistory;
 import com.zhouruojun.travelingagent.config.ParallelExecutionConfig;
 import com.zhouruojun.travelingagent.mcp.TravelingToolProviderManager;
-import com.zhouruojun.travelingagent.tools.TravelingToolCollection;
+import com.zhouruojun.travelingagent.tools.extractor.ToolExtractionManager;
+import lombok.extern.slf4j.Slf4j;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.NodeAction;
 
 import java.util.HashMap;
@@ -32,6 +31,9 @@ import java.util.stream.Collectors;
  * 通用工具执行节点
  * 支持主智能体和子智能体的工具执行
  * 支持并行和串行两种执行模式
+ * 
+ * 工具结果的提取和处理由ToolExtractionManager统一管理
+ * 包括JSON-RPC格式解析和自定义提取器的应用
  */
 @Slf4j
 public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
@@ -138,13 +140,9 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
         resultMap.put("next", "callback");
         resultMap.put("messages", result);
         
-        // 获取工具执行历史管理对象
+        // 获取工具执行历史管理对象并记录执行结果（包含参数信息）
         ToolExecutionHistory executionHistory = getToolExecutionHistoryFromState(state);
-        
-        // 添加当前批次的工具执行记录
-        for (ToolExecutionResultMessage resultMsg : result) {
-            executionHistory.addRecord(resultMsg.toolName(), resultMsg.text());
-        }
+        recordToolExecutions(toolExecutionRequests, result, executionHistory);
         
         // 格式化为LLM可读的字符串（只显示最近20条，避免上下文过长）
         //TODO:工具执行记忆管理待实现！
@@ -279,18 +277,131 @@ public class ExecuteTools<T extends BaseAgentState> implements NodeAction<T> {
             log.info("执行工具: {} (线程: {})", request.name(), Thread.currentThread().getName());
             
             // 使用工具提供者管理器执行工具
-            String result = toolProviderManager.executeTool(getRequestId(state), request);
+            String rawResult = toolProviderManager.executeTool(getRequestId(state), request);
+            
+            // 使用ToolExtractionManager处理工具结果（包括JSON-RPC提取和自定义提取器）
+            ToolExtractionManager extractionManager = toolProviderManager.getToolExtractionManager();
+            String processedResult = extractionManager.processToolResult(request.name(), rawResult);
             
             long duration = System.currentTimeMillis() - startTime;
             log.info("工具 {} 执行完成，耗时: {}ms", request.name(), duration);
             
-            return Optional.of(new ToolExecutionResultMessage(request.id(), request.name(), result));
+            return Optional.of(new ToolExecutionResultMessage(request.id(), request.name(), processedResult));
             
         } catch (Exception e) {
             log.error("工具 {} 执行失败: {}", request.name(), e.getMessage(), e);
             String errorResult = "Error executing tool: " + e.getMessage();
             // 返回错误结果而不是抛出异常，让流程继续
             return Optional.of(new ToolExecutionResultMessage(request.id(), request.name(), errorResult));
+        }
+    }
+    
+    /**
+     * 记录工具执行历史（包含参数信息）
+     * 
+     * @param requests 工具执行请求列表
+     * @param results 工具执行结果列表
+     * @param executionHistory 工具执行历史对象
+     */
+    private void recordToolExecutions(List<ToolExecutionRequest> requests, 
+                                      List<ToolExecutionResultMessage> results,
+                                      ToolExecutionHistory executionHistory) {
+        // 创建请求映射（通过ID和工具名索引，支持多种匹配方式）
+        Map<String, ToolExecutionRequest> requestMapById = new HashMap<>();
+        Map<String, List<ToolExecutionRequest>> requestMapByName = new HashMap<>();
+        for (ToolExecutionRequest request : requests) {
+            if (request.id() != null && !request.id().isEmpty()) {
+                requestMapById.put(request.id(), request);
+            }
+            requestMapByName.computeIfAbsent(request.name(), k -> new java.util.ArrayList<>()).add(request);
+        }
+        
+        // 添加当前批次的工具执行记录（包含参数信息）
+        int resultIndex = 0;
+        for (ToolExecutionResultMessage resultMsg : results) {
+            ToolExecutionRequest matchingRequest = findMatchingRequest(
+                resultMsg, resultIndex, requests, requestMapById, requestMapByName);
+            
+            String arguments = extractArguments(matchingRequest, resultMsg.toolName());
+            executionHistory.addRecord(resultMsg.toolName(), arguments, resultMsg.text(), 0);
+            resultIndex++;
+        }
+    }
+    
+    /**
+     * 查找匹配的工具执行请求
+     * 
+     * @param resultMsg 工具执行结果消息
+     * @param resultIndex 结果索引
+     * @param requests 工具执行请求列表
+     * @param requestMapById 按ID索引的请求映射
+     * @param requestMapByName 按工具名索引的请求映射
+     * @return 匹配的请求，如果未找到则返回null
+     */
+    private ToolExecutionRequest findMatchingRequest(ToolExecutionResultMessage resultMsg,
+                                                     int resultIndex,
+                                                     List<ToolExecutionRequest> requests,
+                                                     Map<String, ToolExecutionRequest> requestMapById,
+                                                     Map<String, List<ToolExecutionRequest>> requestMapByName) {
+        // 首先尝试通过ID匹配
+        try {
+            String resultId = resultMsg.id();
+            if (resultId != null && !resultId.isEmpty()) {
+                ToolExecutionRequest matched = requestMapById.get(resultId);
+                if (matched != null) {
+                    return matched;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("无法获取结果消息ID，尝试其他匹配方式: {}", e.getMessage());
+        }
+        
+        // 如果ID匹配失败，尝试通过工具名和位置匹配
+        if (resultIndex < requests.size()) {
+            ToolExecutionRequest candidate = requests.get(resultIndex);
+            if (candidate.name().equals(resultMsg.toolName())) {
+                return candidate;
+            }
+        }
+        
+        // 如果仍然匹配失败，尝试通过工具名匹配
+        List<ToolExecutionRequest> requestsWithSameName = requestMapByName.get(resultMsg.toolName());
+        if (requestsWithSameName != null && !requestsWithSameName.isEmpty()) {
+            return requestsWithSameName.get(0);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 从工具执行请求中提取参数字符串
+     * 
+     * @param request 工具执行请求
+     * @param toolName 工具名称（用于日志）
+     * @return 参数字符串，如果无法提取则返回null
+     */
+    private String extractArguments(ToolExecutionRequest request, String toolName) {
+        if (request == null) {
+            log.warn("无法为工具 {} 找到匹配的请求，参数信息将丢失", toolName);
+            return null;
+        }
+        
+        Object argsObj = request.arguments();
+        if (argsObj == null) {
+            return null;
+        }
+        
+        // 将参数对象转换为字符串
+        if (argsObj instanceof String) {
+            return (String) argsObj;
+        }
+        
+        // 如果是Map或其他对象，转换为JSON字符串
+        try {
+            return com.alibaba.fastjson.JSONObject.toJSONString(argsObj);
+        } catch (Exception e) {
+            log.debug("参数转换失败，使用toString: {}", e.getMessage());
+            return String.valueOf(argsObj);
         }
     }
     

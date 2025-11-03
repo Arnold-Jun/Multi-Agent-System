@@ -159,10 +159,23 @@ public class MCPClientManager {
                         if (firstContent instanceof Map) {
                             @SuppressWarnings("unchecked")
                             Map<String, Object> contentMap = (Map<String, Object>) firstContent;
-                            String text = (String) contentMap.get("text");
+                            Object textObj = contentMap.get("text");
                             
-                            if (text != null) {
-                                return text;
+                            if (textObj != null) {
+                                // text字段可能是字符串或对象（Map/JSONObject），需要正确转换
+                                String text;
+                                if (textObj instanceof String) {
+                                    text = (String) textObj;
+                                } else {
+                                    // 如果是对象，转换为JSON字符串
+                                    text = objectMapper.writeValueAsString(textObj);
+                                }
+                                
+                                if (text != null && !text.isEmpty()) {
+                                    return text;
+                                } else {
+                                    return "工具执行完成，但返回内容为空";
+                                }
                             } else {
                                 return "工具执行完成，但返回内容为空";
                             }

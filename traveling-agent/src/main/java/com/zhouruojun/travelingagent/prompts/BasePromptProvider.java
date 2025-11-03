@@ -76,8 +76,7 @@ public abstract class BasePromptProvider implements PromptProvider {
         return String.format("""
             **当前时间信息**：
             - 当前时间：%s
-            - 时间格式：yyyy年M月d日 EEEE HH:mm:ss
-            - 时区：中国北京时间
+            - 时区：美东时间
             
             %s
             """, timeInfo, originalPrompt);

@@ -49,29 +49,15 @@ public class SubgraphState extends BaseAgentState {
     }
 
     /**
-     * 设置工具执行结果
-     */
-    public void setToolExecutionResult(String result) {
-        state.put("toolExecutionResult", result);
-    }
-
-    /**
      * 获取工具执行历史
      */
     public ToolExecutionHistory getToolExecutionHistory() {
         ToolExecutionHistory history = (ToolExecutionHistory) state.get("toolExecutionHistory");
         if (history == null) {
-            history = new ToolExecutionHistory();
-            state.put("toolExecutionHistory", history);
+            // 返回一个新的实例，但不修改state（由节点返回的Map来更新state）
+            return new ToolExecutionHistory();
         }
         return history;
-    }
-
-    /**
-     * 设置工具执行历史
-     */
-    public void setToolExecutionHistory(ToolExecutionHistory history) {
-        state.put("toolExecutionHistory", history);
     }
 
     /**
@@ -99,13 +85,6 @@ public class SubgraphState extends BaseAgentState {
     }
 
     /**
-     * 设置当前任务
-     */
-    public void setCurrentTask(TodoTask task) {
-        state.put("currentTask", task);
-    }
-
-    /**
      * 获取子图类型
      */
     public Optional<String> getSubgraphType() {
@@ -113,24 +92,10 @@ public class SubgraphState extends BaseAgentState {
     }
 
     /**
-     * 设置子图类型
-     */
-    public void setSubgraphType(String type) {
-        state.put("subgraphType", type);
-    }
-
-    /**
      * 获取子图上下文
      */
     public Optional<String> getSubgraphContext() {
         return Optional.ofNullable((String) state.get("subgraphContext"));
-    }
-
-    /**
-     * 设置子图上下文
-     */
-    public void setSubgraphContext(String context) {
-        state.put("subgraphContext", context);
     }
 
 
@@ -147,6 +112,64 @@ public class SubgraphState extends BaseAgentState {
      */
     public boolean hasToolExecutionHistory() {
         return getToolExecutionHistory() != null && getToolExecutionHistory().getTotalCount() > 0;
+    }
+
+    /**
+     * 获取当前完整方案（由itineraryPlanner生成）
+     */
+    public Optional<String> getCurrentPlan() {
+        return Optional.ofNullable((String) state.get("currentPlan"));
+    }
+
+    /**
+     * 获取行程规划方案（由plannerAgent生成，已废弃，保留用于兼容）
+     * @deprecated 使用 getCurrentPlan() 获取完整方案
+     */
+    @Deprecated
+    public Optional<String> getItineraryPlan() {
+        return Optional.ofNullable((String) state.get("itineraryPlan"));
+    }
+
+    /**
+     * 获取机酒规划方案（由plannerAgent生成，已废弃，保留用于兼容）
+     * @deprecated 使用 getCurrentPlan() 获取完整方案
+     */
+    @Deprecated
+    public Optional<String> getTransportHotelPlan() {
+        return Optional.ofNullable((String) state.get("transportHotelPlan"));
+    }
+
+    /**
+     * 获取监督反馈（由supervisorAgent生成）
+     */
+    public Optional<String> getSupervisorFeedback() {
+        return Optional.ofNullable((String) state.get("supervisorFeedback"));
+    }
+
+    /**
+     * 获取迭代次数
+     */
+    public int getIterationCount() {
+        Object count = state.get("iterationCount");
+        if (count instanceof Integer) {
+            return (Integer) count;
+        }
+        return 0;
+    }
+
+    /**
+     * 检查是否需要修改方案（由supervisorAgent设置）
+     */
+    public boolean needsRevision() {
+        Object needs = state.get("needsRevision");
+        return needs instanceof Boolean && (Boolean) needs;
+    }
+
+    /**
+     * 检查是否达到最大迭代次数
+     */
+    public boolean isMaxIterationsReached() {
+        return getIterationCount() >= 5; // 最大5次迭代
     }
 
     private List<ChatMessage> extractMessages(Map<String, Object> state) {

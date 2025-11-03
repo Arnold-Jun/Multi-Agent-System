@@ -75,7 +75,7 @@ public abstract class CallAgent<T extends BaseAgentState> implements NodeAction<
                 AiMessage aiMessage = response.aiMessage();
 
                 // 创建过滤后的AI消息
-                AiMessage filteredAiMessage = MessageFilter.createSubGraphFilteredMessage(aiMessage);
+                AiMessage filteredAiMessage = MessageFilter.createFilteredMessage(aiMessage);
 
                 // 处理响应
                 return processResponse(aiMessage, filteredAiMessage, state);
