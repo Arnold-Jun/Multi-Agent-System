@@ -1,6 +1,0 @@
-com\zhouruojun\bossmock\BossMockApplication.class
-com\zhouruojun\bossmock\controller\SimpleJobController.class
-com\zhouruojun\bossmock\dto\response\ApiResponse.class
-com\zhouruojun\bossmock\dto\response\ApiResponse$ApiResponseBuilder.class
-com\zhouruojun\bossmock\service\SimpleEmbeddingService.class
-com\zhouruojun\bossmock\service\EmbeddingMatchService.class
